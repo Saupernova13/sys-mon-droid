@@ -31,9 +31,15 @@ class SettingsStore(private val context: Context) {
 
     suspend fun clearToken() = store.edit { it.remove(KEY_TOKEN) }
 
+    /** Last terminal PTY session id, so the app can re-attach to a live shell. */
+    suspend fun terminalSessionNow(): String? = store.data.map { it[KEY_TERM_SESSION] }.first()
+
+    suspend fun setTerminalSession(id: String) = store.edit { it[KEY_TERM_SESSION] = id }
+
     private companion object {
         val KEY_SERVER = stringPreferencesKey("server_url")
         val KEY_TOKEN = stringPreferencesKey("token")
         val KEY_USERNAME = stringPreferencesKey("username")
+        val KEY_TERM_SESSION = stringPreferencesKey("terminal_session")
     }
 }
