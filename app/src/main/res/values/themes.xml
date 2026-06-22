@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pre-Compose window theme. Colours are driven by the Compose theme at
+         runtime; this only sets a dark window background to avoid a white flash
+         on launch and removes the action bar. -->
+    <style name="Theme.SysMonDroid" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/sysmon_window_bg</item>
+        <item name="android:statusBarColor">@color/sysmon_window_bg</item>
+        <item name="android:navigationBarColor">@color/sysmon_window_bg</item>
+    </style>
+</resources>

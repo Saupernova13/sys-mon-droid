@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  sys-mon is a LAN-only HTTP service on a user-configured host (e.g. 10.0.2.2 from
+  the emulator, or the PC's LAN IP from a device). The server URL is entered at
+  runtime and can be any private address, so cleartext is permitted broadly here.
+  If you put sys-mon behind TLS, you can tighten this to https-only.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
