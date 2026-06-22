@@ -1,5 +1,6 @@
 package com.raavivi.sysmon.core.model
 
+import com.raavivi.sysmon.core.net.FlexibleBooleanSerializer
 import kotlinx.serialization.Serializable
 
 /** One row of the LLM audit trail (`services/model_log.py:_FIELDS`). */
@@ -17,7 +18,10 @@ data class ModelLogRow(
     val message: String = "",
     val status: Int? = null,
     val durationMs: Double? = null,
+    // The backend stores these as SQLite INTEGER (0/1), so accept int or bool.
+    @Serializable(with = FlexibleBooleanSerializer::class)
     val coldStart: Boolean = false,
+    @Serializable(with = FlexibleBooleanSerializer::class)
     val stream: Boolean = false,
     val reqBytes: Long? = null,
     val respBytes: Long? = null,
