@@ -1,6 +1,7 @@
 package com.raavivi.sysmon
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import coil.ImageLoader
 import com.raavivi.sysmon.core.auth.SessionManager
@@ -13,6 +14,8 @@ import com.raavivi.sysmon.core.net.ApiProvider
  * Compose via [LocalAppContainer].
  */
 class AppContainer(application: Application) {
+    /** Application context for features that need it (e.g. PDF cache files). */
+    val appContext: Context = application.applicationContext
     val settings: SettingsStore = SettingsStore(application)
     val api: ApiProvider = ApiProvider()
     val session: SessionManager = SessionManager(settings, api)
