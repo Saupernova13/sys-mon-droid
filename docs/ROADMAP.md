@@ -1,36 +1,52 @@
 # Roadmap
 
-The first build ports the high-value, REST/JSON-shaped surface of sys-mon. The
-remaining features are heavier to do natively and are staged next. The backend
-already exposes all of them — only the Android UI is outstanding.
+The first build ported the high-value, REST/JSON-shaped surface of sys-mon. The
+heavier, natively-hard features were staged afterwards and are now implemented.
+The backend was never modified — this is purely a client.
 
-## Stage 6 — Terminal
-- `WS /ws/terminal?session_id=<uuid>`; binary frames are raw PTY bytes, text frames
-  are JSON control messages (`{type:"resize",rows,cols}`).
-- Needs an ANSI terminal view. Options: the Termux `terminal-view` /
-  `terminal-emulator` AARs, or a compact ANSI parser rendering to a monospaced grid.
-- Wire a soft-keyboard + an extra keys row (Esc, Tab, Ctrl, arrows). Send resize on
-  layout changes. Persist sessions via the Sessions API.
+## Done
 
-## Stage 7 — Screen share
-- `WS /ws/screen`: server pushes binary JPEG frames; client sends `ScreenEvent` JSON
-  (`mousemove/mousedown/mouseup/scroll/keydown/keyup`) with `x`/`y` normalised 0..1.
-- Decode JPEG (`BitmapFactory`) into a Compose `Image`; map touch/drag/scroll and a
-  soft keyboard to normalised events. Add a quality/scale control.
+### Stage 6 — Terminal ✅
+- `WS /ws/terminal?session_id=<uuid>`; binary frames carry raw PTY keystrokes,
+  text frames are JSON control messages (`{type:"resize",rows,cols}`).
+- Self-contained compact ANSI/VT emulator (`core/term/TerminalEmulator.kt`):
+  SGR colours (16 / 256 / truecolor), cursor + erase + scroll-region ops, OSC
+  consume, scrollback. Renders to styled spans (no external terminal AAR).
+- Command input + control-key bar (Esc/Tab/^C/^D/arrows). Grid auto-sizes to the
+  view and sends a resize. Session id persisted in DataStore for resume.
 
-## Stage 8 — WhatsApp
-- `/api/whatsapp/{status,chats,messages,contacts,media,send,send-media,pin,backfill}`
-  plus `WS /ws/whatsapp` for live messages.
-- Chat list → thread view, media via Coil (authed loader already exists), text +
-  media send, pin, backfill.
+### Stage 7 — Screen share ✅
+- `WS /ws/screen`: server pushes binary JPEG frames (decoded with `BitmapFactory`);
+  client sends `ScreenEvent` JSON with `x`/`y` normalised 0..1 over the letterboxed
+  image.
+- Absolute pointer mapping (tap=click, long-press=right-click, drag=move/drag),
+  a scroll mode, and a keyboard bar (`typeString` + Enter/Tab/Esc/Backspace/Win).
 
-## Stage 9 — Godot, sessions, PDF
-- Godot: `POST /api/godot/start|stop`, `GET /api/godot/status`; open the editor URL
-  in a Custom Tab / WebView once started.
-- Sessions: surface and manage terminal + file-explorer sessions.
-- PDF preview via Android's `PdfRenderer` for `/api/fs/file` PDFs.
+### Stage 8 — WhatsApp ✅
+- `/api/whatsapp/{status,chats,messages,contacts,media,send,pin,backfill}` plus
+  `WS /ws/whatsapp` for live messages.
+- wacli's loosely-shaped rows are parsed as raw JSON and normalised in Kotlin
+  (mirrors the web frontend's `normChat`/`normMsg`). Chat list → conversation,
+  inline image/sticker media via the authed Coil loader, send text, pin,
+  load-older/backfill, contact search, pairing-status banner.
+
+### Stage 9 (partial) — PDF preview ✅
+- PDF preview via Android's `PdfRenderer` for `/api/fs/file` PDFs: the file is
+  fetched with the authed OkHttp client to a cache file and rendered page-by-page
+  (capped to keep memory bounded). Opened by tapping a `.pdf` in the file explorer.
+
+## Not included / future
+
+- **Godot editor** — intentionally skipped in this client.
+- **Send media** (`/api/whatsapp/send-media`) — outgoing text only for now;
+  attaching/sending images from the phone is a future addition.
+- **Full session management UI** — terminal sessions resume via a persisted id,
+  but there is no screen to list/close arbitrary terminal/file-explorer sessions
+  (`/api/sessions/*`).
+- **Screen-share quality/scale controls** — server-side `config.SCREEN_*` only.
 
 ## Notes
 - All streams authenticate with `?token=<jwt>` (see `ApiProvider.openWebSocket`).
-- The networking, auth, theming, charts, and Coil-with-auth plumbing are already in
-  place, so these stages are mostly new screens + a couple of decoders.
+- The Model Log decodes `cold_start`/`stream` defensively: the backend emits them
+  as SQLite integers (`0`/`1`), so a flexible boolean serializer accepts int or
+  bool (`core/net/Serializers.kt`).

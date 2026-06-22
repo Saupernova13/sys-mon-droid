@@ -10,8 +10,6 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
 
 ## Features
 
-Implemented in this build (core):
-
 - **Connect & auth** — point at any `host:port`, log in (JWT), token persisted and
   verified on launch, log out / log out everywhere.
 - **Live dashboard** — CPU (overall + per-core bars + freq/temp), memory (+ swap),
@@ -23,15 +21,23 @@ Implemented in this build (core):
   prepare→confirm kill flow (and rate-limit handling).
 - **Power & remote** — restart / shutdown (confirmed) and launch remote control.
 - **File explorer** — browse drives & folders, open text files in an editor
-  (read + save), image preview, rename / copy / move / delete, new folder,
-  properties, favorites, recycle bin (restore / delete / empty), and search
-  (with backend indicator).
+  (read + save), image preview, **PDF preview** (`PdfRenderer`), rename / copy /
+  move / delete, new folder, properties, favorites, recycle bin
+  (restore / delete / empty), and search (with backend indicator).
 - **Model Log** — the LLM audit trail, live over `WS /ws/models`, with COLD START
   badges, proxy status, row detail, and clear.
+- **Terminal** — a PTY shell over `WS /ws/terminal` with a built-in compact ANSI
+  emulator (colours, scrollback), a command input + control-key bar (Esc/Tab/^C/
+  arrows), auto-resize, and session resume across reconnects.
+- **Screen share** — live JPEG frames over `WS /ws/screen` with absolute
+  touch→cursor mapping (tap = click, hold = right-click, drag = move/drag), a
+  scroll mode, and a keyboard bar that types to the PC.
+- **WhatsApp** — chat list + conversation view, live messages over
+  `WS /ws/whatsapp`, inline image/sticker media (authed Coil), send text, pin,
+  load-older/backfill, contact search, and pairing-status guidance.
 
-Staged for the next build (the heavy/native-hard ones — see
-`docs/ROADMAP.md`): PTY terminal, screen share with input forwarding, WhatsApp,
-Godot editor, full session management, PDF preview.
+Found in `More`: Terminal, Screen share, and WhatsApp. The Godot editor launcher
+was intentionally left out of this client.
 
 ## Build
 
