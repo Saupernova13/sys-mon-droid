@@ -30,6 +30,13 @@ import com.raavivi.sysmon.core.model.SearchBackend
 import com.raavivi.sysmon.core.model.SearchResult
 import com.raavivi.sysmon.core.model.SystemSnapshot
 import com.raavivi.sysmon.core.model.VerifyResponse
+import com.raavivi.sysmon.core.model.WaBackfill
+import com.raavivi.sysmon.core.model.WaChatsResponse
+import com.raavivi.sysmon.core.model.WaContactsResponse
+import com.raavivi.sysmon.core.model.WaMessagesResponse
+import com.raavivi.sysmon.core.model.WaPinReq
+import com.raavivi.sysmon.core.model.WaSendText
+import com.raavivi.sysmon.core.model.WaStatus
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -179,4 +186,33 @@ interface ApiService {
 
     @POST("api/models/clear")
     suspend fun modelClear(): ClearResponse
+
+    // ── WhatsApp ─────────────────────────────────────────────────────────────────
+    @GET("api/whatsapp/status")
+    suspend fun waStatus(): WaStatus
+
+    @GET("api/whatsapp/chats")
+    suspend fun waChats(@Query("limit") limit: Int = 100): WaChatsResponse
+
+    @GET("api/whatsapp/messages")
+    suspend fun waMessages(
+        @Query("chat") chat: String,
+        @Query("limit") limit: Int = 50,
+        @Query("before") before: String? = null,
+    ): WaMessagesResponse
+
+    @GET("api/whatsapp/contacts")
+    suspend fun waContacts(
+        @Query("q") q: String = "",
+        @Query("limit") limit: Int = 100,
+    ): WaContactsResponse
+
+    @POST("api/whatsapp/send")
+    suspend fun waSend(@Body body: WaSendText): OkResponse
+
+    @POST("api/whatsapp/pin")
+    suspend fun waPin(@Body body: WaPinReq): OkResponse
+
+    @POST("api/whatsapp/backfill")
+    suspend fun waBackfill(@Body body: WaBackfill): OkResponse
 }

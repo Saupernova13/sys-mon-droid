@@ -70,6 +70,14 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
             .build()
             .toString()
 
+    /** `/api/whatsapp/media` URL for a message's media (Coil with the authed client). */
+    fun whatsappMediaUrl(chat: String, id: String): String =
+        "$baseUrl/api/whatsapp/media".toHttpUrl().newBuilder()
+            .addQueryParameter("chat", chat)
+            .addQueryParameter("id", id)
+            .build()
+            .toString()
+
     /**
      * Open a WebSocket on the shared client. OkHttp accepts http(s) URLs for the
      * handshake and upgrades them to ws(s) itself, so we keep [baseUrl] as-is and
