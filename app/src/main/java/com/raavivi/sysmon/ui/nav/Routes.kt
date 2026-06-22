@@ -23,4 +23,8 @@ enum class TopDest(
 
 object Routes {
     const val TEXT_EDITOR = "editor"
+    const val PDF_VIEWER = "pdf"
+    const val TERMINAL = "terminal"
+    const val SCREEN = "screen"
+    const val WHATSAPP = "whatsapp"
 }

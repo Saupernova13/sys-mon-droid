@@ -24,11 +24,15 @@ import com.raavivi.sysmon.core.auth.AuthState
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.dashboard.DashboardScreen
 import com.raavivi.sysmon.ui.files.FilesScreen
+import com.raavivi.sysmon.ui.files.PdfViewerScreen
 import com.raavivi.sysmon.ui.files.TextEditorScreen
 import com.raavivi.sysmon.ui.modellog.ModelLogScreen
 import com.raavivi.sysmon.ui.more.MoreScreen
 import com.raavivi.sysmon.ui.processes.ProcessesScreen
+import com.raavivi.sysmon.ui.screen.ScreenShareScreen
 import com.raavivi.sysmon.ui.setup.LoginScreen
+import com.raavivi.sysmon.ui.terminal.TerminalScreen
+import com.raavivi.sysmon.ui.whatsapp.WhatsAppScreen
 
 @Composable
 fun SysMonRoot() {
@@ -78,12 +82,19 @@ private fun MainScaffold() {
             composable(TopDest.Dashboard.route) { DashboardScreen() }
             composable(TopDest.Processes.route) { ProcessesScreen() }
             composable(TopDest.Files.route) {
-                FilesScreen(onEditFile = { path ->
-                    nav.navigate("${Routes.TEXT_EDITOR}/${encodePath(path)}")
-                })
+                FilesScreen(
+                    onEditFile = { path -> nav.navigate("${Routes.TEXT_EDITOR}/${encodePath(path)}") },
+                    onOpenPdf = { path -> nav.navigate("${Routes.PDF_VIEWER}/${encodePath(path)}") },
+                )
             }
             composable(TopDest.ModelLog.route) { ModelLogScreen() }
-            composable(TopDest.More.route) { MoreScreen() }
+            composable(TopDest.More.route) {
+                MoreScreen(
+                    onOpenTerminal = { nav.navigate(Routes.TERMINAL) },
+                    onOpenScreen = { nav.navigate(Routes.SCREEN) },
+                    onOpenWhatsApp = { nav.navigate(Routes.WHATSAPP) },
+                )
+            }
             composable(
                 route = "${Routes.TEXT_EDITOR}/{path}",
                 arguments = listOf(navArgument("path") { type = NavType.StringType }),
@@ -91,6 +102,16 @@ private fun MainScaffold() {
                 val path = decodePath(entry.arguments?.getString("path").orEmpty())
                 TextEditorScreen(path = path, onBack = { nav.popBackStack() })
             }
+            composable(
+                route = "${Routes.PDF_VIEWER}/{path}",
+                arguments = listOf(navArgument("path") { type = NavType.StringType }),
+            ) { entry ->
+                val path = decodePath(entry.arguments?.getString("path").orEmpty())
+                PdfViewerScreen(path = path, onBack = { nav.popBackStack() })
+            }
+            composable(Routes.TERMINAL) { TerminalScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.SCREEN) { ScreenShareScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.WHATSAPP) { WhatsAppScreen(onBack = { nav.popBackStack() }) }
         }
     }
 }

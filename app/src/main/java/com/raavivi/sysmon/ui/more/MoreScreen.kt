@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +41,11 @@ import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
 
 @Composable
-fun MoreScreen() {
+fun MoreScreen(
+    onOpenTerminal: () -> Unit = {},
+    onOpenScreen: () -> Unit = {},
+    onOpenWhatsApp: () -> Unit = {},
+) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
 
@@ -85,14 +92,12 @@ fun MoreScreen() {
                 }
             }
 
-            SectionCard(title = "Coming soon") {
-                Text(
-                    "Terminal, screen share, WhatsApp and the Godot editor are part of " +
-                        "the next build stage. The backend already exposes them; the native " +
-                        "screens are in progress.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            SectionCard(title = "Tools") {
+                ActionButton("Terminal", Icons.Filled.Terminal, onOpenTerminal)
+                Spacer(Modifier.height(8.dp))
+                ActionButton("Screen share", Icons.AutoMirrored.Filled.ScreenShare, onOpenScreen)
+                Spacer(Modifier.height(8.dp))
+                ActionButton("WhatsApp", Icons.AutoMirrored.Filled.Chat, onOpenWhatsApp)
             }
 
             SectionCard(title = "Account") {
@@ -108,7 +113,7 @@ fun MoreScreen() {
             }
 
             Text(
-                "sys-mon-droid 0.1.0",
+                "sys-mon-droid 0.2.0",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontFamily = FontFamily.Monospace,

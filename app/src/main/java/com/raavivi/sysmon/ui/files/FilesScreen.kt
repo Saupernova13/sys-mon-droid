@@ -63,8 +63,10 @@ private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic"
 
 private fun isImage(name: String) = name.substringAfterLast('.', "").lowercase() in IMAGE_EXT
 
+private fun isPdf(name: String) = name.substringAfterLast('.', "").equals("pdf", ignoreCase = true)
+
 @Composable
-fun FilesScreen(onEditFile: (String) -> Unit) {
+fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) {
     val vm = rememberContainerViewModel { FilesViewModel(it) }
 
     var showSearch by remember { mutableStateOf(false) }
@@ -169,7 +171,7 @@ fun FilesScreen(onEditFile: (String) -> Unit) {
                 vm.loading -> LoadingBox()
                 vm.error != null -> ErrorBox(vm.error!!, onRetry = { vm.refresh() })
                 else -> when (vm.mode) {
-                    FilesMode.Browse -> BrowseList(vm, onEditFile, onRename = { renameTarget = it },
+                    FilesMode.Browse -> BrowseList(vm, onEditFile, onOpenPdf, onRename = { renameTarget = it },
                         onTransfer = { e, move -> transfer = e to move }, onDelete = { deleteTarget = it })
                     FilesMode.Recycle -> RecycleList(vm)
                     FilesMode.Search -> SearchList(vm)
@@ -253,6 +255,7 @@ fun FilesScreen(onEditFile: (String) -> Unit) {
 private fun BrowseList(
     vm: FilesViewModel,
     onEditFile: (String) -> Unit,
+    onOpenPdf: (String) -> Unit,
     onRename: (FsEntry) -> Unit,
     onTransfer: (FsEntry, Boolean) -> Unit,
     onDelete: (FsEntry) -> Unit,
@@ -265,6 +268,7 @@ private fun BrowseList(
                     when {
                         entry.isDir -> vm.open(entry.path)
                         isImage(entry.name) -> vm.imagePreviewPath = entry.path
+                        isPdf(entry.name) -> onOpenPdf(entry.path)
                         else -> onEditFile(entry.path)
                     }
                 },
