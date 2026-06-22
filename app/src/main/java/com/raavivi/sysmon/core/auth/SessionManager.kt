@@ -1,0 +1,88 @@
+package com.raavivi.sysmon.core.auth
+
+import com.raavivi.sysmon.core.data.SettingsStore
+import com.raavivi.sysmon.core.model.LoginRequest
+import com.raavivi.sysmon.core.net.ApiProvider
+import com.raavivi.sysmon.core.net.ApiResult
+import com.raavivi.sysmon.core.net.safeCall
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+enum class AuthState { Loading, LoggedOut, LoggedIn }
+
+/**
+ * Single source of truth for authentication. Loads persisted server/token at
+ * startup, verifies the token, and exposes [state] for navigation gating. Wires the
+ * live token + base URL into [ApiProvider] so every request and socket is authed.
+ */
+class SessionManager(
+    private val settings: SettingsStore,
+    private val api: ApiProvider,
+) {
+    private val _state = MutableStateFlow(AuthState.Loading)
+    val state: StateFlow<AuthState> = _state.asStateFlow()
+
+    @Volatile
+    var currentUser: String? = null
+        private set
+
+    /** Restore persisted session on app launch and verify the token if present. */
+    suspend fun bootstrap() {
+        val url = settings.serverUrlNow()
+        if (url.isNotBlank()) api.setBaseUrl(url)
+        val token = settings.tokenNow()
+        currentUser = settings.usernameNow()
+        if (token.isNullOrBlank()) {
+            _state.value = AuthState.LoggedOut
+            return
+        }
+        api.token = token
+        when (val r = safeCall { api.api.verify() }) {
+            is ApiResult.Ok -> {
+                currentUser = r.value.user
+                _state.value = AuthState.LoggedIn
+            }
+            is ApiResult.Err -> {
+                api.token = null
+                settings.clearToken()
+                _state.value = AuthState.LoggedOut
+            }
+        }
+    }
+
+    /** Configure the server, then exchange credentials for a JWT. */
+    suspend fun login(serverUrl: String, username: String, password: String): ApiResult<Unit> {
+        api.setBaseUrl(serverUrl)
+        settings.setServerUrl(ApiProvider.normalizeBaseUrl(serverUrl))
+        api.token = null
+        return when (val r = safeCall { api.api.login(LoginRequest(username, password)) }) {
+            is ApiResult.Ok -> {
+                api.token = r.value.token
+                settings.setToken(r.value.token)
+                settings.setUsername(username)
+                currentUser = username
+                _state.value = AuthState.LoggedIn
+                ApiResult.Ok(Unit)
+            }
+            is ApiResult.Err -> r
+        }
+    }
+
+    suspend fun logout() {
+        safeCall { api.api.logout() }
+        finishLogout()
+    }
+
+    suspend fun logoutAll() {
+        safeCall { api.api.logoutAll() }
+        finishLogout()
+    }
+
+    private suspend fun finishLogout() {
+        api.token = null
+        settings.clearToken()
+        currentUser = null
+        _state.value = AuthState.LoggedOut
+    }
+}
