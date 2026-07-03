@@ -23,6 +23,11 @@ class SessionManager(
     private val _state = MutableStateFlow(AuthState.Loading)
     val state: StateFlow<AuthState> = _state.asStateFlow()
 
+    /** Server-assigned role for the current session: [ROLE_ADMIN] or [ROLE_VIEWER]. */
+    private val _role = MutableStateFlow(ROLE_ADMIN)
+    val role: StateFlow<String> = _role.asStateFlow()
+    val isAdmin: Boolean get() = _role.value == ROLE_ADMIN
+
     @Volatile
     var currentUser: String? = null
         private set
@@ -33,6 +38,7 @@ class SessionManager(
         if (url.isNotBlank()) api.setBaseUrl(url)
         val token = settings.tokenNow()
         currentUser = settings.usernameNow()
+        _role.value = settings.roleNow() ?: ROLE_ADMIN
         if (token.isNullOrBlank()) {
             _state.value = AuthState.LoggedOut
             return
@@ -41,6 +47,7 @@ class SessionManager(
         when (val r = safeCall { api.api.verify() }) {
             is ApiResult.Ok -> {
                 currentUser = r.value.user
+                setRole(r.value.role)
                 _state.value = AuthState.LoggedIn
             }
             is ApiResult.Err -> {
@@ -62,11 +69,17 @@ class SessionManager(
                 settings.setToken(r.value.token)
                 settings.setUsername(username)
                 currentUser = username
+                setRole(r.value.role)
                 _state.value = AuthState.LoggedIn
                 ApiResult.Ok(Unit)
             }
             is ApiResult.Err -> r
         }
+    }
+
+    private suspend fun setRole(role: String) {
+        _role.value = role
+        settings.setRole(role)
     }
 
     suspend fun logout() {
@@ -83,6 +96,12 @@ class SessionManager(
         api.token = null
         settings.clearToken()
         currentUser = null
+        _role.value = ROLE_ADMIN
         _state.value = AuthState.LoggedOut
+    }
+
+    companion object {
+        const val ROLE_ADMIN = "admin"
+        const val ROLE_VIEWER = "viewer"
     }
 }
