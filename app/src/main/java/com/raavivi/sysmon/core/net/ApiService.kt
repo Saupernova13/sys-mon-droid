@@ -23,11 +23,12 @@ import com.raavivi.sysmon.core.model.LoginResponse
 import com.raavivi.sysmon.core.model.ModelLogMeta
 import com.raavivi.sysmon.core.model.ModelLogResponse
 import com.raavivi.sysmon.core.model.OkResponse
+import com.raavivi.sysmon.core.model.PowerActionResponse
 import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
-import com.raavivi.sysmon.core.model.ScheduledResponse
 import com.raavivi.sysmon.core.model.SearchBackend
 import com.raavivi.sysmon.core.model.SearchResponse
+import com.raavivi.sysmon.core.model.StatusResponse
 import com.raavivi.sysmon.core.model.SystemSnapshot
 import com.raavivi.sysmon.core.model.VerifyResponse
 import com.raavivi.sysmon.core.model.WaBackfill
@@ -82,10 +83,10 @@ interface ApiService {
 
     // ── Power / process ──────────────────────────────────────────────────────────
     @POST("api/power/restart")
-    suspend fun restart(): ScheduledResponse
+    suspend fun restart(): PowerActionResponse
 
     @POST("api/power/shutdown")
-    suspend fun shutdown(): ScheduledResponse
+    suspend fun shutdown(): PowerActionResponse
 
     @POST("api/process/kill/prepare")
     suspend fun killPrepare(@Body body: KillPrepareBody): KillPrepareResponse
@@ -94,7 +95,7 @@ interface ApiService {
     suspend fun kill(@Body body: KillBody): OkResponse
 
     @POST("api/remote-control")
-    suspend fun remoteControl(): OkResponse
+    suspend fun remoteControl(): StatusResponse
 
     // ── Files ────────────────────────────────────────────────────────────────────
     @GET("api/fs/list")

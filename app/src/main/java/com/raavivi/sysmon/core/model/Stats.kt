@@ -39,10 +39,13 @@ data class KillBody(val pid: Int, val token: String)
 
 // ── Power / scheduled actions ─────────────────────────────────────────────────
 
+/** /api/power/restart|shutdown -> `{"status": "restart"|"shutdown", "delay_seconds": n}`. */
 @Serializable
-data class ScheduledResponse(
-    val ok: Boolean = true,
-    val action: String? = null,
-    val scheduled: Boolean? = null,
-    val message: String? = null,
+data class PowerActionResponse(
+    val status: String = "",
+    val delaySeconds: Double = 0.0,
 )
+
+/** Endpoints that answer with a bare `{"status": "..."}` (e.g. remote-control). */
+@Serializable
+data class StatusResponse(val status: String = "")
