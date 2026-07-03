@@ -13,8 +13,8 @@ import com.raavivi.sysmon.core.model.FsMoveBody
 import com.raavivi.sysmon.core.model.FsReadResponse
 import com.raavivi.sysmon.core.model.FsRenameBody
 import com.raavivi.sysmon.core.model.FsWriteBody
-import com.raavivi.sysmon.core.model.HistoryItem
 import com.raavivi.sysmon.core.model.HistoryRangeResponse
+import com.raavivi.sysmon.core.model.HistoryRecentResponse
 import com.raavivi.sysmon.core.model.KillBody
 import com.raavivi.sysmon.core.model.KillPrepareBody
 import com.raavivi.sysmon.core.model.KillPrepareResponse
@@ -27,7 +27,7 @@ import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
 import com.raavivi.sysmon.core.model.ScheduledResponse
 import com.raavivi.sysmon.core.model.SearchBackend
-import com.raavivi.sysmon.core.model.SearchResult
+import com.raavivi.sysmon.core.model.SearchResponse
 import com.raavivi.sysmon.core.model.SystemSnapshot
 import com.raavivi.sysmon.core.model.VerifyResponse
 import com.raavivi.sysmon.core.model.WaBackfill
@@ -67,7 +67,7 @@ interface ApiService {
     suspend fun snapshot(): SystemSnapshot
 
     @GET("api/history/recent")
-    suspend fun historyRecent(@Query("seconds") seconds: Int = 600): List<HistoryItem>
+    suspend fun historyRecent(@Query("seconds") seconds: Int = 600): HistoryRecentResponse
 
     @GET("api/history")
     suspend fun historyRange(
@@ -155,7 +155,7 @@ interface ApiService {
         @Query("min_size") minSize: Long? = null,
         @Query("max_size") maxSize: Long? = null,
         @Query("limit") limit: Int = 500,
-    ): List<SearchResult>
+    ): SearchResponse
 
     @GET("api/fs/search/backend")
     suspend fun fsSearchBackend(): SearchBackend

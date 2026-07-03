@@ -126,11 +126,12 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         loading = true
         error = null
         viewModelScope.launch {
-            (safeCall { container.api.api.fsSearchBackend() } as? ApiResult.Ok)?.let {
-                searchBackend = it.value.backend
-            }
             when (val r = safeCall { container.api.api.fsSearch(q = query, root = root) }) {
-                is ApiResult.Ok -> searchResults = r.value
+                is ApiResult.Ok -> {
+                    searchResults = r.value.items
+                    searchBackend = r.value.backend
+                    r.value.warning?.let { message = it }
+                }
                 is ApiResult.Err -> error = r.message
             }
             loading = false

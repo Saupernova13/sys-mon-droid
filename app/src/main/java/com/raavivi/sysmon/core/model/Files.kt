@@ -105,6 +105,14 @@ data class SearchResult(
     val modified: Double? = null,
 )
 
+/** /api/fs/search -> `{items, backend, warning?}` (warning omitted when clean). */
+@Serializable
+data class SearchResponse(
+    val items: List<SearchResult> = emptyList(),
+    val backend: String = "",
+    val warning: String? = null,
+)
+
 @Serializable
 data class SearchBackend(val backend: String = "", val description: String = "")
 

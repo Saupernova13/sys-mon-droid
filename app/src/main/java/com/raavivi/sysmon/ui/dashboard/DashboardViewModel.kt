@@ -49,7 +49,7 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
             when (val r = safeCall { container.api.api.historyRecent(seconds = 600) }) {
                 is ApiResult.Ok -> {
                     cpuHistory.clear(); ramHistory.clear(); gpuHistory.clear(); diskHistory.clear()
-                    r.value.takeLast(MAX_POINTS).forEach { item ->
+                    r.value.items.takeLast(MAX_POINTS).forEach { item ->
                         cpuHistory.add((item.cpu ?: 0.0).toFloat())
                         ramHistory.add((item.ram ?: 0.0).toFloat())
                         gpuHistory.add((item.gpu ?: 0.0).toFloat())

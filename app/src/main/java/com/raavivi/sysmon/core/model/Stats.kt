@@ -18,9 +18,13 @@ data class HistoryRangeResponse(
     val items: List<HistoryItem> = emptyList(),
     val oldestTs: Double? = null,
     val totalCount: Int = 0,
+    val bucketSeconds: Long = 0,
+    val nextBefore: Double? = null,
 )
 
-/** /api/history/recent -> bare array of samples (newest in ring order). */
+/** /api/history/recent -> `{"items": [...]}` (ring buffer, oldest -> newest). */
+@Serializable
+data class HistoryRecentResponse(val items: List<HistoryItem> = emptyList())
 
 // ── Process kill (two-step) ───────────────────────────────────────────────────
 
