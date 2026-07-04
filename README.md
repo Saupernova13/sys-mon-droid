@@ -2,8 +2,8 @@
 
 A native **Android client** for [sys-mon](https://github.com/) — view and control
 your PC from your phone instead of the browser. It does **not** monitor the phone;
-it connects to the sys-mon FastAPI backend running on your PC and renders the same
-data natively (Kotlin + Jetpack Compose).
+it connects to the sys-mon Rust backend (`sysmon-server`) running on your PC and
+renders the same data natively (Kotlin + Jetpack Compose).
 
 The backend is unchanged: the app is a pure client of the existing REST +
 WebSocket API (`docs/API.md` in the sys-mon repo).
@@ -19,7 +19,20 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   `/api/history/recent`, plus a host-side history backup action.
 - **Processes** — top processes by CPU / RAM / Disk / GPU with the two-step
   prepare→confirm kill flow (and rate-limit handling).
-- **Power & remote** — restart / shutdown (confirmed) and launch remote control.
+- **Power & remote** — restart / shutdown (confirmed, with the server's delay
+  echoed back) and launch remote control.
+- **Power widget** — when the host has a Tasmota smart plug configured, a power
+  card rides the live snapshot stream (watts, load gauge, today's cost) and opens
+  a detail screen: usage chart (1h/24h/7d), cost breakdown and projections,
+  electrical quality (voltage / power factor / reactive), and device info.
+- **Roles & feature flags** — the client reads the session role from login
+  (`admin` vs the read-only `viewer` account) and `GET /api/features`, so
+  viewer sessions hide every mutating control (kill, power, file writes,
+  terminal, screen share) and disabled server widgets (Model Log, WhatsApp)
+  drop out of the navigation instead of erroring.
+- **Server settings** — admins can flip the server's widget feature flags
+  (WhatsApp / Model Log / ollama proxy / Godot / Power) from the phone, with
+  availability hints and restart-required notices.
 - **File explorer** — browse drives & folders, open text files in an editor
   (read + save), image preview, **PDF preview** (`PdfRenderer`), rename / copy /
   move / delete, new folder, properties, favorites, recycle bin
@@ -36,8 +49,9 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   `WS /ws/whatsapp`, inline image/sticker media (authed Coil), send text, pin,
   load-older/backfill, contact search, and pairing-status guidance.
 
-Found in `More`: Terminal, Screen share, and WhatsApp. The Godot editor launcher
-was intentionally left out of this client.
+Found in `More`: Terminal, Screen share, WhatsApp (when enabled), Server
+settings, and the app + server version line. The Godot editor launcher was
+intentionally left out of this client.
 
 ## Build
 

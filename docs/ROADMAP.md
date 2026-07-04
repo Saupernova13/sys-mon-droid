@@ -35,14 +35,31 @@ The backend was never modified — this is purely a client.
   fetched with the authed OkHttp client to a cache file and rendered page-by-page
   (capped to keep memory bounded). Opened by tapping a `.pdf` in the file explorer.
 
+### Stage 10 — Rust backend parity (0.3.0) ✅
+- Fixed the two decode breaks from the Python→Rust port: `/api/history/recent`
+  and `/api/fs/search` now return `{items, ...}` wrappers; power/remote-control
+  envelopes retyped to `{status, delay_seconds}` / `{status}`.
+- Role awareness: `role` captured from login/verify and persisted; the read-only
+  `viewer` account gets a fully read-only UI (no kill/power/writes/tools).
+- Feature flags: `GET /api/features` gates the Model Log tab and the WhatsApp
+  entry so disabled server routers (which 404 wholesale) never render.
+- Power widget: snapshot-fed dashboard card + detail screen over
+  `/api/power-usage` and `/api/power-usage/history`.
+- Admin settings screen: `POST /api/settings` toggles with availability hints.
+- `/api/version` shown next to the app version; DTOs pinned by unit tests
+  decoding fixtures captured from a live server.
+
 ## Not included / future
 
 - **Godot editor** — intentionally skipped in this client.
 - **Send media** (`/api/whatsapp/send-media`) — outgoing text only for now;
-  attaching/sending images from the phone is a future addition.
+  attaching/sending images from the phone is a future addition. (Raw-body POST
+  with `?to=&filename=&caption=` query params, not multipart.)
 - **Full session management UI** — terminal sessions resume via a persisted id,
   but there is no screen to list/close arbitrary terminal/file-explorer sessions
   (`/api/sessions/*`).
+- **History explorer** — `/api/history` pagination, `/api/history/processes`
+  (what ran at a past timestamp), and CSV/JSON export.
 - **Screen-share quality/scale controls** — server-side `config.SCREEN_*` only.
 
 ## Notes
