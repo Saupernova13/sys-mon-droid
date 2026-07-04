@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
 import com.raavivi.sysmon.core.model.PowerActionResponse
+import com.raavivi.sysmon.core.model.VersionInfo
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
 import kotlinx.coroutines.launch
@@ -17,6 +18,8 @@ class MoreViewModel(private val container: AppContainer) : ViewModel() {
         private set
     var username by mutableStateOf("")
         private set
+    var serverVersion by mutableStateOf<VersionInfo?>(null)
+        private set
     var message by mutableStateOf<String?>(null)
 
     init {
@@ -24,6 +27,11 @@ class MoreViewModel(private val container: AppContainer) : ViewModel() {
         username = container.session.currentUser ?: ""
         viewModelScope.launch {
             username = container.settings.usernameNow() ?: username
+        }
+        viewModelScope.launch {
+            (safeCall { container.api.api.version() } as? ApiResult.Ok)?.let {
+                serverVersion = it.value
+            }
         }
     }
 

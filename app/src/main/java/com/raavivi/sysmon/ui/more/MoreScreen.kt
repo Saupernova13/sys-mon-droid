@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.raavivi.sysmon.BuildConfig
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.ui.common.ScreenHeader
@@ -128,8 +129,14 @@ fun MoreScreen(
                 }
             }
 
+            val versionLine = buildString {
+                append("sys-mon-droid ${BuildConfig.VERSION_NAME}")
+                vm.serverVersion?.let { v ->
+                    append(" · server ${v.version} (${v.commit})")
+                }
+            }
             Text(
-                "sys-mon-droid 0.2.0",
+                versionLine,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontFamily = FontFamily.Monospace,

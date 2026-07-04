@@ -18,6 +18,14 @@ data class VerifyResponse(val user: String, val role: String = "admin")
 @Serializable
 data class OkResponse(val ok: Boolean = true)
 
+/** `GET /api/version` — public, no auth. */
+@Serializable
+data class VersionInfo(
+    val name: String = "",
+    val version: String = "",
+    val commit: String = "",
+)
+
 /** The standard error envelope `{"ok": false, "error": "...", "code": null}`. */
 @Serializable
 data class ErrorEnvelope(

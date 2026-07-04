@@ -35,6 +35,7 @@ import com.raavivi.sysmon.core.model.SearchResponse
 import com.raavivi.sysmon.core.model.StatusResponse
 import com.raavivi.sysmon.core.model.SystemSnapshot
 import com.raavivi.sysmon.core.model.VerifyResponse
+import com.raavivi.sysmon.core.model.VersionInfo
 import com.raavivi.sysmon.core.model.WaBackfill
 import com.raavivi.sysmon.core.model.WaChatsResponse
 import com.raavivi.sysmon.core.model.WaContactsResponse
@@ -66,6 +67,9 @@ interface ApiService {
 
     @POST("auth/logout-all")
     suspend fun logoutAll(): OkResponse
+
+    @GET("api/version")
+    suspend fun version(): VersionInfo
 
     // ── Features / settings ─────────────────────────────────────────────────────
     @GET("api/features")
