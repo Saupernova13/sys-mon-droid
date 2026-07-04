@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
@@ -49,6 +50,7 @@ fun MoreScreen(
     onOpenTerminal: () -> Unit = {},
     onOpenScreen: () -> Unit = {},
     onOpenWhatsApp: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
     val container = LocalAppContainer.current
@@ -114,6 +116,8 @@ fun MoreScreen(
                         Spacer(Modifier.height(8.dp))
                         ActionButton("WhatsApp", Icons.AutoMirrored.Filled.Chat, onOpenWhatsApp)
                     }
+                    Spacer(Modifier.height(8.dp))
+                    ActionButton("Server settings", Icons.Filled.Settings, onOpenSettings)
                 }
             }
 

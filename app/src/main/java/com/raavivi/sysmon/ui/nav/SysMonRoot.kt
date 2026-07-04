@@ -32,6 +32,7 @@ import com.raavivi.sysmon.ui.more.MoreScreen
 import com.raavivi.sysmon.ui.power.PowerScreen
 import com.raavivi.sysmon.ui.processes.ProcessesScreen
 import com.raavivi.sysmon.ui.screen.ScreenShareScreen
+import com.raavivi.sysmon.ui.settings.SettingsScreen
 import com.raavivi.sysmon.ui.setup.LoginScreen
 import com.raavivi.sysmon.ui.terminal.TerminalScreen
 import com.raavivi.sysmon.ui.whatsapp.WhatsAppScreen
@@ -74,7 +75,7 @@ private fun MainScaffold() {
         val onHiddenTab = TopDest.entries.any { it.route == currentRoute } &&
             visibleDests.none { it.route == currentRoute }
         val onHiddenTool = when (currentRoute) {
-            Routes.TERMINAL, Routes.SCREEN -> !isAdmin
+            Routes.TERMINAL, Routes.SCREEN, Routes.SETTINGS -> !isAdmin
             Routes.WHATSAPP -> !isAdmin || features?.whatsapp != true
             else -> false
         }
@@ -127,6 +128,7 @@ private fun MainScaffold() {
                     onOpenTerminal = { nav.navigate(Routes.TERMINAL) },
                     onOpenScreen = { nav.navigate(Routes.SCREEN) },
                     onOpenWhatsApp = { nav.navigate(Routes.WHATSAPP) },
+                    onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 )
             }
             composable(
@@ -147,6 +149,7 @@ private fun MainScaffold() {
             composable(Routes.SCREEN) { ScreenShareScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.WHATSAPP) { WhatsAppScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.POWER) { PowerScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
         }
     }
 }
