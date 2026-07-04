@@ -29,6 +29,7 @@ import com.raavivi.sysmon.ui.files.PdfViewerScreen
 import com.raavivi.sysmon.ui.files.TextEditorScreen
 import com.raavivi.sysmon.ui.modellog.ModelLogScreen
 import com.raavivi.sysmon.ui.more.MoreScreen
+import com.raavivi.sysmon.ui.power.PowerScreen
 import com.raavivi.sysmon.ui.processes.ProcessesScreen
 import com.raavivi.sysmon.ui.screen.ScreenShareScreen
 import com.raavivi.sysmon.ui.setup.LoginScreen
@@ -110,7 +111,9 @@ private fun MainScaffold() {
             startDestination = TopDest.Dashboard.route,
             modifier = Modifier.padding(padding),
         ) {
-            composable(TopDest.Dashboard.route) { DashboardScreen() }
+            composable(TopDest.Dashboard.route) {
+                DashboardScreen(onOpenPower = { nav.navigate(Routes.POWER) })
+            }
             composable(TopDest.Processes.route) { ProcessesScreen() }
             composable(TopDest.Files.route) {
                 FilesScreen(
@@ -143,6 +146,7 @@ private fun MainScaffold() {
             composable(Routes.TERMINAL) { TerminalScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SCREEN) { ScreenShareScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.WHATSAPP) { WhatsAppScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.POWER) { PowerScreen(onBack = { nav.popBackStack() }) }
         }
     }
 }

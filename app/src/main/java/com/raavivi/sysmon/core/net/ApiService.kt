@@ -26,6 +26,8 @@ import com.raavivi.sysmon.core.model.ModelLogMeta
 import com.raavivi.sysmon.core.model.ModelLogResponse
 import com.raavivi.sysmon.core.model.OkResponse
 import com.raavivi.sysmon.core.model.PowerActionResponse
+import com.raavivi.sysmon.core.model.PowerHistoryResponse
+import com.raavivi.sysmon.core.model.PowerReading
 import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
 import com.raavivi.sysmon.core.model.SearchBackend
@@ -89,6 +91,17 @@ interface ApiService {
 
     @POST("api/history/backup")
     suspend fun historyBackup(): OkResponse
+
+    // ── Power usage (smart plug) ─────────────────────────────────────────────────
+    @GET("api/power-usage")
+    suspend fun powerUsage(): PowerReading
+
+    @GET("api/power-usage/history")
+    suspend fun powerHistory(
+        @Query("start") start: Double? = null,
+        @Query("end") end: Double? = null,
+        @Query("target_points") targetPoints: Int = 600,
+    ): PowerHistoryResponse
 
     // ── Power / process ──────────────────────────────────────────────────────────
     @POST("api/power/restart")

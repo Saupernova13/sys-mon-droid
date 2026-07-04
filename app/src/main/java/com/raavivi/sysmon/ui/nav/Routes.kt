@@ -27,4 +27,6 @@ object Routes {
     const val TERMINAL = "terminal"
     const val SCREEN = "screen"
     const val WHATSAPP = "whatsapp"
+    const val POWER = "power"
+    const val SETTINGS = "settings"
 }

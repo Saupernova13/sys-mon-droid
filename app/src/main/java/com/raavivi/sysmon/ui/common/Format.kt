@@ -33,6 +33,13 @@ fun formatMhz(mhz: Double): String =
 fun formatTemp(celsius: Double?): String =
     if (celsius == null) "—" else String.format(Locale.US, "%.0f°C", celsius)
 
+/** Watts with adaptive precision: "3.2 W", "87 W", "1.24 kW". */
+fun formatWatts(watts: Double): String = when {
+    watts >= 1000 -> String.format(Locale.US, "%.2f kW", watts / 1000.0)
+    watts >= 10 -> String.format(Locale.US, "%.0f W", watts)
+    else -> String.format(Locale.US, "%.1f W", watts)
+}
+
 private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
 private val dateTimeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 

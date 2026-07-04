@@ -23,3 +23,4 @@ val CpuColor = Mint
 val RamColor = Sky
 val GpuColor = Violet
 val DiskColor = Amber
+val PowerColor = Color(0xFFFACC15) // matches the web UI's --accent-power

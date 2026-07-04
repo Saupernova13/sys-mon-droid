@@ -58,7 +58,7 @@ import com.raavivi.sysmon.ui.theme.GpuColor
 import com.raavivi.sysmon.ui.theme.RamColor
 
 @Composable
-fun DashboardScreen() {
+fun DashboardScreen(onOpenPower: () -> Unit = {}) {
     val vm = rememberContainerViewModel { DashboardViewModel(it) }
     var menuOpen by remember { mutableStateOf(false) }
     val snap = vm.snapshot
@@ -111,6 +111,9 @@ fun DashboardScreen() {
                     snap.gpu.devices.forEach { dev -> item { GpuCard(dev) } }
                 }
                 item { DiskCard(snap) }
+                snap.power?.takeIf { it.configured }?.let { p ->
+                    item { PowerCard(p, onOpen = onOpenPower) }
+                }
             } else {
                 item {
                     Text(

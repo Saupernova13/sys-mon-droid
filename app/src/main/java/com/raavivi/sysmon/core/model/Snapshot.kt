@@ -14,6 +14,8 @@ data class SystemSnapshot(
     val gpu: GpuSnapshot,
     val ram: RamSnapshot,
     val disk: DiskSnapshot,
+    /** Smart-plug reading; null when the power widget is off or not configured. */
+    val power: PowerReading? = null,
 )
 
 @Serializable
