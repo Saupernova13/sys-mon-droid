@@ -4,6 +4,8 @@ import com.raavivi.sysmon.core.model.ClearResponse
 import com.raavivi.sysmon.core.model.DrivesResponse
 import com.raavivi.sysmon.core.model.Favorite
 import com.raavivi.sysmon.core.model.FavoriteBody
+import com.raavivi.sysmon.core.model.FeaturePatch
+import com.raavivi.sysmon.core.model.FeaturesResponse
 import com.raavivi.sysmon.core.model.FileProperties
 import com.raavivi.sysmon.core.model.FolderSize
 import com.raavivi.sysmon.core.model.FsCopyBody
@@ -62,6 +64,13 @@ interface ApiService {
 
     @POST("auth/logout-all")
     suspend fun logoutAll(): OkResponse
+
+    // ── Features / settings ─────────────────────────────────────────────────────
+    @GET("api/features")
+    suspend fun features(): FeaturesResponse
+
+    @POST("api/settings")
+    suspend fun updateSettings(@Body patch: FeaturePatch): FeaturesResponse
 
     // ── Stats / history ────────────────────────────────────────────────────────
     @GET("api/snapshot")

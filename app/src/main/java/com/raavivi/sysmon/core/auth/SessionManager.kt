@@ -1,6 +1,7 @@
 package com.raavivi.sysmon.core.auth
 
 import com.raavivi.sysmon.core.data.SettingsStore
+import com.raavivi.sysmon.core.model.FeaturesResponse
 import com.raavivi.sysmon.core.model.LoginRequest
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.net.ApiResult
@@ -28,6 +29,10 @@ class SessionManager(
     val role: StateFlow<String> = _role.asStateFlow()
     val isAdmin: Boolean get() = _role.value == ROLE_ADMIN
 
+    /** Server feature flags; null until the first successful fetch. */
+    private val _features = MutableStateFlow<FeaturesResponse?>(null)
+    val features: StateFlow<FeaturesResponse?> = _features.asStateFlow()
+
     @Volatile
     var currentUser: String? = null
         private set
@@ -48,6 +53,7 @@ class SessionManager(
             is ApiResult.Ok -> {
                 currentUser = r.value.user
                 setRole(r.value.role)
+                refreshFeatures()
                 _state.value = AuthState.LoggedIn
             }
             is ApiResult.Err -> {
@@ -70,6 +76,7 @@ class SessionManager(
                 settings.setUsername(username)
                 currentUser = username
                 setRole(r.value.role)
+                refreshFeatures()
                 _state.value = AuthState.LoggedIn
                 ApiResult.Ok(Unit)
             }
@@ -80,6 +87,16 @@ class SessionManager(
     private suspend fun setRole(role: String) {
         _role.value = role
         settings.setRole(role)
+    }
+
+    /** Fetch the server's feature flags; failures keep the previous value. */
+    suspend fun refreshFeatures() {
+        (safeCall { api.api.features() } as? ApiResult.Ok)?.let { _features.value = it.value }
+    }
+
+    /** Push a payload returned by `POST /api/settings` so gated UI updates live. */
+    fun acceptFeatures(features: FeaturesResponse) {
+        _features.value = features
     }
 
     suspend fun logout() {
@@ -97,6 +114,7 @@ class SessionManager(
         settings.clearToken()
         currentUser = null
         _role.value = ROLE_ADMIN
+        _features.value = null
         _state.value = AuthState.LoggedOut
     }
 

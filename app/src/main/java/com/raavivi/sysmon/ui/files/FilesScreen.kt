@@ -86,8 +86,10 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
             IconButton(onClick = { vm.openRecycle() }) {
                 Icon(Icons.Filled.Delete, contentDescription = "Recycle bin")
             }
-            IconButton(onClick = { showNewFolder = true }) {
-                Icon(Icons.Filled.CreateNewFolder, contentDescription = "New folder")
+            if (vm.isAdmin) {
+                IconButton(onClick = { showNewFolder = true }) {
+                    Icon(Icons.Filled.CreateNewFolder, contentDescription = "New folder")
+                }
             }
             IconButton(onClick = { vm.refresh() }) {
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
@@ -133,8 +135,10 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
             when (vm.mode) {
                 FilesMode.Recycle -> {
                     Text("Recycle bin", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { vm.recycleClear() }) {
-                        Icon(Icons.Filled.DeleteSweep, contentDescription = "Empty recycle bin")
+                    if (vm.isAdmin) {
+                        IconButton(onClick = { vm.recycleClear() }) {
+                            Icon(Icons.Filled.DeleteSweep, contentDescription = "Empty recycle bin")
+                        }
                     }
                     TextButton(onClick = { vm.open(vm.path.ifBlank { "" }) }) { Text("Files") }
                 }
@@ -264,6 +268,7 @@ private fun BrowseList(
         items(vm.entries, key = { it.path }) { entry ->
             EntryRow(
                 entry = entry,
+                canMutate = vm.isAdmin,
                 onOpen = {
                     when {
                         entry.isDir -> vm.open(entry.path)
@@ -286,6 +291,7 @@ private fun BrowseList(
 @Composable
 private fun EntryRow(
     entry: FsEntry,
+    canMutate: Boolean,
     onOpen: () -> Unit,
     onRename: () -> Unit,
     onCopy: () -> Unit,
@@ -326,15 +332,19 @@ private fun EntryRow(
                 Icon(Icons.Filled.MoreVert, contentDescription = "Actions")
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
-                DropdownMenuItem(text = { Text("Copy to…") }, onClick = { menu = false; onCopy() })
-                DropdownMenuItem(text = { Text("Move to…") }, onClick = { menu = false; onMove() })
-                DropdownMenuItem(text = { Text("Add to favorites") }, onClick = { menu = false; onFavorite() })
+                if (canMutate) {
+                    DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
+                    DropdownMenuItem(text = { Text("Copy to…") }, onClick = { menu = false; onCopy() })
+                    DropdownMenuItem(text = { Text("Move to…") }, onClick = { menu = false; onMove() })
+                    DropdownMenuItem(text = { Text("Add to favorites") }, onClick = { menu = false; onFavorite() })
+                }
                 DropdownMenuItem(text = { Text("Properties") }, onClick = { menu = false; onProperties() })
-                DropdownMenuItem(
-                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                    onClick = { menu = false; onDelete() },
-                )
+                if (canMutate) {
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                        onClick = { menu = false; onDelete() },
+                    )
+                }
             }
         }
     }
@@ -366,11 +376,13 @@ private fun RecycleList(vm: FilesViewModel) {
                         fontFamily = FontFamily.Monospace,
                     )
                 }
-                IconButton(onClick = { vm.recycleRestore(item) }) {
-                    Icon(Icons.Filled.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(onClick = { vm.recycleDelete(item) }) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete forever", tint = MaterialTheme.colorScheme.error)
+                if (vm.isAdmin) {
+                    IconButton(onClick = { vm.recycleRestore(item) }) {
+                        Icon(Icons.Filled.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { vm.recycleDelete(item) }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete forever", tint = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }

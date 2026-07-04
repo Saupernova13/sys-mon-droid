@@ -34,6 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.raavivi.sysmon.LocalAppContainer
+import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
@@ -47,6 +50,10 @@ fun MoreScreen(
     onOpenWhatsApp: () -> Unit = {},
 ) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
+    val container = LocalAppContainer.current
+    val role by container.session.role.collectAsStateWithLifecycle()
+    val features by container.session.features.collectAsStateWithLifecycle()
+    val isAdmin = role == SessionManager.ROLE_ADMIN
     var confirm by remember { mutableStateOf<Confirm?>(null) }
 
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(3000); vm.message = null } }
@@ -74,30 +81,39 @@ fun MoreScreen(
             SectionCard(title = "Connection") {
                 StatRow("Server", vm.serverUrl)
                 StatRow("User", vm.username)
+                StatRow("Role", role)
             }
 
-            SectionCard(title = "Host actions") {
-                ActionButton("Launch remote control", Icons.Filled.SmartToy) { vm.remoteControl() }
-                Spacer(Modifier.height(8.dp))
-                ActionButton("Back up history", Icons.Filled.Backup) { vm.backup() }
-            }
-
-            SectionCard(title = "Power", accent = MaterialTheme.colorScheme.error) {
-                ActionButton("Restart host", Icons.Filled.RestartAlt) {
-                    confirm = Confirm("Restart host?", "The host will reboot shortly.", vm::restart)
+            // Everything below the connection card mutates the host, so the
+            // read-only viewer role only ever sees Connection + Account.
+            if (isAdmin) {
+                SectionCard(title = "Host actions") {
+                    if (features?.remoteControl == true) {
+                        ActionButton("Launch remote control", Icons.Filled.SmartToy) { vm.remoteControl() }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    ActionButton("Back up history", Icons.Filled.Backup) { vm.backup() }
                 }
-                Spacer(Modifier.height(8.dp))
-                ActionButton("Shut down host", Icons.Filled.PowerSettingsNew) {
-                    confirm = Confirm("Shut down host?", "The host will power off shortly.", vm::shutdown)
-                }
-            }
 
-            SectionCard(title = "Tools") {
-                ActionButton("Terminal", Icons.Filled.Terminal, onOpenTerminal)
-                Spacer(Modifier.height(8.dp))
-                ActionButton("Screen share", Icons.AutoMirrored.Filled.ScreenShare, onOpenScreen)
-                Spacer(Modifier.height(8.dp))
-                ActionButton("WhatsApp", Icons.AutoMirrored.Filled.Chat, onOpenWhatsApp)
+                SectionCard(title = "Power", accent = MaterialTheme.colorScheme.error) {
+                    ActionButton("Restart host", Icons.Filled.RestartAlt) {
+                        confirm = Confirm("Restart host?", "The host will reboot shortly.", vm::restart)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    ActionButton("Shut down host", Icons.Filled.PowerSettingsNew) {
+                        confirm = Confirm("Shut down host?", "The host will power off shortly.", vm::shutdown)
+                    }
+                }
+
+                SectionCard(title = "Tools") {
+                    ActionButton("Terminal", Icons.Filled.Terminal, onOpenTerminal)
+                    Spacer(Modifier.height(8.dp))
+                    ActionButton("Screen share", Icons.AutoMirrored.Filled.ScreenShare, onOpenScreen)
+                    if (features?.whatsapp == true) {
+                        Spacer(Modifier.height(8.dp))
+                        ActionButton("WhatsApp", Icons.AutoMirrored.Filled.Chat, onOpenWhatsApp)
+                    }
+                }
             }
 
             SectionCard(title = "Account") {

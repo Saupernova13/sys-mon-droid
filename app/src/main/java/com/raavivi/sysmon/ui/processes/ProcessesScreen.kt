@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
@@ -32,6 +33,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun ProcessesScreen() {
     val vm = rememberContainerViewModel { ProcessesViewModel(it) }
+    val isAdmin = LocalAppContainer.current.session.isAdmin
     val rows = vm.rows()
 
     vm.toast?.let { msg ->
@@ -77,7 +79,10 @@ fun ProcessesScreen() {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(rows, key = { "${vm.category}-${it.pid}-${it.name}" }) { row ->
-                    ProcessItem(row, onKill = { vm.requestKill(row.pid, row.name) })
+                    ProcessItem(
+                        row,
+                        onKill = if (isAdmin) ({ vm.requestKill(row.pid, row.name) }) else null,
+                    )
                 }
             }
         }
@@ -101,7 +106,7 @@ fun ProcessesScreen() {
 }
 
 @Composable
-private fun ProcessItem(row: ProcRow, onKill: () -> Unit) {
+private fun ProcessItem(row: ProcRow, onKill: (() -> Unit)?) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -123,12 +128,14 @@ private fun ProcessItem(row: ProcRow, onKill: () -> Unit) {
             fontFamily = FontFamily.Monospace,
             color = MaterialTheme.colorScheme.primary,
         )
-        IconButton(onClick = onKill) {
-            Icon(
-                Icons.Filled.Close,
-                contentDescription = "Kill ${row.name}",
-                tint = MaterialTheme.colorScheme.error,
-            )
+        if (onKill != null) {
+            IconButton(onClick = onKill) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Kill ${row.name}",
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
         }
     }
 }

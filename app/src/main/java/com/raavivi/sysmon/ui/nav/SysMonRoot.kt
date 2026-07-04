@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.AuthState
+import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.dashboard.DashboardScreen
 import com.raavivi.sysmon.ui.files.FilesScreen
@@ -50,14 +51,44 @@ fun SysMonRoot() {
 
 @Composable
 private fun MainScaffold() {
+    val container = LocalAppContainer.current
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    val role by container.session.role.collectAsStateWithLifecycle()
+    val features by container.session.features.collectAsStateWithLifecycle()
+    val isAdmin = role == SessionManager.ROLE_ADMIN
+
+    // Model Log is both admin-only and feature-gated (its router 404s when off),
+    // so its tab only exists when the server actually answers for it.
+    val visibleDests = TopDest.entries.filter { dest ->
+        when (dest) {
+            TopDest.ModelLog -> isAdmin && features?.modelLog == true
+            else -> true
+        }
+    }
+
+    // If the tab or tool we're on disappears (role/flag change), fall back home.
+    LaunchedEffect(visibleDests, currentRoute, isAdmin, features) {
+        val onHiddenTab = TopDest.entries.any { it.route == currentRoute } &&
+            visibleDests.none { it.route == currentRoute }
+        val onHiddenTool = when (currentRoute) {
+            Routes.TERMINAL, Routes.SCREEN -> !isAdmin
+            Routes.WHATSAPP -> !isAdmin || features?.whatsapp != true
+            else -> false
+        }
+        if (onHiddenTab || onHiddenTool) {
+            nav.navigate(TopDest.Dashboard.route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = false }
+                launchSingleTop = true
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {
             NavigationBar {
-                TopDest.entries.forEach { dest ->
+                visibleDests.forEach { dest ->
                     NavigationBarItem(
                         selected = currentRoute == dest.route,
                         onClick = {

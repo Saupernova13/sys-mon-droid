@@ -27,6 +27,9 @@ enum class FilesMode { Browse, Recycle, Search }
 
 class FilesViewModel(private val container: AppContainer) : ViewModel() {
 
+    /** Viewers get a read-only explorer; the server 403s writes anyway. */
+    val isAdmin: Boolean get() = container.session.isAdmin
+
     var mode by mutableStateOf(FilesMode.Browse)
         private set
     var path by mutableStateOf("")

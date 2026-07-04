@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
+import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.model.FsWriteBody
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
@@ -83,6 +84,7 @@ class TextEditorViewModel(
 @Composable
 fun TextEditorScreen(path: String, onBack: () -> Unit) {
     val vm = rememberContainerViewModel { TextEditorViewModel(it, path) }
+    val isAdmin = LocalAppContainer.current.session.isAdmin
 
     Column(
         Modifier
@@ -95,8 +97,10 @@ fun TextEditorScreen(path: String, onBack: () -> Unit) {
                 vm.status?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
-                IconButton(onClick = vm::save, enabled = !vm.saving && vm.dirty) {
-                    Icon(Icons.Filled.Save, contentDescription = "Save")
+                if (isAdmin) {
+                    IconButton(onClick = vm::save, enabled = !vm.saving && vm.dirty) {
+                        Icon(Icons.Filled.Save, contentDescription = "Save")
+                    }
                 }
                 IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
