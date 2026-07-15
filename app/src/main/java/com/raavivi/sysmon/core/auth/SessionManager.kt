@@ -6,6 +6,7 @@ import com.raavivi.sysmon.core.model.LoginRequest
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
+import com.raavivi.sysmon.core.push.PushRegistrar
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +21,7 @@ enum class AuthState { Loading, LoggedOut, LoggedIn }
 class SessionManager(
     private val settings: SettingsStore,
     private val api: ApiProvider,
+    private val pushRegistrar: PushRegistrar,
 ) {
     private val _state = MutableStateFlow(AuthState.Loading)
     val state: StateFlow<AuthState> = _state.asStateFlow()
@@ -55,6 +57,7 @@ class SessionManager(
                 setRole(r.value.role)
                 refreshFeatures()
                 _state.value = AuthState.LoggedIn
+                pushRegistrar.syncRegistration()
             }
             is ApiResult.Err -> {
                 api.token = null
@@ -78,6 +81,7 @@ class SessionManager(
                 setRole(r.value.role)
                 refreshFeatures()
                 _state.value = AuthState.LoggedIn
+                pushRegistrar.syncRegistration()
                 ApiResult.Ok(Unit)
             }
             is ApiResult.Err -> r
@@ -100,11 +104,14 @@ class SessionManager(
     }
 
     suspend fun logout() {
+        // Unregister the push token while the JWT is still valid, then log out.
+        pushRegistrar.unregister()
         safeCall { api.api.logout() }
         finishLogout()
     }
 
     suspend fun logoutAll() {
+        pushRegistrar.unregister()
         safeCall { api.api.logoutAll() }
         finishLogout()
     }

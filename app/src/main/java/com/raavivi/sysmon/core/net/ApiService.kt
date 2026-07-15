@@ -28,6 +28,9 @@ import com.raavivi.sysmon.core.model.OkResponse
 import com.raavivi.sysmon.core.model.PowerActionResponse
 import com.raavivi.sysmon.core.model.PowerHistoryResponse
 import com.raavivi.sysmon.core.model.PowerReading
+import com.raavivi.sysmon.core.model.PushRegisterBody
+import com.raavivi.sysmon.core.model.PushRegisterResponse
+import com.raavivi.sysmon.core.model.PushStatusResponse
 import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
 import com.raavivi.sysmon.core.model.RelayBody
@@ -115,6 +118,18 @@ interface ApiService {
     /** Switch one smart plug's relay. Admin only; state-aware on the server. */
     @POST("api/power/devices/{id}/relay")
     suspend fun setPlugRelay(@Path("id") id: String, @Body body: RelayBody): RelayResponse
+
+    // ── Push notifications (FCM) ─────────────────────────────────────────────────
+    @GET("api/push/status")
+    suspend fun pushStatus(): PushStatusResponse
+
+    /** Register this device's FCM token so the server can push heater alerts. */
+    @POST("api/push/register")
+    suspend fun pushRegister(@Body body: PushRegisterBody): PushRegisterResponse
+
+    /** Stop receiving pushes on this device's token. */
+    @POST("api/push/unregister")
+    suspend fun pushUnregister(@Body body: PushRegisterBody): PushRegisterResponse
 
     // ── Power / process ──────────────────────────────────────────────────────────
     @POST("api/power/restart")

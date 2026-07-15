@@ -49,7 +49,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.BuildConfig
 import com.raavivi.sysmon.LocalAppContainer
-import com.raavivi.sysmon.core.alerts.HeaterAlertService
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
@@ -100,7 +99,7 @@ fun MoreScreen(
                 StatRow("Role", role)
             }
 
-            NotificationsCard()
+            NotificationsCard(pushAvailable = features?.push == true)
 
             // Everything below the connection card mutates the host, so the
             // read-only viewer role only ever sees Connection + Account.
@@ -180,22 +179,23 @@ fun MoreScreen(
 }
 
 /**
- * Heater-alert toggle: runs the [HeaterAlertService] foreground watcher so a
- * "Your heater is on" notification fires no matter how the plug was switched.
- * Enabling asks for POST_NOTIFICATIONS on Android 13+; the service is started
- * either way and simply stays silent until the permission is granted.
+ * Heater-alert toggle: subscribes this device to Firebase push notifications so a
+ * "Your heater is on" notification fires no matter how the plug was switched. The
+ * backend watches the relay and pushes on/off; enabling registers this device's
+ * FCM token, disabling unregisters it. Enabling asks for POST_NOTIFICATIONS on
+ * Android 13+. Disabled with a hint when the server has no push key configured.
  */
 @Composable
-private fun NotificationsCard() {
+private fun NotificationsCard(pushAvailable: Boolean) {
     val container = LocalAppContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var enabled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { enabled = container.settings.heaterAlertsNow() }
+    LaunchedEffect(Unit) { enabled = container.settings.pushEnabledNow() }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { /* the service runs regardless; alerts show once granted */ }
+    ) { /* registration proceeds regardless; alerts show once granted */ }
 
     SectionCard(title = "Notifications") {
         Row(
@@ -207,16 +207,20 @@ private fun NotificationsCard() {
             Column(Modifier.weight(1f)) {
                 Text("Heater alert", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "Notify while the heater plug is on, with live usage and a Stop button.",
+                    if (pushAvailable) {
+                        "Push a notification while the heater plug is on, with live usage and a Stop button."
+                    } else {
+                        "Unavailable — the server has no Firebase push key configured."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Switch(
-                checked = enabled,
+                checked = enabled && pushAvailable,
+                enabled = pushAvailable,
                 onCheckedChange = { on ->
                     enabled = on
-                    scope.launch { container.settings.setHeaterAlerts(on) }
                     if (on) {
                         if (Build.VERSION.SDK_INT >= 33 &&
                             ContextCompat.checkSelfPermission(
@@ -226,9 +230,9 @@ private fun NotificationsCard() {
                         ) {
                             permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
-                        HeaterAlertService.ensureRunning(context)
+                        scope.launch { container.pushRegistrar.enable() }
                     } else {
-                        HeaterAlertService.stop(context)
+                        scope.launch { container.pushRegistrar.disable() }
                     }
                 },
             )

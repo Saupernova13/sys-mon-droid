@@ -1,0 +1,47 @@
+package com.raavivi.sysmon.core.push
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.util.Log
+import com.raavivi.sysmon.SysMonApp
+import com.raavivi.sysmon.core.model.RelayBody
+import com.raavivi.sysmon.core.net.ApiResult
+import com.raavivi.sysmon.core.net.safeCall
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
+/**
+ * Handles the notification's "Stop heater" action: switches the plug's relay off
+ * through the admin relay API, then clears the notification. Runs off the main
+ * thread via [goAsync]; the FCM message that raised the notification may have
+ * cold-started the process, so it re-wires the API client from persisted state.
+ */
+class StopHeaterReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != ACTION_STOP_HEATER) return
+        val plugId = intent.getStringExtra(EXTRA_PLUG_ID)
+        if (plugId.isNullOrBlank()) return
+        val app = context.applicationContext as? SysMonApp ?: return
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val container = app.container
+                container.pushRegistrar.ensureApiReady()
+                when (val r = safeCall { container.api.api.setPlugRelay(plugId, RelayBody(false)) }) {
+                    is ApiResult.Ok -> HeaterNotifier.cancel(context)
+                    is ApiResult.Err -> Log.w(TAG, "stop heater failed: ${r.message}")
+                }
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    companion object {
+        const val ACTION_STOP_HEATER = "com.raavivi.sysmon.action.STOP_HEATER"
+        const val EXTRA_PLUG_ID = "plug_id"
+        private const val TAG = "StopHeaterReceiver"
+    }
+}

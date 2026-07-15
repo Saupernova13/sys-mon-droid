@@ -16,6 +16,8 @@ data class FeaturesResponse(
     val godot: Boolean = false,
     val power: Boolean = false,
     val remoteControl: Boolean = false,
+    /** Config-driven: the server has a Firebase key and can send FCM pushes. */
+    val push: Boolean = false,
     val detail: FeatureDetail? = null,
     /** Only present on `POST /api/settings`: flags needing a server restart. */
     val restartRequired: List<String> = emptyList(),
@@ -29,7 +31,11 @@ data class FeatureDetail(
     val godot: GodotDetail = GodotDetail(),
     val power: PowerFeatureDetail = PowerFeatureDetail(),
     val remoteControl: RemoteControlDetail = RemoteControlDetail(),
+    val push: PushFeatureDetail = PushFeatureDetail(),
 )
+
+@Serializable
+data class PushFeatureDetail(val configured: Boolean = false, val devices: Int = 0)
 
 @Serializable
 data class WhatsAppDetail(val enabled: Boolean = false, val wacliFound: Boolean = false)

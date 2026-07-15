@@ -44,12 +44,20 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setTerminalSession(id: String) = store.edit { it[KEY_TERM_SESSION] = id }
 
-    /** Whether the heater-alert foreground monitor should run. */
-    val heaterAlerts: Flow<Boolean> = store.data.map { it[KEY_HEATER_ALERTS] ?: false }
+    /** Whether this device wants heater push notifications (opt-in). Reuses the
+     *  legacy `heater_alerts` key so an upgrade keeps the user's choice. */
+    val pushEnabled: Flow<Boolean> = store.data.map { it[KEY_PUSH_ENABLED] ?: false }
 
-    suspend fun heaterAlertsNow(): Boolean = heaterAlerts.first()
+    suspend fun pushEnabledNow(): Boolean = pushEnabled.first()
 
-    suspend fun setHeaterAlerts(on: Boolean) = store.edit { it[KEY_HEATER_ALERTS] = on }
+    suspend fun setPushEnabled(on: Boolean) = store.edit { it[KEY_PUSH_ENABLED] = on }
+
+    /** The FCM token last registered with the server, so we can unregister it. */
+    suspend fun fcmTokenNow(): String? = store.data.map { it[KEY_FCM_TOKEN] }.first()
+
+    suspend fun setFcmToken(token: String) = store.edit { it[KEY_FCM_TOKEN] = token }
+
+    suspend fun clearFcmToken() = store.edit { it.remove(KEY_FCM_TOKEN) }
 
     private companion object {
         val KEY_SERVER = stringPreferencesKey("server_url")
@@ -57,6 +65,7 @@ class SettingsStore(private val context: Context) {
         val KEY_USERNAME = stringPreferencesKey("username")
         val KEY_ROLE = stringPreferencesKey("role")
         val KEY_TERM_SESSION = stringPreferencesKey("terminal_session")
-        val KEY_HEATER_ALERTS = booleanPreferencesKey("heater_alerts")
+        val KEY_PUSH_ENABLED = booleanPreferencesKey("heater_alerts")
+        val KEY_FCM_TOKEN = stringPreferencesKey("fcm_token")
     }
 }

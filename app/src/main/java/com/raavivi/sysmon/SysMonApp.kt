@@ -4,13 +4,10 @@ import android.app.Application
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import coil.ImageLoader
-import com.raavivi.sysmon.core.alerts.HeaterAlertService
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.data.SettingsStore
 import com.raavivi.sysmon.core.net.ApiProvider
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.raavivi.sysmon.core.push.PushRegistrar
 
 /**
  * Manual dependency container — kept deliberately small so the first build has no
@@ -22,7 +19,8 @@ class AppContainer(application: Application) {
     val appContext: Context = application.applicationContext
     val settings: SettingsStore = SettingsStore(application)
     val api: ApiProvider = ApiProvider()
-    val session: SessionManager = SessionManager(settings, api)
+    val pushRegistrar: PushRegistrar = PushRegistrar(appContext, settings, api)
+    val session: SessionManager = SessionManager(settings, api, pushRegistrar)
 
     /** Coil loader that reuses the authed OkHttp client so `/api/fs/file` images
      *  and WhatsApp media carry the bearer token. */
@@ -38,13 +36,8 @@ class SysMonApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        // Bring the heater monitor back up (app update, force-stop, crash) —
-        // ensureRunning is a no-op when it can't start from the background.
-        CoroutineScope(Dispatchers.Default).launch {
-            if (container.settings.heaterAlertsNow()) {
-                HeaterAlertService.ensureRunning(this@SysMonApp)
-            }
-        }
+        // Heater alerts now arrive by FCM push; no foreground watcher to start.
+        // Token (re)registration happens after login in SessionManager.
     }
 }
 

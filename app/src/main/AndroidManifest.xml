@@ -4,9 +4,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".SysMonApp"
@@ -30,22 +27,24 @@
             </intent-filter>
         </activity>
 
+        <!-- Firebase Cloud Messaging: receives heater alerts (data messages). -->
         <service
-            android:name=".core.alerts.HeaterAlertService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Continuously monitors a self-hosted smart plug and alerts while the heater is drawing power" />
-        </service>
-
-        <receiver
-            android:name=".core.alerts.BootReceiver"
+            android:name=".core.push.SysMonMessagingService"
             android:exported="false">
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
-        </receiver>
+        </service>
+
+        <!-- Fallback channel for any notification-type FCM message. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="heater_alerts" />
+
+        <!-- Notification "Stop heater" action target. -->
+        <receiver
+            android:name=".core.push.StopHeaterReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>
