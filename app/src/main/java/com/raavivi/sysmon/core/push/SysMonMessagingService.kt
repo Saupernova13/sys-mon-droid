@@ -7,9 +7,10 @@ import com.raavivi.sysmon.core.auth.SessionManager
 import kotlinx.coroutines.runBlocking
 
 /**
- * Receives FCM messages from the sys-mon backend. Heater alerts arrive as
- * data-only messages (`type=heater`, `event=on|update|off`) which we render via
- * [HeaterNotifier]. `onNewToken` re-registers a rotated token with the server.
+ * Receives FCM messages from the sys-mon backend. Plug alerts arrive as
+ * data-only messages (`type=plug_alert`, `event=on|update|off`) which we render
+ * via [PlugAlertNotifier]. `onNewToken` re-registers a rotated token with the
+ * server.
  *
  * Both callbacks run on a background thread inside a short FCM wakelock window;
  * the work here (a DataStore read + at most one HTTP call) finishes well within
@@ -19,12 +20,12 @@ class SysMonMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
-        if (data["type"] != "heater") return
+        if (data["type"] != "plug_alert") return
         val app = applicationContext as? SysMonApp ?: return
         val isAdmin = runBlocking {
             (app.container.settings.roleNow() ?: SessionManager.ROLE_ADMIN) != SessionManager.ROLE_VIEWER
         }
-        HeaterNotifier.handle(this, data, isAdmin)
+        PlugAlertNotifier.handle(this, data, isAdmin)
     }
 
     override fun onNewToken(token: String) {

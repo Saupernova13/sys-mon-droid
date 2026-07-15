@@ -179,11 +179,12 @@ fun MoreScreen(
 }
 
 /**
- * Heater-alert toggle: subscribes this device to Firebase push notifications so a
- * "Your heater is on" notification fires no matter how the plug was switched. The
- * backend watches the relay and pushes on/off; enabling registers this device's
- * FCM token, disabling unregisters it. Enabling asks for POST_NOTIFICATIONS on
- * Android 13+. Disabled with a hint when the server has no push key configured.
+ * Appliance-alert toggle: subscribes this device to Firebase push notifications
+ * so a "Your <appliance> is on" notification fires no matter how the plug was
+ * switched (which plug is watched is a server-side setting). The backend watches
+ * the relay and pushes on/off; enabling registers this device's FCM token,
+ * disabling unregisters it. Enabling asks for POST_NOTIFICATIONS on Android 13+.
+ * Disabled with a hint when the server has no push key configured.
  */
 @Composable
 private fun NotificationsCard(pushAvailable: Boolean) {
@@ -205,10 +206,10 @@ private fun NotificationsCard(pushAvailable: Boolean) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Heater alert", style = MaterialTheme.typography.bodyLarge)
+                Text("Appliance alert", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     if (pushAvailable) {
-                        "Push a notification while the heater plug is on, with live usage and a Stop button."
+                        "Push a notification while the watched plug is on, with live usage and a Stop button."
                     } else {
                         "Unavailable — the server has no Firebase push key configured."
                     },

@@ -13,14 +13,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Handles the notification's "Stop heater" action: switches the plug's relay off
- * through the admin relay API, then clears the notification. Runs off the main
- * thread via [goAsync]; the FCM message that raised the notification may have
- * cold-started the process, so it re-wires the API client from persisted state.
+ * Handles the notification's "Stop" action: switches the alerted plug's relay
+ * off through the admin relay API, then clears the notification. Runs off the
+ * main thread via [goAsync]; the FCM message that raised the notification may
+ * have cold-started the process, so it re-wires the API client from persisted
+ * state first.
  */
-class StopHeaterReceiver : BroadcastReceiver() {
+class StopPlugReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION_STOP_HEATER) return
+        if (intent.action != ACTION_STOP_PLUG) return
         val plugId = intent.getStringExtra(EXTRA_PLUG_ID)
         if (plugId.isNullOrBlank()) return
         val app = context.applicationContext as? SysMonApp ?: return
@@ -30,8 +31,8 @@ class StopHeaterReceiver : BroadcastReceiver() {
                 val container = app.container
                 container.pushRegistrar.ensureApiReady()
                 when (val r = safeCall { container.api.api.setPlugRelay(plugId, RelayBody(false)) }) {
-                    is ApiResult.Ok -> HeaterNotifier.cancel(context)
-                    is ApiResult.Err -> Log.w(TAG, "stop heater failed: ${r.message}")
+                    is ApiResult.Ok -> PlugAlertNotifier.cancel(context)
+                    is ApiResult.Err -> Log.w(TAG, "stop plug failed: ${r.message}")
                 }
             } finally {
                 pending.finish()
@@ -40,8 +41,8 @@ class StopHeaterReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        const val ACTION_STOP_HEATER = "com.raavivi.sysmon.action.STOP_HEATER"
+        const val ACTION_STOP_PLUG = "com.raavivi.sysmon.action.STOP_PLUG"
         const val EXTRA_PLUG_ID = "plug_id"
-        private const val TAG = "StopHeaterReceiver"
+        private const val TAG = "StopPlugReceiver"
     }
 }

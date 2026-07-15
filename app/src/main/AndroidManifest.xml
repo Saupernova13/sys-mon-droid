@@ -39,11 +39,11 @@
         <!-- Fallback channel for any notification-type FCM message. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="heater_alerts" />
+            android:value="plug_alerts" />
 
-        <!-- Notification "Stop heater" action target. -->
+        <!-- Notification "Stop" action target. -->
         <receiver
-            android:name=".core.push.StopHeaterReceiver"
+            android:name=".core.push.StopPlugReceiver"
             android:exported="false" />
     </application>
 

@@ -17,13 +17,16 @@ import com.raavivi.sysmon.ui.common.formatWatts
 import java.util.Locale
 
 /**
- * Turns a heater FCM data message into the local notification. The backend
- * watches the relay and pushes `event=on|update|off`; this renders (or clears)
- * a single high-priority notification showing the live draw, the running cost,
- * a chronometer counting from when the heater came on, and — for admins — a
- * Stop button that switches the plug off through [StopHeaterReceiver].
+ * Turns a plug-alert FCM data message into the local notification. The backend
+ * watches a configured plug's relay and pushes `event=on|update|off`; this
+ * renders (or clears) a single high-priority notification showing the live draw,
+ * the running cost, a chronometer counting from when the plug came on, and — for
+ * admins — a Stop button that switches the plug off through [StopPlugReceiver].
+ *
+ * When the message asks for it (`ongoing=true`) the notification is ongoing:
+ * the user can't swipe it away, it only clears when the plug turns off.
  */
-object HeaterNotifier {
+object PlugAlertNotifier {
 
     fun handle(context: Context, data: Map<String, String>, isAdmin: Boolean) {
         ensureChannel(context)
@@ -34,30 +37,33 @@ object HeaterNotifier {
     }
 
     private fun show(context: Context, data: Map<String, String>, isAdmin: Boolean) {
-        val name = data["device_name"].orEmpty().ifBlank { "Heater" }
+        val label = data["label"].orEmpty().ifBlank { data["device_name"].orEmpty() }.ifBlank { "appliance" }
         val watts = data["watts"]?.toDoubleOrNull() ?: 0.0
         val perHour = data["cost_per_hour"]?.toDoubleOrNull() ?: 0.0
         val currency = data["currency"].orEmpty()
         val startedAtMs = ((data["started_at"]?.toDoubleOrNull() ?: 0.0) * 1000).toLong()
         val plugId = data["plug_id"].orEmpty()
+        val ongoing = data["ongoing"] != "false" // default true
 
         val costStr = String.format(Locale.US, "%.2f", perHour)
         val builder = NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Your $name is on")
+            .setContentTitle("Your $label is on")
             .setContentText("${formatWatts(watts)} · $currency$costStr/h right now")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            // "on" alerts (heads-up/sound); the periodic "update" re-posts the
-            // same id silently to refresh the watts/cost without buzzing again.
+            // "on" alerts (heads-up/sound); each "update" re-posts the same id
+            // silently to refresh the watts/cost without buzzing again.
             .setOnlyAlertOnce(true)
-            .setContentIntent(openAppIntent(context))
+            // Non-dismissable while on: it only goes away on the "off" push.
+            .setOngoing(ongoing)
             .setAutoCancel(false)
+            .setContentIntent(openAppIntent(context))
         if (startedAtMs > 0) {
             builder.setWhen(startedAtMs).setUsesChronometer(true).setShowWhen(true)
         }
         if (isAdmin && plugId.isNotBlank()) {
-            builder.addAction(0, "Stop heater", stopIntent(context, plugId))
+            builder.addAction(0, "Stop", stopIntent(context, plugId))
         }
         notifySafely(context, builder.build())
     }
@@ -71,9 +77,9 @@ object HeaterNotifier {
         nm.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ALERTS,
-                "Heater alerts",
+                "Appliance alerts",
                 NotificationManager.IMPORTANCE_HIGH,
-            ).apply { description = "Fires when the heater plug turns on" },
+            ).apply { description = "Fires when a watched plug turns on" },
         )
     }
 
@@ -103,12 +109,12 @@ object HeaterNotifier {
         PendingIntent.getBroadcast(
             context,
             plugId.hashCode(),
-            Intent(context, StopHeaterReceiver::class.java)
-                .setAction(StopHeaterReceiver.ACTION_STOP_HEATER)
-                .putExtra(StopHeaterReceiver.EXTRA_PLUG_ID, plugId),
+            Intent(context, StopPlugReceiver::class.java)
+                .setAction(StopPlugReceiver.ACTION_STOP_PLUG)
+                .putExtra(StopPlugReceiver.EXTRA_PLUG_ID, plugId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-    const val CHANNEL_ALERTS = "heater_alerts"
+    const val CHANNEL_ALERTS = "plug_alerts"
     private const val NOTIF_ALERT = 42
 }
