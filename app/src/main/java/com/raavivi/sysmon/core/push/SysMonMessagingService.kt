@@ -12,6 +12,12 @@ import kotlinx.coroutines.runBlocking
  * via [PlugAlertNotifier]. `onNewToken` re-registers a rotated token with the
  * server.
  *
+ * `heater` is accepted as a legacy alias for `plug_alert`: the server and app
+ * update independently, so a newer app must still handle an older server (which
+ * sends `type=heater`) until prod is redeployed. [PlugAlertNotifier] tolerates
+ * the older payload (no `label`/`ongoing` — it falls back to the device name and
+ * defaults ongoing on).
+ *
  * Both callbacks run on a background thread inside a short FCM wakelock window;
  * the work here (a DataStore read + at most one HTTP call) finishes well within
  * it, so [runBlocking] keeps it from being cut off by process death.
@@ -20,7 +26,7 @@ class SysMonMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
-        if (data["type"] != "plug_alert") return
+        if (data["type"] != "plug_alert" && data["type"] != "heater") return
         val app = applicationContext as? SysMonApp ?: return
         val isAdmin = runBlocking {
             (app.container.settings.roleNow() ?: SessionManager.ROLE_ADMIN) != SessionManager.ROLE_VIEWER
