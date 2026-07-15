@@ -137,19 +137,30 @@ class DtoDecodeTest {
         assertEquals(3.8152, r.effectiveRate, 0.0001)
         // Envelope has no watts of its own; the headline is the aggregate.
         assertNotNull(r.aggregate)
-        assertEquals(165.0, r.headline.watts, 0.0001)
+        assertEquals(120.0, r.headline.watts, 0.0001)
         assertEquals(3, r.aggregate!!.deviceCount)
-        assertEquals(2, r.aggregate!!.onlineCount)
+        assertEquals(3, r.aggregate!!.onlineCount)
         assertTrue(r.aggregate!!.relayOn)
+        assertEquals(0.46, r.aggregate!!.cost.perHour, 0.0001)
         assertEquals(3, r.devices.size)
+        val pc = r.deviceById("default")!!
+        assertEquals("PC Plug", pc.deviceName)
+        assertTrue(pc.relayOn)
+        assertEquals(120.0, pc.watts, 0.0001)
         val heater = r.deviceById("heater")!!
         assertEquals("Heater", heater.deviceName)
-        assertTrue(heater.relayOn)
-        assertEquals(45.0, heater.watts, 0.0001)
-        // A plug the poller hasn't reached yet keeps the flat error form.
-        val fan = r.deviceById("fan-airfryer")!!
-        assertFalse(fan.available)
-        assertEquals("starting up", fan.error)
+        assertFalse(heater.relayOn)
+        assertEquals("Switched off", heater.load.label)
+    }
+
+    @Test
+    fun `device still starting up keeps flat error form inside envelope`() {
+        val json = """{"available":false,"configured":true,"currency":"R","effective_rate":3.8152,"devices":[{"id":"heater","device_name":"Heater","available":false,"reachable":false,"configured":true,"error":"starting up"}]}"""
+        val r = SysMonJson.decodeFromString(PowerReading.serializer(), json)
+        assertNull(r.aggregate)
+        val heater = r.deviceById("heater")!!
+        assertFalse(heater.available)
+        assertEquals("starting up", heater.error)
     }
 
     @Test
@@ -196,6 +207,6 @@ class DtoDecodeTest {
 
         // Multi-device envelope from power::latest_all(): aggregate + devices,
         // with one plug still in the "starting up" flat-error form.
-        const val MULTI_POWER_JSON = """{"available":true,"configured":true,"currency":"R","effective_rate":3.8152,"aggregate":{"device_count":3,"online_count":2,"relay_on":true,"watts":165.0,"apparent_va":170.5,"reactive_var":28.0,"today_kwh":2.295,"yesterday_kwh":3.264,"total_kwh":30.736,"load":{"gauge_pct":4.1,"hint":"a fridge compressor, monitor, or vacuum","label":"Heavy","level":"heavy"},"cost":{"per_day":15.11,"per_hour":0.63,"per_month":453.28,"projected_today":22.28,"projected_today_kwh":5.84,"today":8.76,"total":117.26,"yesterday":12.45}},"devices":[{"id":"default","apparent_va":143.0,"available":true,"configured":true,"cost":{"per_day":11.76,"per_hour":0.49,"per_month":352.8,"projected_today":null,"projected_today_kwh":null,"projected_vs_yesterday_pct":null,"today":6.28,"total":23.58,"yesterday":7.92},"currency":"R","current":0.623,"device":{"firmware":"15.5.0(release-tasmota32)","ip":"http://192.168.0.130","uptime":"3T09:28:29","wifi_rssi":100,"wifi_signal_dbm":-29},"device_name":"PC Plug","load":{"gauge_pct":7.0,"hint":"a TV, desktop PC, or games console","label":"Moderate","level":"moderate"},"power_factor":0.98,"quality":{"power_factor":{"desc":"share of the supplied power doing real work","label":"Excellent","level":"excellent"},"reactive_pct":18.2,"voltage":{"desc":"nominal 230 V","label":"Healthy","level":"nominal"}},"reachable":true,"reactive_var":26.0,"relay_on":true,"stale":false,"tariff":3.5,"today_kwh":1.795,"total_kwh":6.736,"total_start":"2026-06-29T21:12:32","ts":1783116990.4954665,"voltage":229.0,"watts":120.0,"yesterday_kwh":2.264},{"id":"heater","apparent_va":47.5,"available":true,"configured":true,"cost":{"per_day":4.12,"per_hour":0.17,"per_month":123.6,"today":2.48,"total":93.68,"yesterday":4.53},"currency":"R","current":0.205,"device":{"firmware":"13.0","ip":"http://192.168.0.131","uptime":"1T02:11:09","wifi_rssi":80,"wifi_signal_dbm":-50},"device_name":"Heater","load":{"gauge_pct":2.3,"hint":"a few LED bulbs, a router, or a laptop charger","label":"Light","level":"light"},"power_factor":0.98,"quality":{"power_factor":{"desc":"share of the supplied power doing real work","label":"Excellent","level":"excellent"},"reactive_pct":10.5,"voltage":{"desc":"nominal 230 V","label":"Healthy","level":"nominal"}},"reachable":true,"reactive_var":5.0,"relay_on":true,"stale":false,"tariff":3.5,"today_kwh":0.5,"total_kwh":24.0,"total_start":"2026-06-29T21:12:32","ts":1783116990.4954665,"voltage":230.0,"watts":45.0,"yesterday_kwh":1.0},{"id":"fan-airfryer","device_name":"Fan - Airfryer","available":false,"reachable":false,"configured":true,"error":"starting up"}]}"""
+        const val MULTI_POWER_JSON = """{"aggregate":{"apparent_va":120.0,"cost":{"per_day":10.99,"per_hour":0.46,"per_month":329.64,"projected_today":12.89,"projected_today_kwh":3.378,"today":5.72,"total":114.46,"yesterday":11.45},"device_count":3,"load":{"gauge_pct":2.0,"hint":"a TV, desktop PC, or games console","label":"Moderate","level":"moderate"},"online_count":3,"reactive_var":0.0,"relay_on":true,"today_kwh":1.5,"total_kwh":30.0,"watts":120.0,"yesterday_kwh":3.0},"available":true,"configured":true,"currency":"R","devices":[{"apparent_va":120.0,"available":true,"configured":true,"cost":{"per_day":10.99,"per_hour":0.46,"per_month":329.64,"projected_today":4.3,"projected_today_kwh":1.126,"projected_vs_yesterday_pct":12.6,"today":1.91,"total":38.15,"yesterday":3.82},"currency":"R","current":0.5,"device":{"firmware":"13.0","ip":"http://127.0.0.1:9801","uptime":null,"wifi_rssi":80,"wifi_signal_dbm":-50},"device_name":"PC Plug","effective_rate":3.8152,"id":"default","load":{"gauge_pct":6.0,"hint":"a TV, desktop PC, or games console","label":"Moderate","level":"moderate"},"power_factor":0.98,"quality":{"power_factor":{"desc":"share of the supplied power doing real work — the rest is reactive current the grid carries but the device doesn't consume. Low values are normal for chargers, LED drivers, and motors","label":"Excellent","level":"excellent"},"reactive_pct":0.0,"voltage":{"desc":"nominal 230 V, acceptable band 207–253.00000000000003 V","label":"Healthy","level":"nominal"}},"reachable":true,"reactive_var":0.0,"relay_on":true,"stale":false,"tariff":3.5,"tariff_tiers":[{"rate":2.4137,"up_to":100.0},{"rate":2.8247,"up_to":400.0},{"rate":3.0775,"up_to":650.0},{"rate":3.3176,"up_to":null}],"tariff_vat":0.15,"today_kwh":0.5,"total_kwh":10.0,"total_start":null,"ts":1784104767.367324,"voltage":230.0,"watts":120.0,"yesterday_kwh":1.0},{"apparent_va":0.0,"available":true,"configured":true,"cost":{"per_day":0.0,"per_hour":0.0,"per_month":0.0,"projected_today":4.3,"projected_today_kwh":1.126,"projected_vs_yesterday_pct":12.6,"today":1.91,"total":38.15,"yesterday":3.82},"currency":"R","current":0.0,"device":{"firmware":"13.0","ip":"http://127.0.0.1:9802","uptime":null,"wifi_rssi":80,"wifi_signal_dbm":-50},"device_name":"Heater","effective_rate":3.8152,"id":"heater","load":{"gauge_pct":0.0,"hint":"the plug's relay is open — no power is passing through","label":"Switched off","level":"off"},"power_factor":0.98,"quality":{"power_factor":{"desc":"too little load to judge efficiency","label":"—","level":"idle"},"reactive_pct":0.0,"voltage":{"desc":"nominal 230 V, acceptable band 207–253.00000000000003 V","label":"Healthy","level":"nominal"}},"reachable":true,"reactive_var":0.0,"relay_on":false,"stale":false,"tariff":3.5,"tariff_tiers":[{"rate":2.4137,"up_to":100.0},{"rate":2.8247,"up_to":400.0},{"rate":3.0775,"up_to":650.0},{"rate":3.3176,"up_to":null}],"tariff_vat":0.15,"today_kwh":0.5,"total_kwh":10.0,"total_start":null,"ts":1784104767.3689587,"voltage":230.0,"watts":0.0,"yesterday_kwh":1.0},{"apparent_va":0.0,"available":true,"configured":true,"cost":{"per_day":0.0,"per_hour":0.0,"per_month":0.0,"projected_today":4.3,"projected_today_kwh":1.126,"projected_vs_yesterday_pct":12.6,"today":1.91,"total":38.15,"yesterday":3.82},"currency":"R","current":0.0,"device":{"firmware":"13.0","ip":"http://127.0.0.1:9803","uptime":null,"wifi_rssi":80,"wifi_signal_dbm":-50},"device_name":"Fan - Airfryer","effective_rate":3.8152,"id":"fan-airfryer","load":{"gauge_pct":0.0,"hint":"the plug's relay is open — no power is passing through","label":"Switched off","level":"off"},"power_factor":0.98,"quality":{"power_factor":{"desc":"too little load to judge efficiency","label":"—","level":"idle"},"reactive_pct":0.0,"voltage":{"desc":"nominal 230 V, acceptable band 207–253.00000000000003 V","label":"Healthy","level":"nominal"}},"reachable":true,"reactive_var":0.0,"relay_on":false,"stale":false,"tariff":3.5,"tariff_tiers":[{"rate":2.4137,"up_to":100.0},{"rate":2.8247,"up_to":400.0},{"rate":3.0775,"up_to":650.0},{"rate":3.3176,"up_to":null}],"tariff_vat":0.15,"today_kwh":0.5,"total_kwh":10.0,"total_start":null,"ts":1784104767.370012,"voltage":230.0,"watts":0.0,"yesterday_kwh":1.0}],"effective_rate":3.8152}"""
     }
 }
