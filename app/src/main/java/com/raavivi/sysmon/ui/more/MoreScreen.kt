@@ -19,10 +19,17 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,20 +37,26 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.BuildConfig
 import com.raavivi.sysmon.LocalAppContainer
+import com.raavivi.sysmon.core.alerts.HeaterAlertService
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun MoreScreen(
@@ -86,6 +99,8 @@ fun MoreScreen(
                 StatRow("User", vm.username)
                 StatRow("Role", role)
             }
+
+            NotificationsCard()
 
             // Everything below the connection card mutates the host, so the
             // read-only viewer role only ever sees Connection + Account.
@@ -161,6 +176,63 @@ fun MoreScreen(
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
         )
+    }
+}
+
+/**
+ * Heater-alert toggle: runs the [HeaterAlertService] foreground watcher so a
+ * "Your heater is on" notification fires no matter how the plug was switched.
+ * Enabling asks for POST_NOTIFICATIONS on Android 13+; the service is started
+ * either way and simply stays silent until the permission is granted.
+ */
+@Composable
+private fun NotificationsCard() {
+    val container = LocalAppContainer.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var enabled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { enabled = container.settings.heaterAlertsNow() }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* the service runs regardless; alerts show once granted */ }
+
+    SectionCard(title = "Notifications") {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Heater alert", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Notify while the heater plug is on, with live usage and a Stop button.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = { on ->
+                    enabled = on
+                    scope.launch { container.settings.setHeaterAlerts(on) }
+                    if (on) {
+                        if (Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        HeaterAlertService.ensureRunning(context)
+                    } else {
+                        HeaterAlertService.stop(context)
+                    }
+                },
+            )
+        }
     }
 }
 

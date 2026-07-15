@@ -1,6 +1,7 @@
 package com.raavivi.sysmon.core.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -43,11 +44,19 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setTerminalSession(id: String) = store.edit { it[KEY_TERM_SESSION] = id }
 
+    /** Whether the heater-alert foreground monitor should run. */
+    val heaterAlerts: Flow<Boolean> = store.data.map { it[KEY_HEATER_ALERTS] ?: false }
+
+    suspend fun heaterAlertsNow(): Boolean = heaterAlerts.first()
+
+    suspend fun setHeaterAlerts(on: Boolean) = store.edit { it[KEY_HEATER_ALERTS] = on }
+
     private companion object {
         val KEY_SERVER = stringPreferencesKey("server_url")
         val KEY_TOKEN = stringPreferencesKey("token")
         val KEY_USERNAME = stringPreferencesKey("username")
         val KEY_ROLE = stringPreferencesKey("role")
         val KEY_TERM_SESSION = stringPreferencesKey("terminal_session")
+        val KEY_HEATER_ALERTS = booleanPreferencesKey("heater_alerts")
     }
 }
