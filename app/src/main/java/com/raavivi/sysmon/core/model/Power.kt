@@ -3,13 +3,17 @@ package com.raavivi.sysmon.core.model
 import kotlinx.serialization.Serializable
 
 /**
- * `GET /api/power-usage` — smart-plug (Tasmota) reading. Three states:
- * disabled/unconfigured (`available=false` + [error]), live, and stale
- * (`stale=true` + [staleSeconds]). The same object rides along inside
- * [SystemSnapshot.power] on every snapshot/WS frame.
+ * `GET /api/power-usage` — smart-plug (Tasmota) reading. The multi-device
+ * backend returns an envelope: top-level `available`/`configured` plus an
+ * [aggregate] total and one entry per plug in [devices]; all three reuse this
+ * same shape (the aggregate has no id/electricals, a device has no children).
+ * Unconfigured/disabled keeps the flat `available=false` + [error] form. The
+ * same object rides along inside [SystemSnapshot.power] on every snapshot/WS
+ * frame.
  */
 @Serializable
 data class PowerReading(
+    val id: String = "",
     val available: Boolean = false,
     val reachable: Boolean = false,
     val configured: Boolean = false,
@@ -33,8 +37,32 @@ data class PowerReading(
     val quality: PowerQuality = PowerQuality(),
     val tariff: Double = 0.0,
     val currency: String = "",
+    val effectiveRate: Double = 0.0,
     val cost: PowerCost = PowerCost(),
     val device: PowerDevice = PowerDevice(),
+    // Aggregate-only fields (the summed reading inside the envelope).
+    val deviceCount: Int = 0,
+    val onlineCount: Int = 0,
+    // Envelope-only fields.
+    val aggregate: PowerReading? = null,
+    val devices: List<PowerReading> = emptyList(),
+) {
+    /** The reading a headline should show: the aggregate when this is the
+     *  multi-device envelope, otherwise the reading itself. */
+    val headline: PowerReading get() = aggregate ?: this
+
+    fun deviceById(id: String): PowerReading? = devices.firstOrNull { it.id == id }
+}
+
+/** `POST /api/power/devices/{id}/relay` request body — the desired relay state. */
+@Serializable
+data class RelayBody(val on: Boolean)
+
+/** `POST /api/power/devices/{id}/relay` response — the plug's reported state. */
+@Serializable
+data class RelayResponse(
+    val id: String = "",
+    val relayOn: Boolean = false,
 )
 
 @Serializable

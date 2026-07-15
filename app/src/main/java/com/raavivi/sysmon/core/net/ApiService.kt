@@ -30,6 +30,8 @@ import com.raavivi.sysmon.core.model.PowerHistoryResponse
 import com.raavivi.sysmon.core.model.PowerReading
 import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
+import com.raavivi.sysmon.core.model.RelayBody
+import com.raavivi.sysmon.core.model.RelayResponse
 import com.raavivi.sysmon.core.model.SearchBackend
 import com.raavivi.sysmon.core.model.SearchResponse
 import com.raavivi.sysmon.core.model.StatusResponse
@@ -47,6 +49,7 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
@@ -105,7 +108,13 @@ interface ApiService {
         @Query("start") start: Double? = null,
         @Query("end") end: Double? = null,
         @Query("target_points") targetPoints: Int = 600,
+        /** Plug id to filter to; null/"all" means the aggregate. */
+        @Query("plug") plug: String? = null,
     ): PowerHistoryResponse
+
+    /** Switch one smart plug's relay. Admin only; state-aware on the server. */
+    @POST("api/power/devices/{id}/relay")
+    suspend fun setPlugRelay(@Path("id") id: String, @Body body: RelayBody): RelayResponse
 
     // ── Power / process ──────────────────────────────────────────────────────────
     @POST("api/power/restart")
