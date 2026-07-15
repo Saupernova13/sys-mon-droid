@@ -12,3 +12,8 @@ app/build/
 *.apk
 *.keystore
 *.jks
+
+# Firebase config — carries the project's app id / API key; keep it out of the
+# repo. Copy google-services.json.example to app/google-services.json and fill in
+# your own Firebase Android app values (see README).
+app/google-services.json
