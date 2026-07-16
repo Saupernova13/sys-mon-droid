@@ -8,15 +8,15 @@ import kotlinx.coroutines.runBlocking
 
 /**
  * Receives FCM messages from the sys-mon backend. Plug alerts arrive as
- * data-only messages (`type=plug_alert`, `event=on|update|off`) which we render
- * via [PlugAlertNotifier]. `onNewToken` re-registers a rotated token with the
- * server.
+ * data-only messages (`type=plug_alert`, `event=on|update|off`) carrying every
+ * plug that's currently on, which we render via [PlugAlertNotifier]. `onNewToken`
+ * re-registers a rotated token with the server.
  *
  * `heater` is accepted as a legacy alias for `plug_alert`: the server and app
  * update independently, so a newer app must still handle an older server (which
- * sends `type=heater`) until prod is redeployed. [PlugAlertNotifier] tolerates
- * the older payload (no `label`/`ongoing` — it falls back to the device name and
- * defaults ongoing on).
+ * sends `type=heater`) until prod is redeployed. [PlugAlert] tolerates the older
+ * payloads too — no `plugs` array (it rebuilds one from the single-plug keys),
+ * no `label`/`ongoing`/`style` (it falls back to the device name and defaults).
  *
  * Both callbacks run on a background thread inside a short FCM wakelock window;
  * the work here (a DataStore read + at most one HTTP call) finishes well within

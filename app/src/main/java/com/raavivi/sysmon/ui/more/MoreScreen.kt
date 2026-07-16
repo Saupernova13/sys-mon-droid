@@ -181,10 +181,14 @@ fun MoreScreen(
 /**
  * Appliance-alert toggle: subscribes this device to Firebase push notifications
  * so a "Your <appliance> is on" notification fires no matter how the plug was
- * switched (which plug is watched is a server-side setting). The backend watches
- * the relay and pushes on/off; enabling registers this device's FCM token,
- * disabling unregisters it. Enabling asks for POST_NOTIFICATIONS on Android 13+.
- * Disabled with a hint when the server has no push key configured.
+ * switched. The backend watches the relays and pushes on/off; enabling registers
+ * this device's FCM token, disabling unregisters it. Enabling asks for
+ * POST_NOTIFICATIONS on Android 13+. Disabled with a hint when the server has no
+ * push key configured.
+ *
+ * This switch is only "does this phone get alerts at all". Which plugs alert and
+ * how they're laid out are server-side (the dashboard's Settings panel), so they
+ * stay consistent across every registered device and need no app update.
  */
 @Composable
 private fun NotificationsCard(pushAvailable: Boolean) {
@@ -206,10 +210,10 @@ private fun NotificationsCard(pushAvailable: Boolean) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Appliance alert", style = MaterialTheme.typography.bodyLarge)
+                Text("Appliance alerts", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     if (pushAvailable) {
-                        "Push a notification while the watched plug is on, with live usage and a Stop button."
+                        "Push a notification while a watched plug is on, with live usage and a Stop button. Pick which plugs in the dashboard's Settings."
                     } else {
                         "Unavailable — the server has no Firebase push key configured."
                     },
