@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import coil.ImageLoader
 import com.raavivi.sysmon.core.auth.SessionManager
+import com.raavivi.sysmon.core.auth.TokenRenewer
 import com.raavivi.sysmon.core.data.SettingsStore
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.push.PushRegistrar
@@ -20,7 +21,8 @@ class AppContainer(application: Application) {
     val settings: SettingsStore = SettingsStore(application)
     val api: ApiProvider = ApiProvider()
     val pushRegistrar: PushRegistrar = PushRegistrar(appContext, settings, api)
-    val session: SessionManager = SessionManager(settings, api, pushRegistrar)
+    val tokenRenewer: TokenRenewer = TokenRenewer(settings, api)
+    val session: SessionManager = SessionManager(settings, api, pushRegistrar, tokenRenewer)
 
     /** Coil loader that reuses the authed OkHttp client so `/api/fs/file` images
      *  and WhatsApp media carry the bearer token. */

@@ -22,6 +22,7 @@ class SessionManager(
     private val settings: SettingsStore,
     private val api: ApiProvider,
     private val pushRegistrar: PushRegistrar,
+    private val tokenRenewer: TokenRenewer,
 ) {
     private val _state = MutableStateFlow(AuthState.Loading)
     val state: StateFlow<AuthState> = _state.asStateFlow()
@@ -55,6 +56,9 @@ class SessionManager(
             is ApiResult.Ok -> {
                 currentUser = r.value.user
                 setRole(r.value.role)
+                // Opening the app is also a chance to slide the session forward,
+                // which keeps the home-screen widgets alive between visits.
+                tokenRenewer.renewIfDue()
                 refreshFeatures()
                 _state.value = AuthState.LoggedIn
                 pushRegistrar.syncRegistration()
