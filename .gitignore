@@ -17,3 +17,10 @@ app/build/
 # repo. Copy google-services.json.example to app/google-services.json and fill in
 # your own Firebase Android app values (see README).
 app/google-services.json
+
+# Captured auth responses. A login response is a bearer credential — one of
+# these was committed by accident once (an expired viewer JWT), so anything
+# shaped like a saved session stays out of the repo.
+login*.json
+*.token
+.token
