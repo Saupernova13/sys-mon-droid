@@ -26,13 +26,19 @@ import com.raavivi.sysmon.core.model.ModelLogMeta
 import com.raavivi.sysmon.core.model.ModelLogResponse
 import com.raavivi.sysmon.core.model.OkResponse
 import com.raavivi.sysmon.core.model.PowerActionResponse
+import com.raavivi.sysmon.core.model.PowerCalendarResponse
+import com.raavivi.sysmon.core.model.PowerDevicesBody
+import com.raavivi.sysmon.core.model.PowerDevicesResponse
 import com.raavivi.sysmon.core.model.PowerHistoryResponse
 import com.raavivi.sysmon.core.model.PowerReading
+import com.raavivi.sysmon.core.model.PowerSchedulesBody
+import com.raavivi.sysmon.core.model.PowerSchedulesResponse
 import com.raavivi.sysmon.core.model.PushRegisterBody
 import com.raavivi.sysmon.core.model.PushRegisterResponse
 import com.raavivi.sysmon.core.model.PushStatusResponse
 import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
+import com.raavivi.sysmon.core.model.RefreshResponse
 import com.raavivi.sysmon.core.model.RelayBody
 import com.raavivi.sysmon.core.model.RelayResponse
 import com.raavivi.sysmon.core.model.SearchBackend
@@ -67,6 +73,11 @@ interface ApiService {
 
     @GET("auth/verify")
     suspend fun verify(): VerifyResponse
+
+    /** Slide the session forward: a fresh token with a full TTL. Lets the
+     *  home-screen widgets outlive the 72-hour default with the app closed. */
+    @POST("auth/refresh")
+    suspend fun refreshToken(): RefreshResponse
 
     @POST("auth/logout")
     suspend fun logout(): OkResponse
@@ -115,9 +126,36 @@ interface ApiService {
         @Query("plug") plug: String? = null,
     ): PowerHistoryResponse
 
+    /** Month rollup for the calendar view; `month` is `YYYY-MM` (blank = now),
+     *  `plug` null/"all" is the aggregate across every device. */
+    @GET("api/power-usage/calendar")
+    suspend fun powerCalendar(
+        @Query("month") month: String? = null,
+        @Query("plug") plug: String? = null,
+    ): PowerCalendarResponse
+
     /** Switch one smart plug's relay. Admin only; state-aware on the server. */
     @POST("api/power/devices/{id}/relay")
     suspend fun setPlugRelay(@Path("id") id: String, @Body body: RelayBody): RelayResponse
+
+    // ── Plug configuration (device manager + schedules) ──────────────────────────
+
+    /** Every configured plug with its alert/protection flags. Readable by any
+     *  signed-in user; only admins may POST it back. */
+    @GET("api/power/devices")
+    suspend fun powerDevices(): PowerDevicesResponse
+
+    /** Replaces the whole device list — send every device, not just the edits. */
+    @POST("api/power/devices")
+    suspend fun setPowerDevices(@Body body: PowerDevicesBody): PowerDevicesResponse
+
+    /** On/off windows for every plug (filter by `plug` client-side). */
+    @GET("api/power/schedules")
+    suspend fun powerSchedules(): PowerSchedulesResponse
+
+    /** Replaces every window belonging to one plug; other plugs are untouched. */
+    @POST("api/power/schedules")
+    suspend fun setPowerSchedules(@Body body: PowerSchedulesBody): PowerSchedulesResponse
 
     // ── Push notifications (FCM) ─────────────────────────────────────────────────
     @GET("api/push/status")
