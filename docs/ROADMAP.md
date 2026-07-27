@@ -49,6 +49,25 @@ The backend was never modified — this is purely a client.
 - `/api/version` shown next to the app version; DTOs pinned by unit tests
   decoding fixtures captured from a live server.
 
+### Stage 11 — Power parity + home-screen widgets (0.7.0) ✅
+- **Calendar tab** (`/api/power-usage/calendar`): month grid, per-day cost and a
+  24-hour sparkline on one shared vertical scale, month paging capped at the
+  current month, tap-a-day for exact figures (the web tooltip has no touch
+  equivalent).
+- **Schedules tab** (`GET`/`POST /api/power/schedules`): per-plug on/off windows
+  with weekday selection and midnight wrapping, edited as a local draft because
+  the endpoint replaces a plug's whole set in one call. Times go through the
+  Material picker — the backend silently drops rows whose times it can't parse.
+- **Plug alerts screen**: the server's per-plug `alert` flag (via
+  `POST /api/power/devices`, shared with the dashboard) plus a per-phone mute
+  list that filters what `PlugAlertNotifier` renders and re-sums the totals.
+- **Home-screen widgets**: a configurable per-plug tile and an all-plugs list,
+  both driven by `PlugWidgetRepository` — cached snapshot, relay toggles, and no
+  dependency on the app having been opened.
+- **Sliding token renewal** (`POST /auth/refresh`, added backend-side): the 72-hour
+  JWT is renewed inside its last 24 hours on app launch and on every widget
+  refresh, which is what makes the widgets viable at all.
+
 ## Not included / future
 
 - **Godot editor** — intentionally skipped in this client.
@@ -61,6 +80,13 @@ The backend was never modified — this is purely a client.
 - **History explorer** — `/api/history` pagination, `/api/history/processes`
   (what ran at a past timestamp), and CSV/JSON export.
 - **Screen-share quality/scale controls** — server-side `config.SCREEN_*` only.
+- **Widget updates faster than 30 minutes** — Android's `updatePeriodMillis`
+  floor. Event-driven refreshes (tap, toggle, FCM alert, in-app poll) cover the
+  cases that matter; a foreground service or a short-interval alarm would cost
+  battery for little gain.
+- **`RemoteCollectionItems` for the list widget** — the non-deprecated
+  collection API is API 31+, and this module ships to minSdk 26. Revisit if the
+  floor ever rises.
 
 ## Notes
 - All streams authenticate with `?token=<jwt>` (see `ApiProvider.openWebSocket`).

@@ -21,10 +21,33 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   prepare→confirm kill flow (and rate-limit handling).
 - **Power & remote** — restart / shutdown (confirmed, with the server's delay
   echoed back) and launch remote control.
-- **Power widget** — when the host has a Tasmota smart plug configured, a power
+- **Power widget** — when the host has Tasmota smart plugs configured, a power
   card rides the live snapshot stream (watts, load gauge, today's cost) and opens
-  a detail screen: usage chart (1h/24h/7d), cost breakdown and projections,
-  electrical quality (voltage / power factor / reactive), and device info.
+  a detail screen with a device list (live draw + relay switch per plug) and
+  three tabs:
+  - **Live** — usage chart (1h/24h/7d), cost breakdown and projections,
+    electrical quality (voltage / power factor / reactive), and device info.
+  - **Calendar** — a month grid of recorded use, each day showing its cost and a
+    24-hour sparkline. Every cell shares one vertical scale so days are
+    comparable, hours the plug was offline break the line rather than reading as
+    zero, and tapping a day gives its exact kWh / cost / peak.
+  - **Schedules** — per-plug on/off windows (label, on time, off time, weekdays,
+    enabled), including windows that wrap past midnight. Read-only for viewers.
+- **Home-screen widgets** — plug toggles that work with the app closed:
+  - a **per-plug tile** (pick its plug when you drop it) showing the name, live
+    draw and an ON/OFF pill;
+  - an **all-plugs list**, resizable, with the aggregate draw in the header and a
+    toggle on every row.
+
+  Taps send the opposite of the state on screen rather than a blind flip, so a
+  plug switched by hand can't be driven the wrong way. Android floors widget
+  updates at 30 minutes, so the tiles also refresh on tap, after a toggle, on an
+  FCM plug alert, and whenever the app polls power — and each one shows the time
+  its reading was taken.
+- **Plug alerts** (More → Plug alerts) — two layers. *Watched* is the server's
+  per-plug flag, shared with the web dashboard and every signed-in device (admin
+  only). *Mute on this phone* is local: the alert is still sent, this device just
+  doesn't show it.
 - **Roles & feature flags** — the client reads the session role from login
   (`admin` vs the read-only `viewer` account) and `GET /api/features`, so
   viewer sessions hide every mutating control (kill, power, file writes,
@@ -49,9 +72,21 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   `WS /ws/whatsapp`, inline image/sticker media (authed Coil), send text, pin,
   load-older/backfill, contact search, and pairing-status guidance.
 
-Found in `More`: Terminal, Screen share, WhatsApp (when enabled), Server
-settings, and the app + server version line. The Godot editor launcher was
+Found in `More`: Plug alerts, Terminal, Screen share, WhatsApp (when enabled),
+Server settings, and the app + server version line. The Godot editor launcher was
 intentionally left out of this client.
+
+### Staying signed in
+
+The server issues 72-hour JWTs. The app renews its token opportunistically —
+on launch and on every widget refresh, whenever the token is inside its last
+24 hours — via `POST /auth/refresh`. This is what lets the home-screen widgets
+keep working without the app ever being opened. A phone left off for longer than
+the token's full life still needs a fresh sign-in; the widgets say so and tap
+through to the login screen.
+
+Against a server too old to have `/auth/refresh`, renewal quietly no-ops and the
+app behaves exactly as it did before.
 
 ## Build
 
