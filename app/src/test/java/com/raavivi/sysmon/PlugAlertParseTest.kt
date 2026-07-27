@@ -190,6 +190,33 @@ class PlugAlertParseTest {
     }
 
     @Test
+    fun mutingAPlugDropsItAndRecomputesTheTotals() {
+        val a = PlugAlert.from(multiPlug())!!.withoutMuted(setOf("fan-airfryer"))
+        assertEquals(1, a.plugs.size)
+        assertEquals("heater", a.plugs[0].id)
+        // The server's totals cover every plug it watches. Left alone they'd
+        // report the air fryer's draw on a card that no longer lists it.
+        assertEquals(1800.0, a.totalWatts, 0.0001)
+        assertEquals(6.87, a.totalCostPerHour, 0.0001)
+    }
+
+    @Test
+    fun mutingEveryPlugClearsTheAlert() {
+        val a = PlugAlert.from(multiPlug())!!.withoutMuted(setOf("heater", "fan-airfryer"))
+        // An empty plug list is the notifier's "cancel everything" signal, so a
+        // fully muted push tidies up rather than leaving a stale card.
+        assertTrue(a.plugs.isEmpty())
+        assertEquals(0.0, a.totalWatts, 0.0001)
+    }
+
+    @Test
+    fun mutingSomethingElseLeavesTheAlertUntouched() {
+        val original = PlugAlert.from(multiPlug())!!
+        assertEquals(original, original.withoutMuted(setOf("some-other-plug")))
+        assertEquals(original, original.withoutMuted(emptySet()))
+    }
+
+    @Test
     fun junkPayloadsAreDroppedNotCrashed() {
         // No event: not something we can act on.
         assertNull(PlugAlert.from(mapOf("type" to "plug_alert")))

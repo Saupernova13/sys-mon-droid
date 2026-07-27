@@ -14,22 +14,17 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,15 +32,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.BuildConfig
 import com.raavivi.sysmon.LocalAppContainer
@@ -55,7 +46,6 @@ import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun MoreScreen(
@@ -63,6 +53,7 @@ fun MoreScreen(
     onOpenScreen: () -> Unit = {},
     onOpenWhatsApp: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenAlerts: () -> Unit = {},
 ) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
     val container = LocalAppContainer.current
@@ -99,7 +90,7 @@ fun MoreScreen(
                 StatRow("Role", role)
             }
 
-            NotificationsCard(pushAvailable = features?.push == true)
+            NotificationsCard(pushAvailable = features?.push == true, onOpenAlerts = onOpenAlerts)
 
             // Everything below the connection card mutates the host, so the
             // read-only viewer role only ever sees Connection + Account.
@@ -179,69 +170,29 @@ fun MoreScreen(
 }
 
 /**
- * Appliance-alert toggle: subscribes this device to Firebase push notifications
- * so a "Your <appliance> is on" notification fires no matter how the plug was
- * switched. The backend watches the relays and pushes on/off; enabling registers
- * this device's FCM token, disabling unregisters it. Enabling asks for
- * POST_NOTIFICATIONS on Android 13+. Disabled with a hint when the server has no
- * push key configured.
- *
- * This switch is only "does this phone get alerts at all". Which plugs alert and
- * how they're laid out are server-side (the dashboard's Settings panel), so they
- * stay consistent across every registered device and need no app update.
+ * Entry point to the plug-alert controls. The device opt-in and the per-plug
+ * switches moved to their own screen once "which plugs" became editable here
+ * rather than only in the web dashboard — there are two layers to explain now
+ * (server-side watching vs. muting this phone) and they don't fit a single row.
  */
 @Composable
-private fun NotificationsCard(pushAvailable: Boolean) {
+private fun NotificationsCard(pushAvailable: Boolean, onOpenAlerts: () -> Unit) {
     val container = LocalAppContainer.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var enabled by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { enabled = container.settings.pushEnabledNow() }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { /* registration proceeds regardless; alerts show once granted */ }
-
     SectionCard(title = "Notifications") {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Appliance alerts", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    if (pushAvailable) {
-                        "Push a notification while a watched plug is on, with live usage and a Stop button. Pick which plugs in the dashboard's Settings."
-                    } else {
-                        "Unavailable — the server has no Firebase push key configured."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = enabled && pushAvailable,
-                enabled = pushAvailable,
-                onCheckedChange = { on ->
-                    enabled = on
-                    if (on) {
-                        if (Build.VERSION.SDK_INT >= 33 &&
-                            ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.POST_NOTIFICATIONS,
-                            ) != PackageManager.PERMISSION_GRANTED
-                        ) {
-                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        scope.launch { container.pushRegistrar.enable() }
-                    } else {
-                        scope.launch { container.pushRegistrar.disable() }
-                    }
-                },
-            )
-        }
+        Text(
+            when {
+                !pushAvailable -> "Unavailable — the server has no Firebase push key configured."
+                enabled -> "This phone is registered for plug alerts."
+                else -> "Plug alerts are off for this phone."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        ActionButton("Plug alerts", Icons.Filled.NotificationsActive, onOpenAlerts)
     }
 }
 

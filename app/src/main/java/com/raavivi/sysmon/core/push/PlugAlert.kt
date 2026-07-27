@@ -40,6 +40,23 @@ data class PlugAlert(
     val totalWatts: Double,
     val totalCostPerHour: Double,
 ) {
+    /**
+     * Drop the plugs this device has silenced and re-sum the totals from what
+     * remains. Recomputing matters: the server's totals cover every plug it
+     * watches, so a muted plug would otherwise still show up in the "2 appliances
+     * on" figure of a card that doesn't list it.
+     */
+    fun withoutMuted(muted: Set<String>): PlugAlert {
+        if (muted.isEmpty()) return this
+        val kept = plugs.filterNot { it.id in muted }
+        if (kept.size == plugs.size) return this
+        return copy(
+            plugs = kept,
+            totalWatts = kept.sumOf { it.watts },
+            totalCostPerHour = kept.sumOf { it.costPerHour },
+        )
+    }
+
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
 

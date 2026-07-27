@@ -22,6 +22,7 @@ import androidx.navigation.navArgument
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.AuthState
 import com.raavivi.sysmon.core.auth.SessionManager
+import com.raavivi.sysmon.ui.alerts.PlugAlertsScreen
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.dashboard.DashboardScreen
 import com.raavivi.sysmon.ui.files.FilesScreen
@@ -129,6 +130,7 @@ private fun MainScaffold() {
                     onOpenScreen = { nav.navigate(Routes.SCREEN) },
                     onOpenWhatsApp = { nav.navigate(Routes.WHATSAPP) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                    onOpenAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
                 )
             }
             composable(
@@ -150,6 +152,7 @@ private fun MainScaffold() {
             composable(Routes.WHATSAPP) { WhatsAppScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.POWER) { PowerScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
         }
     }
 }

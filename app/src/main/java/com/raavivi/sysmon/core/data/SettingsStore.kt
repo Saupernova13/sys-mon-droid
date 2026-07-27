@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -59,6 +60,25 @@ class SettingsStore(private val context: Context) {
 
     suspend fun clearFcmToken() = store.edit { it.remove(KEY_FCM_TOKEN) }
 
+    /**
+     * Plug ids this phone will not raise a notification for, even though the
+     * server is still watching them.
+     *
+     * This is the per-device half of the alert controls: the server's per-plug
+     * `alert` flag decides what is watched at all (and applies to every
+     * registered device), while this list lets one phone stay quiet about a plug
+     * without changing anyone else's alerts. Stored as an id set rather than an
+     * allow-list so a newly added plug alerts by default, matching the server.
+     */
+    val mutedPlugs: Flow<Set<String>> = store.data.map { it[KEY_MUTED_PLUGS] ?: emptySet() }
+
+    suspend fun mutedPlugsNow(): Set<String> = mutedPlugs.first()
+
+    suspend fun setPlugMuted(plugId: String, muted: Boolean) = store.edit { prefs ->
+        val current = prefs[KEY_MUTED_PLUGS] ?: emptySet()
+        prefs[KEY_MUTED_PLUGS] = if (muted) current + plugId else current - plugId
+    }
+
     private companion object {
         val KEY_SERVER = stringPreferencesKey("server_url")
         val KEY_TOKEN = stringPreferencesKey("token")
@@ -67,5 +87,6 @@ class SettingsStore(private val context: Context) {
         val KEY_TERM_SESSION = stringPreferencesKey("terminal_session")
         val KEY_PUSH_ENABLED = booleanPreferencesKey("heater_alerts")
         val KEY_FCM_TOKEN = stringPreferencesKey("fcm_token")
+        val KEY_MUTED_PLUGS = stringSetPreferencesKey("muted_plugs")
     }
 }

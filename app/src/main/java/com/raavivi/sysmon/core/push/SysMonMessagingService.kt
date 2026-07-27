@@ -28,10 +28,12 @@ class SysMonMessagingService : FirebaseMessagingService() {
         val data = message.data
         if (data["type"] != "plug_alert" && data["type"] != "heater") return
         val app = applicationContext as? SysMonApp ?: return
-        val isAdmin = runBlocking {
-            (app.container.settings.roleNow() ?: SessionManager.ROLE_ADMIN) != SessionManager.ROLE_VIEWER
+        val settings = app.container.settings
+        val (isAdmin, muted) = runBlocking {
+            val role = settings.roleNow() ?: SessionManager.ROLE_ADMIN
+            (role != SessionManager.ROLE_VIEWER) to settings.mutedPlugsNow()
         }
-        PlugAlertNotifier.handle(this, data, isAdmin)
+        PlugAlertNotifier.handle(this, data, isAdmin, muted)
     }
 
     override fun onNewToken(token: String) {

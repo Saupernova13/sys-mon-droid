@@ -34,8 +34,19 @@ import java.util.Locale
  */
 object PlugAlertNotifier {
 
-    fun handle(context: Context, data: Map<String, String>, isAdmin: Boolean) {
-        val alert = PlugAlert.from(data) ?: return
+    /**
+     * [mutedPlugs] are ids this phone has silenced locally. The server still
+     * watches them and still sends them, so they're dropped here — and the
+     * totals are recomputed from what's left, or a silenced plug would keep
+     * inflating the figure on the card it isn't shown on.
+     */
+    fun handle(
+        context: Context,
+        data: Map<String, String>,
+        isAdmin: Boolean,
+        mutedPlugs: Set<String> = emptySet(),
+    ) {
+        val alert = PlugAlert.from(data)?.withoutMuted(mutedPlugs) ?: return
         ensureChannel(context)
         if (alert.plugs.isEmpty()) {
             cancelAll(context)
