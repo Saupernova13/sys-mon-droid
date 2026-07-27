@@ -19,6 +19,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -86,6 +88,19 @@ private fun PowerDetail(vm: PowerViewModel, env: PowerReading) {
     val role by container.session.role.collectAsStateWithLifecycle()
     val isAdmin = role == SessionManager.ROLE_ADMIN
 
+    val calendarVm = rememberContainerViewModel { PowerCalendarViewModel(it) }
+    val schedulesVm = rememberContainerViewModel { PowerSchedulesViewModel(it) }
+
+    // Each tab fetches only once it is actually on screen, and follows the plug
+    // selection shared across all three.
+    LaunchedEffect(vm.tab, vm.selected) {
+        when (vm.tab) {
+            PowerTab.Calendar -> calendarVm.setPlug(vm.selected)
+            PowerTab.Schedules -> schedulesVm.setPlug(vm.schedulePlug(env))
+            PowerTab.Live -> Unit
+        }
+    }
+
     Column(
         Modifier
             .fillMaxWidth()
@@ -102,21 +117,50 @@ private fun PowerDetail(vm: PowerViewModel, env: PowerReading) {
 
         DevicesCard(vm, env, isAdmin)
         SelectorChips(vm, env)
+        TabBar(vm)
 
-        val d = vm.detail() ?: return@Column
-        val isAll = vm.selected == PowerViewModel.ALL
-        val currency = env.currency
-
-        if (!isAll && !d.available) {
-            SectionCard(title = d.deviceName.ifBlank { "Plug" }, accent = MaterialTheme.colorScheme.error) {
-                Text(d.error ?: "The smart plug is not reachable.")
-            }
-            return@Column
+        when (vm.tab) {
+            PowerTab.Live -> LiveTab(vm, env)
+            PowerTab.Calendar -> PowerCalendarTab(calendarVm)
+            PowerTab.Schedules -> PowerSchedulesTab(
+                vm = schedulesVm,
+                plug = vm.schedulePlug(env),
+                plugName = vm.schedulePlugName(env),
+                isAdmin = isAdmin,
+            )
         }
+    }
+}
 
+@Composable
+private fun TabBar(vm: PowerViewModel) {
+    TabRow(selectedTabIndex = vm.tab.ordinal, containerColor = MaterialTheme.colorScheme.background) {
+        PowerTab.entries.forEach { t ->
+            Tab(
+                selected = vm.tab == t,
+                onClick = { vm.tab = t },
+                text = { Text(t.label, style = MaterialTheme.typography.labelLarge) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LiveTab(vm: PowerViewModel, env: PowerReading) {
+    val d = vm.detail() ?: return
+    val isAll = vm.selected == PowerViewModel.ALL
+
+    if (!isAll && !d.available) {
+        SectionCard(title = d.deviceName.ifBlank { "Plug" }, accent = MaterialTheme.colorScheme.error) {
+            Text(d.error ?: "The smart plug is not reachable.")
+        }
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HeadlineCard(d, isAll)
         HistoryCard(vm)
-        CostCard(d, currency)
+        CostCard(d, env.currency)
 
         if (!isAll) {
             SectionCard(title = "Electrical", accent = PowerColor) {

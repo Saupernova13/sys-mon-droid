@@ -21,6 +21,13 @@ enum class PowerRange(val label: String, val seconds: Long) {
     Week("7d", 604_800),
 }
 
+/** The Power screen's tabs, matching the web dashboard's expanded power card. */
+enum class PowerTab(val label: String) {
+    Live("Live"),
+    Calendar("Calendar"),
+    Schedules("Schedules"),
+}
+
 class PowerViewModel(private val container: AppContainer) : ViewModel() {
 
     /** The `/api/power-usage` envelope: aggregate + one reading per plug. */
@@ -34,6 +41,7 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
     /** [ALL] for the aggregate view, or a plug id for its detail. */
     var selected by mutableStateOf(ALL)
         private set
+    var tab by mutableStateOf(PowerTab.Live)
     var loading by mutableStateOf(true)
         private set
     var error by mutableStateOf<String?>(null)
@@ -83,6 +91,24 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
         val env = envelope ?: return null
         if (selected == ALL) return env.headline
         return env.deviceById(selected) ?: env.headline
+    }
+
+    /**
+     * The plug the Schedules tab edits: the picked one, or the only plug when
+     * there is just one, else blank. A schedule always belongs to a specific
+     * device, so the aggregate "All" view has nothing to edit unless the choice
+     * is unambiguous.
+     */
+    fun schedulePlug(env: PowerReading): String = when {
+        selected != ALL -> selected
+        env.devices.size == 1 -> env.devices.first().id
+        else -> ""
+    }
+
+    fun schedulePlugName(env: PowerReading): String {
+        val id = schedulePlug(env)
+        if (id.isEmpty()) return ""
+        return env.deviceById(id)?.deviceName?.ifBlank { id } ?: id
     }
 
     fun clearRelayError() {
