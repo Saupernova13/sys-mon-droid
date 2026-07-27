@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">sys-mon</string>
+
+    <!-- Home-screen widgets -->
+    <string name="widget_plug_single_label">sys-mon plug</string>
+    <string name="widget_plug_single_description">Switch one smart plug and see its live draw.</string>
+    <string name="widget_plugs_list_label">sys-mon plugs</string>
+    <string name="widget_plugs_list_description">Switch every smart plug from one tile.</string>
+    <string name="widget_all_plugs_title">Plugs</string>
+    <string name="widget_configure_title">Pick a plug</string>
 </resources>

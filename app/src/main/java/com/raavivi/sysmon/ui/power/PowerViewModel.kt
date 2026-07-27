@@ -11,6 +11,7 @@ import com.raavivi.sysmon.core.model.PowerReading
 import com.raavivi.sysmon.core.model.RelayBody
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
+import com.raavivi.sysmon.widget.PlugWidgets
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -127,6 +128,9 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
             when (val r = safeCall { container.api.api.setPlugRelay(id, RelayBody(on)) }) {
                 is ApiResult.Ok -> {
                     relayPending = relayPending + (id to r.value.relayOn)
+                    // Keep any home-screen tile for this plug in step; it would
+                    // otherwise show the old state until its next update tick.
+                    PlugWidgets.requestRefresh(container.appContext)
                     // Safety: if the reading never catches up (plug dropped
                     // offline mid-switch), stop holding the switch.
                     launch {

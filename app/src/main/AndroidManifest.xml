@@ -45,6 +45,63 @@
         <receiver
             android:name=".core.push.StopPlugReceiver"
             android:exported="false" />
+
+        <!-- ── Home-screen plug widgets ──────────────────────────────────────
+             These work with the app closed: they read the persisted session,
+             renew the JWT when it nears expiry, and talk to the server
+             themselves. -->
+
+        <!-- One plug per tile; the plug is chosen when the widget is dropped. -->
+        <receiver
+            android:name=".widget.SinglePlugWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_plug_single_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_plug_single_info" />
+        </receiver>
+
+        <!-- Every plug in one resizable tile. -->
+        <receiver
+            android:name=".widget.AllPlugsWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_plugs_list_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_plugs_list_info" />
+        </receiver>
+
+        <!-- Toggle / refresh taps from either widget. -->
+        <receiver
+            android:name=".widget.PlugWidgetActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.raavivi.sysmon.widget.TOGGLE" />
+                <action android:name="com.raavivi.sysmon.widget.REFRESH" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Rows for the all-plugs widget. BIND_REMOTEVIEWS keeps the launcher
+             the only caller that can bind it. -->
+        <service
+            android:name=".widget.PlugListRemoteViewsService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <activity
+            android:name=".widget.PlugWidgetConfigureActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SysMonDroid">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

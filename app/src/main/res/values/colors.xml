@@ -2,4 +2,16 @@
 <resources>
     <color name="sysmon_window_bg">#0E1116</color>
     <color name="ic_launcher_background">#0E1116</color>
+
+    <!-- Home-screen widgets. These mirror ui/theme/Color.kt, which Compose owns;
+         RemoteViews can't read the Compose palette, so the values are repeated
+         here. Keep the two in step. -->
+    <color name="widget_surface">#161B22</color>
+    <color name="widget_surface_variant">#1E2630</color>
+    <color name="widget_outline">#2C3542</color>
+    <color name="widget_on_surface">#E6EDF3</color>
+    <color name="widget_on_surface_muted">#8B98A5</color>
+    <color name="widget_power">#FACC15</color>
+    <color name="widget_power_on_text">#0E1116</color>
+    <color name="widget_error">#E2575B</color>
 </resources>

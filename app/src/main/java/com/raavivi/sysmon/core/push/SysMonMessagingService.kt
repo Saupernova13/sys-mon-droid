@@ -4,6 +4,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.raavivi.sysmon.SysMonApp
 import com.raavivi.sysmon.core.auth.SessionManager
+import com.raavivi.sysmon.widget.PlugWidgets
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -34,6 +35,10 @@ class SysMonMessagingService : FirebaseMessagingService() {
             (role != SessionManager.ROLE_VIEWER) to settings.mutedPlugsNow()
         }
         PlugAlertNotifier.handle(this, data, isAdmin, muted)
+        // A plug just changed state, so any placed widget is now out of date.
+        // Widgets are floored at a 30-minute update period; this is what keeps
+        // them honest in between.
+        PlugWidgets.requestRefresh(this)
     }
 
     override fun onNewToken(token: String) {

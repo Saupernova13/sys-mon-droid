@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  updatePeriodMillis is 30 minutes because that is the floor Android enforces;
+  anything shorter is silently rounded up. Fresher state comes from the events
+  that matter instead: a tap on the widget, a toggle, an FCM plug alert, and the
+  app's own power polling.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="com.raavivi.sysmon.widget.PlugWidgetConfigureActivity"
+    android:description="@string/widget_plug_single_description"
+    android:initialLayout="@layout/widget_plug_single"
+    android:minHeight="40dp"
+    android:minWidth="180dp"
+    android:previewLayout="@layout/widget_plug_single"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="1"
+    android:targetCellWidth="3"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />
