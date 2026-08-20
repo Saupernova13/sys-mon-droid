@@ -26,6 +26,11 @@ class PlugWidgetActionReceiver : BroadcastReceiver() {
                 val plugId = intent.getStringExtra(PlugWidgets.EXTRA_PLUG_ID)
                 if (plugId.isNullOrBlank()) return
                 val desiredOn = intent.getBooleanExtra(PlugWidgets.EXTRA_DESIRED_ON, true)
+                // Acknowledge the tap before going near the network: a switch is
+                // two round trips on a process that may have just been started,
+                // and until this the tile looked identical the whole time.
+                PlugWidgetRepository.markPending(appContext, plugId, desiredOn)
+                PlugWidgets.updateAll(appContext)
                 run(appContext) { PlugWidgetRepository.setRelay(appContext, plugId, desiredOn) }
             }
             PlugWidgets.ACTION_REFRESH -> {
