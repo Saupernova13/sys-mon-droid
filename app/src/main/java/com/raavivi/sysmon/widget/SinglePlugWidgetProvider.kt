@@ -92,14 +92,26 @@ class SinglePlugWidgetProvider : AppWidgetProvider() {
                 }
 
                 else -> {
+                    val pending = snapshot.isPending(plug.id)
+                    val shownOn = snapshot.shownOn(plug.id)
                     views.setTextViewText(R.id.plug_name, plug.name)
-                    views.setTextViewText(R.id.plug_detail, detail(plug, snapshot.currency))
+                    views.setTextViewText(
+                        R.id.plug_detail,
+                        if (pending) (if (shownOn) "Switching on…" else "Switching off…")
+                        else detail(plug, snapshot.currency),
+                    )
                     views.setTextViewText(R.id.plug_footer, footer(snapshot))
                     pill(
                         context,
                         views,
-                        text = if (!plug.available) "?" else if (plug.relayOn) "ON" else "OFF",
+                        text = when {
+                            pending -> if (shownOn) "ON" else "OFF"
+                            !plug.available -> "?"
+                            plug.relayOn -> "ON"
+                            else -> "OFF"
+                        },
                         style = when {
+                            pending -> PillStyle.PENDING
                             !plug.available -> PillStyle.UNAVAILABLE
                             plug.relayOn -> PillStyle.ON
                             else -> PillStyle.OFF
@@ -107,10 +119,13 @@ class SinglePlugWidgetProvider : AppWidgetProvider() {
                     )
                     // Tapping asks for the opposite of what is shown — never a
                     // blind flip, so a plug switched physically can't be
-                    // toggled the wrong way by a stale reading.
+                    // toggled the wrong way by a stale reading. While a switch
+                    // is in flight the tap is dropped rather than queueing a
+                    // second one against a state that has not settled.
                     views.setOnClickPendingIntent(
                         R.id.plug_state,
-                        PlugWidgets.togglePendingIntent(context, plug.id, !plug.relayOn),
+                        if (pending) PlugWidgets.refreshPendingIntent(context)
+                        else PlugWidgets.togglePendingIntent(context, plug.id, !plug.relayOn),
                     )
                     views.setOnClickPendingIntent(
                         R.id.widget_root,
@@ -124,7 +139,7 @@ class SinglePlugWidgetProvider : AppWidgetProvider() {
     }
 }
 
-internal enum class PillStyle { ON, OFF, UNAVAILABLE }
+internal enum class PillStyle { ON, OFF, UNAVAILABLE, PENDING }
 
 /**
  * Style the on/off pill. `setTextColor` takes a resolved colour rather than a
@@ -143,6 +158,7 @@ internal fun pill(
         PillStyle.ON -> R.drawable.widget_pill_on to R.color.widget_power_on_text
         PillStyle.OFF -> R.drawable.widget_pill_off to R.color.widget_on_surface_muted
         PillStyle.UNAVAILABLE -> R.drawable.widget_pill_unavailable to R.color.widget_on_surface_muted
+        PillStyle.PENDING -> R.drawable.widget_pill_pending to R.color.widget_power
     }
     views.setInt(viewId, "setBackgroundResource", background)
     views.setTextColor(viewId, ContextCompat.getColor(context, colour))

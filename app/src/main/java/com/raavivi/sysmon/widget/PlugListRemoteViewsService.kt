@@ -24,11 +24,12 @@ private class PlugListFactory(private val context: Context) : RemoteViewsService
 
     private var plugs: List<WidgetPlug> = emptyList()
     private var currency: String = ""
+    private var snapshot: PlugSnapshot = PlugSnapshot()
 
     override fun onCreate() = Unit
 
     override fun onDataSetChanged() {
-        val snapshot = PlugWidgetRepository.cached(context)
+        snapshot = PlugWidgetRepository.cached(context)
         plugs = snapshot.plugs
         currency = snapshot.currency
     }
@@ -43,16 +44,29 @@ private class PlugListFactory(private val context: Context) : RemoteViewsService
         val views = RemoteViews(context.packageName, R.layout.widget_plug_row)
         val plug = plugs.getOrNull(position) ?: return views
 
+        val pending = snapshot.isPending(plug.id)
+        val shownOn = snapshot.shownOn(plug.id)
+
         views.setTextViewText(R.id.row_name, plug.name)
         views.setTextViewText(
             R.id.row_watts,
-            if (plug.available && plug.relayOn) formatWatts(plug.watts) else "",
+            when {
+                pending -> "…"
+                plug.available && plug.relayOn -> formatWatts(plug.watts)
+                else -> ""
+            },
         )
         pill(
             context,
             views,
-            text = if (!plug.available) "?" else if (plug.relayOn) "ON" else "OFF",
+            text = when {
+                pending -> if (shownOn) "ON" else "OFF"
+                !plug.available -> "?"
+                plug.relayOn -> "ON"
+                else -> "OFF"
+            },
             style = when {
+                pending -> PillStyle.PENDING
                 !plug.available -> PillStyle.UNAVAILABLE
                 plug.relayOn -> PillStyle.ON
                 else -> PillStyle.OFF
@@ -64,11 +78,18 @@ private class PlugListFactory(private val context: Context) : RemoteViewsService
         // template and each row fills in what differs. The desired state is the
         // opposite of what this row is showing, so a plug switched by hand can't
         // be driven the wrong way by a stale reading.
+        // An empty fill-in carries no plug id, which the receiver drops: while a
+        // switch is in flight a further tap would queue a second one against a
+        // state that has not settled.
         views.setOnClickFillInIntent(
             R.id.row_state,
-            Intent()
-                .putExtra(PlugWidgets.EXTRA_PLUG_ID, plug.id)
-                .putExtra(PlugWidgets.EXTRA_DESIRED_ON, !plug.relayOn),
+            if (pending) {
+                Intent()
+            } else {
+                Intent()
+                    .putExtra(PlugWidgets.EXTRA_PLUG_ID, plug.id)
+                    .putExtra(PlugWidgets.EXTRA_DESIRED_ON, !plug.relayOn)
+            },
         )
         return views
     }
