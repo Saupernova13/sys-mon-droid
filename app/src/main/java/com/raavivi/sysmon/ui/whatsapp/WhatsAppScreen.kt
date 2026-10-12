@@ -1,5 +1,6 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,9 +60,12 @@ import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
 
 @Composable
-fun WhatsAppScreen(onBack: () -> Unit) {
+fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
     val vm = rememberContainerViewModel { WhatsAppViewModel(it) }
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(2500); vm.message = null } }
+
+    // System back from a conversation returns to the chat list, not out of the tab.
+    BackHandler(enabled = vm.currentJid != null) { vm.closeChat() }
 
     if (vm.currentJid == null) {
         ChatListView(vm, onBack)
@@ -71,7 +75,7 @@ fun WhatsAppScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun ChatListView(vm: WhatsAppViewModel, onBack: () -> Unit) {
+private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
     var filter by remember { mutableStateOf("") }
     var showNew by remember { mutableStateOf(false) }
 
@@ -80,7 +84,9 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: () -> Unit) {
             StatusDot(vm.status)
             IconButton(onClick = { showNew = true }) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
             IconButton(onClick = { vm.loadChats(); vm.loadStatus() }) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            onBack?.let { back ->
+                IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            }
         })
 
         StatusBanner(vm.status)

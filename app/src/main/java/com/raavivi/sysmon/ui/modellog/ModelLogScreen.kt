@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -47,7 +48,7 @@ import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
 
 @Composable
-fun ModelLogScreen() {
+fun ModelLogScreen(onBack: () -> Unit) {
     val vm = rememberContainerViewModel { ModelLogViewModel(it) }
 
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(2500); vm.message = null } }
@@ -58,6 +59,7 @@ fun ModelLogScreen() {
             Spacer(Modifier.size(8.dp))
             IconButton(onClick = vm::fetch) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }
             IconButton(onClick = vm::clear) { Icon(Icons.Filled.DeleteSweep, contentDescription = "Clear log") }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
         })
 
         vm.message?.let {

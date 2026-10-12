@@ -10,12 +10,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
@@ -52,7 +52,7 @@ import kotlinx.coroutines.delay
 fun MoreScreen(
     onOpenTerminal: () -> Unit = {},
     onOpenScreen: () -> Unit = {},
-    onOpenWhatsApp: () -> Unit = {},
+    onOpenModelLog: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAlerts: () -> Unit = {},
     onOpenSchedules: () -> Unit = {},
@@ -123,9 +123,9 @@ fun MoreScreen(
                     ActionButton("Terminal", Icons.Filled.Terminal, onOpenTerminal)
                     Spacer(Modifier.height(8.dp))
                     ActionButton("Screen share", Icons.AutoMirrored.Filled.ScreenShare, onOpenScreen)
-                    if (features?.whatsapp == true) {
+                    if (features?.modelLog == true) {
                         Spacer(Modifier.height(8.dp))
-                        ActionButton("WhatsApp", Icons.AutoMirrored.Filled.Chat, onOpenWhatsApp)
+                        ActionButton("Model log", Icons.Filled.Psychology, onOpenModelLog)
                     }
                     Spacer(Modifier.height(8.dp))
                     ActionButton("Server settings", Icons.Filled.Settings, onOpenSettings)

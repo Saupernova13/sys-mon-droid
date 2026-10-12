@@ -1,10 +1,10 @@
 package com.raavivi.sysmon.ui.nav
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -17,7 +17,7 @@ enum class TopDest(
     Dashboard("dashboard", "Stats", Icons.Filled.Dashboard),
     Processes("processes", "Procs", Icons.Filled.Memory),
     Files("files", "Files", Icons.Filled.Folder),
-    ModelLog("modellog", "Models", Icons.Filled.Psychology),
+    WhatsApp("whatsapp", "WhatsApp", Icons.AutoMirrored.Filled.Chat),
     More("more", "More", Icons.Filled.Tune),
 }
 
@@ -27,6 +27,7 @@ object Routes {
     const val TERMINAL = "terminal"
     const val SCREEN = "screen"
     const val WHATSAPP = "whatsapp"
+    const val MODEL_LOG = "modellog"
     const val POWER = "power"
     const val POWER_SCHEDULES = "power?tab=schedules"
     const val SETTINGS = "settings"
