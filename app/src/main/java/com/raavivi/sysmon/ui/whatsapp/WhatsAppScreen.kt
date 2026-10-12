@@ -1,6 +1,9 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,11 +27,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -183,7 +188,25 @@ private fun ConversationView(vm: WhatsAppViewModel) {
             }
         }
 
-        MessageInput(onSend = { vm.send(it) }, enabled = !vm.sending)
+        vm.uploading?.let { name ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.size(8.dp))
+                Text("Uploading $name...", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            }
+        }
+
+        MessageInput(
+            onSend = { vm.send(it) },
+            onAttach = { uri, caption -> vm.sendMedia(uri, caption) },
+            displayName = vm::displayName,
+            enabled = !vm.sending,
+        )
     }
 }
 
@@ -232,14 +255,26 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel) {
 }
 
 @Composable
-private fun MessageInput(onSend: (String) -> Unit, enabled: Boolean) {
+private fun MessageInput(
+    onSend: (String) -> Unit,
+    onAttach: (Uri, String) -> Unit,
+    displayName: (Uri) -> String,
+    enabled: Boolean,
+) {
     var text by remember { mutableStateOf("") }
+    var picked by remember { mutableStateOf<Uri?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) picked = uri
+    }
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        IconButton(onClick = { picker.launch("*/*") }, enabled = enabled) {
+            Icon(Icons.Filled.AttachFile, contentDescription = "Attach file")
+        }
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
@@ -251,6 +286,36 @@ private fun MessageInput(onSend: (String) -> Unit, enabled: Boolean) {
             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
         }
     }
+
+    picked?.let { uri ->
+        AttachDialog(
+            name = displayName(uri),
+            onSend = { caption -> onAttach(uri, caption); picked = null },
+            onDismiss = { picked = null },
+        )
+    }
+}
+
+@Composable
+private fun AttachDialog(name: String, onSend: (String) -> Unit, onDismiss: () -> Unit) {
+    var caption by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Send file") },
+        text = {
+            Column {
+                Text(name, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.size(8.dp))
+                OutlinedTextField(
+                    value = caption,
+                    onValueChange = { caption = it },
+                    placeholder = { Text("Caption (optional)") },
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSend(caption) }) { Text("Send") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

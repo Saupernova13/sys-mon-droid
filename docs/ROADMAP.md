@@ -29,6 +29,9 @@ The backend was never modified — this is purely a client.
   (mirrors the web frontend's `normChat`/`normMsg`). Chat list → conversation,
   inline image/sticker media via the authed Coil loader, send text, pin,
   load-older/backfill, contact search, pairing-status banner.
+- Send media: the composer's attach button picks any file (system picker) and
+  streams it to `/api/whatsapp/send-media` as a raw body (`?to=&filename=&caption=`,
+  not multipart), 100 MiB cap checked client-side, with an optional caption.
 
 ### Stage 9 (partial) — PDF preview ✅
 - PDF preview via Android's `PdfRenderer` for `/api/fs/file` PDFs: the file is
@@ -71,9 +74,6 @@ The backend was never modified — this is purely a client.
 ## Not included / future
 
 - **Godot editor** — intentionally skipped in this client.
-- **Send media** (`/api/whatsapp/send-media`) — outgoing text only for now;
-  attaching/sending images from the phone is a future addition. (Raw-body POST
-  with `?to=&filename=&caption=` query params, not multipart.)
 - **Full session management UI** — terminal sessions resume via a persisted id,
   but there is no screen to list/close arbitrary terminal/file-explorer sessions
   (`/api/sessions/*`).
