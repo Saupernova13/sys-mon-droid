@@ -131,6 +131,7 @@ private fun MainScaffold() {
                     onOpenWhatsApp = { nav.navigate(Routes.WHATSAPP) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
+                    onOpenSchedules = { nav.navigate(Routes.POWER_SCHEDULES) },
                 )
             }
             composable(
@@ -150,7 +151,21 @@ private fun MainScaffold() {
             composable(Routes.TERMINAL) { TerminalScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SCREEN) { ScreenShareScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.WHATSAPP) { WhatsAppScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.POWER) { PowerScreen(onBack = { nav.popBackStack() }) }
+            composable(
+                route = "${Routes.POWER}?tab={tab}",
+                arguments = listOf(
+                    navArgument("tab") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry ->
+                PowerScreen(
+                    onBack = { nav.popBackStack() },
+                    initialTab = entry.arguments?.getString("tab"),
+                )
+            }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
         }

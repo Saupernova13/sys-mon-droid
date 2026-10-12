@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,8 +51,15 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 
 @Composable
-fun PowerScreen(onBack: () -> Unit) {
+fun PowerScreen(onBack: () -> Unit, initialTab: String? = null) {
     val vm = rememberContainerViewModel { PowerViewModel(it) }
+
+    // Deep links (e.g. More -> Plug schedules) land on a specific tab. Applied
+    // once so it never fights the user's own tab changes on recomposition.
+    LaunchedEffect(Unit) {
+        PowerTab.entries.firstOrNull { it.name.equals(initialTab, ignoreCase = true) }
+            ?.let { vm.tab = it }
+    }
 
     vm.relayError?.let { LaunchedEffect(it) { delay(4000); vm.clearRelayError() } }
 
@@ -224,7 +232,13 @@ private fun DevicesCard(vm: PowerViewModel, env: PowerReading, isAdmin: Boolean)
                         color = PowerColor,
                     )
                 }
-                Spacer(Modifier.width(12.dp))
+                // Open this plug's schedules; read-only for viewers.
+                IconButton(onClick = {
+                    vm.select(d.id)
+                    vm.tab = PowerTab.Schedules
+                }) {
+                    Icon(Icons.Filled.Schedule, contentDescription = "Schedules for ${d.deviceName.ifBlank { d.id }}")
+                }
                 Switch(
                     checked = pending ?: d.relayOn,
                     onCheckedChange = { vm.toggleRelay(d.id, it) },
