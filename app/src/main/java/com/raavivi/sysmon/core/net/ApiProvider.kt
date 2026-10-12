@@ -34,7 +34,14 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
             } else {
                 req
             }
-            chain.proceed(out)
+            // send-media answers only after wacli has sent the file, which can
+            // outlast the normal read timeout for a large upload.
+            val c = if (req.url.encodedPath.endsWith("/whatsapp/send-media")) {
+                chain.withReadTimeout(5, TimeUnit.MINUTES).withWriteTimeout(5, TimeUnit.MINUTES)
+            } else {
+                chain
+            }
+            c.proceed(out)
         }
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)

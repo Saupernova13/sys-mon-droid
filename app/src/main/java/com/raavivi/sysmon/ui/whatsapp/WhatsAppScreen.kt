@@ -289,7 +289,7 @@ private fun MessageInput(
 
     picked?.let { uri ->
         AttachDialog(
-            name = displayName(uri),
+            name = remember(uri) { displayName(uri) },
             onSend = { caption -> onAttach(uri, caption); picked = null },
             onDismiss = { picked = null },
         )
