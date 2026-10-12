@@ -62,11 +62,11 @@ private fun MainScaffold() {
     val features by container.session.features.collectAsStateWithLifecycle()
     val isAdmin = role == SessionManager.ROLE_ADMIN
 
-    // Model Log is both admin-only and feature-gated (its router 404s when off),
+    // WhatsApp is both admin-only and feature-gated (its router 404s when off),
     // so its tab only exists when the server actually answers for it.
     val visibleDests = TopDest.entries.filter { dest ->
         when (dest) {
-            TopDest.ModelLog -> isAdmin && features?.modelLog == true
+            TopDest.WhatsApp -> isAdmin && features?.whatsapp == true
             else -> true
         }
     }
@@ -77,7 +77,7 @@ private fun MainScaffold() {
             visibleDests.none { it.route == currentRoute }
         val onHiddenTool = when (currentRoute) {
             Routes.TERMINAL, Routes.SCREEN, Routes.SETTINGS -> !isAdmin
-            Routes.WHATSAPP -> !isAdmin || features?.whatsapp != true
+            Routes.MODEL_LOG -> !isAdmin || features?.modelLog != true
             else -> false
         }
         if (onHiddenTab || onHiddenTool) {
@@ -123,14 +123,15 @@ private fun MainScaffold() {
                     onOpenPdf = { path -> nav.navigate("${Routes.PDF_VIEWER}/${encodePath(path)}") },
                 )
             }
-            composable(TopDest.ModelLog.route) { ModelLogScreen() }
+            composable(TopDest.WhatsApp.route) { WhatsAppScreen(onBack = null) }
             composable(TopDest.More.route) {
                 MoreScreen(
                     onOpenTerminal = { nav.navigate(Routes.TERMINAL) },
                     onOpenScreen = { nav.navigate(Routes.SCREEN) },
-                    onOpenWhatsApp = { nav.navigate(Routes.WHATSAPP) },
+                    onOpenModelLog = { nav.navigate(Routes.MODEL_LOG) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
+                    onOpenSchedules = { nav.navigate(Routes.POWER_SCHEDULES) },
                 )
             }
             composable(
@@ -149,8 +150,22 @@ private fun MainScaffold() {
             }
             composable(Routes.TERMINAL) { TerminalScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SCREEN) { ScreenShareScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.WHATSAPP) { WhatsAppScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.POWER) { PowerScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.MODEL_LOG) { ModelLogScreen(onBack = { nav.popBackStack() }) }
+            composable(
+                route = "${Routes.POWER}?tab={tab}",
+                arguments = listOf(
+                    navArgument("tab") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry ->
+                PowerScreen(
+                    onBack = { nav.popBackStack() },
+                    initialTab = entry.arguments?.getString("tab"),
+                )
+            }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
         }

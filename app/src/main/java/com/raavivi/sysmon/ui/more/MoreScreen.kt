@@ -10,13 +10,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
@@ -51,9 +52,10 @@ import kotlinx.coroutines.delay
 fun MoreScreen(
     onOpenTerminal: () -> Unit = {},
     onOpenScreen: () -> Unit = {},
-    onOpenWhatsApp: () -> Unit = {},
+    onOpenModelLog: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAlerts: () -> Unit = {},
+    onOpenSchedules: () -> Unit = {},
 ) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
     val container = LocalAppContainer.current
@@ -90,7 +92,11 @@ fun MoreScreen(
                 StatRow("Role", role)
             }
 
-            NotificationsCard(pushAvailable = features?.push == true, onOpenAlerts = onOpenAlerts)
+            NotificationsCard(
+                pushAvailable = features?.push == true,
+                onOpenAlerts = onOpenAlerts,
+                onOpenSchedules = onOpenSchedules,
+            )
 
             // Everything below the connection card mutates the host, so the
             // read-only viewer role only ever sees Connection + Account.
@@ -117,9 +123,9 @@ fun MoreScreen(
                     ActionButton("Terminal", Icons.Filled.Terminal, onOpenTerminal)
                     Spacer(Modifier.height(8.dp))
                     ActionButton("Screen share", Icons.AutoMirrored.Filled.ScreenShare, onOpenScreen)
-                    if (features?.whatsapp == true) {
+                    if (features?.modelLog == true) {
                         Spacer(Modifier.height(8.dp))
-                        ActionButton("WhatsApp", Icons.AutoMirrored.Filled.Chat, onOpenWhatsApp)
+                        ActionButton("Model log", Icons.Filled.Psychology, onOpenModelLog)
                     }
                     Spacer(Modifier.height(8.dp))
                     ActionButton("Server settings", Icons.Filled.Settings, onOpenSettings)
@@ -176,12 +182,16 @@ fun MoreScreen(
  * (server-side watching vs. muting this phone) and they don't fit a single row.
  */
 @Composable
-private fun NotificationsCard(pushAvailable: Boolean, onOpenAlerts: () -> Unit) {
+private fun NotificationsCard(
+    pushAvailable: Boolean,
+    onOpenAlerts: () -> Unit,
+    onOpenSchedules: () -> Unit,
+) {
     val container = LocalAppContainer.current
     var enabled by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { enabled = container.settings.pushEnabledNow() }
 
-    SectionCard(title = "Notifications") {
+    SectionCard(title = "Smart plugs") {
         Text(
             when {
                 !pushAvailable -> "Unavailable — the server has no Firebase push key configured."
@@ -193,6 +203,10 @@ private fun NotificationsCard(pushAvailable: Boolean, onOpenAlerts: () -> Unit) 
         )
         Spacer(Modifier.height(8.dp))
         ActionButton("Plug alerts", Icons.Filled.NotificationsActive, onOpenAlerts)
+        Spacer(Modifier.height(8.dp))
+        // Viewers get the read-only schedule list; we can't tell here whether the
+        // server has plugs, so the entry is always shown.
+        ActionButton("Plug schedules", Icons.Filled.Schedule, onOpenSchedules)
     }
 }
 

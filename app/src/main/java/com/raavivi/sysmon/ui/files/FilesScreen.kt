@@ -196,10 +196,10 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
         }, onDismiss = { renameTarget = null })
     }
     transfer?.let { (entry, isMove) ->
-        TextPromptDialog(
-            title = if (isMove) "Move to" else "Copy to",
-            label = "Destination folder",
-            initial = vm.path,
+        FolderPickerDialog(
+            vm = vm,
+            entry = entry,
+            isMove = isMove,
             onConfirm = { dst ->
                 if (isMove) vm.moveTo(entry.path, dst) else vm.copyTo(entry.path, dst)
                 transfer = null

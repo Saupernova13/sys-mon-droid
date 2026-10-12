@@ -1,5 +1,7 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,12 +21,19 @@ import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.SysMonJson
 import com.raavivi.sysmon.core.net.safeCall
 import coil.ImageLoader
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
+import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.BufferedSink
+import okio.source
 
 class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
@@ -49,6 +58,10 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     var loadingMessages by mutableStateOf(false)
         private set
     var sending by mutableStateOf(false)
+        private set
+
+    /** Display name of the file currently being uploaded, or null when idle. */
+    var uploading by mutableStateOf<String?>(null)
         private set
 
     var contacts by mutableStateOf<List<WaContact>>(emptyList())
@@ -138,6 +151,66 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    /** Display name of a picked document, for the confirm dialog. */
+    fun displayName(uri: Uri): String = queryOpenable(uri).first ?: DEFAULT_UPLOAD_NAME
+
+    /**
+     * Upload a picked file to the open chat. The body is streamed straight from
+     * the content resolver so a large file never sits in memory.
+     */
+    fun sendMedia(uri: Uri, caption: String) {
+        val jid = currentJid ?: return
+        if (sending || uploading != null) return
+        val resolver = container.appContext.contentResolver
+        sending = true
+        viewModelScope.launch {
+            val (name, size) = withContext(Dispatchers.IO) { queryOpenable(uri) }
+            val filename = name ?: DEFAULT_UPLOAD_NAME
+            if (size != null && size > MAX_UPLOAD_BYTES) {
+                message = "Send failed: $filename is larger than 100 MiB"
+                sending = false
+                return@launch
+            }
+            uploading = filename
+            val body = object : RequestBody() {
+                override fun contentType(): MediaType? = resolver.getType(uri)?.toMediaTypeOrNull()
+                override fun contentLength(): Long = size ?: -1L
+                override fun writeTo(sink: BufferedSink) {
+                    val input = resolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open $filename")
+                    input.use { sink.writeAll(it.source()) }
+                }
+            }
+            val r = withContext(Dispatchers.IO) {
+                safeCall { container.api.api.waSendMedia(jid, filename, caption, body) }
+            }
+            when (r) {
+                is ApiResult.Ok -> loadMessages(jid)
+                is ApiResult.Err -> message = "Send failed: ${r.message}"
+            }
+            uploading = null
+            sending = false
+        }
+    }
+
+    /** Display name and size in bytes of a content Uri; either may be unknown. */
+    private fun queryOpenable(uri: Uri): Pair<String?, Long?> {
+        var name: String? = null
+        var size: Long? = null
+        runCatching {
+            container.appContext.contentResolver
+                .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
+                ?.use { c ->
+                    if (c.moveToFirst()) {
+                        val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val s = c.getColumnIndex(OpenableColumns.SIZE)
+                        if (n >= 0 && !c.isNull(n)) name = c.getString(n)
+                        if (s >= 0 && !c.isNull(s)) size = c.getLong(s)
+                    }
+                }
+        }
+        return name to size
+    }
+
     fun togglePin() {
         val jid = currentJid ?: return
         val next = !currentPinned
@@ -204,6 +277,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     private companion object {
+        const val DEFAULT_UPLOAD_NAME = "upload.bin"
+        const val MAX_UPLOAD_BYTES = 100L * 1024 * 1024
         val chatOrder = compareByDescending<WaChat> { it.pinned }.thenByDescending { it.lastTs }
     }
 }

@@ -54,6 +54,7 @@ import com.raavivi.sysmon.core.model.WaMessagesResponse
 import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
+import okhttp3.RequestBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -298,6 +299,15 @@ interface ApiService {
 
     @POST("api/whatsapp/send")
     suspend fun waSend(@Body body: WaSendText): OkResponse
+
+    /** Raw request body = the file bytes (not multipart). Admin only, 100 MiB max. */
+    @POST("api/whatsapp/send-media")
+    suspend fun waSendMedia(
+        @Query("to") to: String,
+        @Query("filename") filename: String,
+        @Query("caption") caption: String,
+        @Body body: RequestBody,
+    ): OkResponse
 
     @POST("api/whatsapp/pin")
     suspend fun waPin(@Body body: WaPinReq): OkResponse

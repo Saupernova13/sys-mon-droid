@@ -55,6 +55,18 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
     var searchBackend by mutableStateOf<String?>(null)
         private set
 
+    // Destination picker state, independent of the explorer list above.
+    var pickerPath by mutableStateOf("")
+        private set
+    var pickerParent by mutableStateOf<String?>(null)
+        private set
+    var pickerEntries by mutableStateOf<List<FsEntry>>(emptyList())
+        private set
+    var pickerLoading by mutableStateOf(false)
+        private set
+    var pickerError by mutableStateOf<String?>(null)
+        private set
+
     var properties by mutableStateOf<FileProperties?>(null)
     var imagePreviewPath by mutableStateOf<String?>(null)
 
@@ -82,6 +94,28 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
                 is ApiResult.Err -> error = r.message
             }
             loading = false
+        }
+    }
+
+    private var pickerSeq = 0
+
+    fun pickerOpen(target: String) {
+        val seq = ++pickerSeq
+        pickerLoading = true
+        pickerError = null
+        viewModelScope.launch {
+            val r = safeCall { container.api.api.fsList(target) }
+            // A newer tap superseded this listing; drop it so folders can't land out of order.
+            if (seq != pickerSeq) return@launch
+            when (r) {
+                is ApiResult.Ok -> {
+                    pickerPath = r.value.path
+                    pickerParent = r.value.parent
+                    pickerEntries = r.value.entries
+                }
+                is ApiResult.Err -> pickerError = r.message
+            }
+            pickerLoading = false
         }
     }
 
