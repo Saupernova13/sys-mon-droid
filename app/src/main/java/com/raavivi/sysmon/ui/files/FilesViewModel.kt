@@ -97,11 +97,17 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    private var pickerSeq = 0
+
     fun pickerOpen(target: String) {
+        val seq = ++pickerSeq
         pickerLoading = true
         pickerError = null
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.fsList(target) }) {
+            val r = safeCall { container.api.api.fsList(target) }
+            // A newer tap superseded this listing; drop it so folders can't land out of order.
+            if (seq != pickerSeq) return@launch
+            when (r) {
                 is ApiResult.Ok -> {
                     pickerPath = r.value.path
                     pickerParent = r.value.parent
