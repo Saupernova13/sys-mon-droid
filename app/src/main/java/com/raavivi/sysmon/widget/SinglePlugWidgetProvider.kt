@@ -94,11 +94,13 @@ class SinglePlugWidgetProvider : AppWidgetProvider() {
                 else -> {
                     val pending = snapshot.isPending(plug.id)
                     val shownOn = snapshot.shownOn(plug.id)
+                    // A held switch outranks a reading that may still be stale.
+                    val shown = plug.copy(relayOn = shownOn)
                     views.setTextViewText(R.id.plug_name, plug.name)
                     views.setTextViewText(
                         R.id.plug_detail,
                         if (pending) (if (shownOn) "Switching on…" else "Switching off…")
-                        else detail(plug, snapshot.currency),
+                        else detail(shown, snapshot.currency),
                     )
                     views.setTextViewText(R.id.plug_footer, footer(snapshot))
                     pill(
@@ -107,13 +109,13 @@ class SinglePlugWidgetProvider : AppWidgetProvider() {
                         text = when {
                             pending -> if (shownOn) "ON" else "OFF"
                             !plug.available -> "?"
-                            plug.relayOn -> "ON"
+                            shown.relayOn -> "ON"
                             else -> "OFF"
                         },
                         style = when {
                             pending -> PillStyle.PENDING
                             !plug.available -> PillStyle.UNAVAILABLE
-                            plug.relayOn -> PillStyle.ON
+                            shown.relayOn -> PillStyle.ON
                             else -> PillStyle.OFF
                         },
                     )
@@ -125,7 +127,7 @@ class SinglePlugWidgetProvider : AppWidgetProvider() {
                     views.setOnClickPendingIntent(
                         R.id.plug_state,
                         if (pending) PlugWidgets.refreshPendingIntent(context)
-                        else PlugWidgets.togglePendingIntent(context, plug.id, !plug.relayOn),
+                        else PlugWidgets.togglePendingIntent(context, plug.id, !shownOn),
                     )
                     views.setOnClickPendingIntent(
                         R.id.widget_root,

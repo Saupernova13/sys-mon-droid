@@ -46,13 +46,15 @@ private class PlugListFactory(private val context: Context) : RemoteViewsService
 
         val pending = snapshot.isPending(plug.id)
         val shownOn = snapshot.shownOn(plug.id)
+        // A held switch outranks a reading that may still be stale.
+        val shown = plug.copy(relayOn = shownOn)
 
         views.setTextViewText(R.id.row_name, plug.name)
         views.setTextViewText(
             R.id.row_watts,
             when {
                 pending -> "…"
-                plug.available && plug.relayOn -> formatWatts(plug.watts)
+                shown.available && shown.relayOn -> formatWatts(shown.watts)
                 else -> ""
             },
         )
@@ -62,13 +64,13 @@ private class PlugListFactory(private val context: Context) : RemoteViewsService
             text = when {
                 pending -> if (shownOn) "ON" else "OFF"
                 !plug.available -> "?"
-                plug.relayOn -> "ON"
+                shown.relayOn -> "ON"
                 else -> "OFF"
             },
             style = when {
                 pending -> PillStyle.PENDING
                 !plug.available -> PillStyle.UNAVAILABLE
-                plug.relayOn -> PillStyle.ON
+                shown.relayOn -> PillStyle.ON
                 else -> PillStyle.OFF
             },
             viewId = R.id.row_state,
@@ -88,7 +90,7 @@ private class PlugListFactory(private val context: Context) : RemoteViewsService
             } else {
                 Intent()
                     .putExtra(PlugWidgets.EXTRA_PLUG_ID, plug.id)
-                    .putExtra(PlugWidgets.EXTRA_DESIRED_ON, !plug.relayOn)
+                    .putExtra(PlugWidgets.EXTRA_DESIRED_ON, !shownOn)
             },
         )
         return views
