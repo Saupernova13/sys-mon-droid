@@ -22,9 +22,16 @@ data class WidgetPlug(
     val costPerHour: Double,
 )
 
-/** A switch that has been asked for but not yet confirmed by the server. */
+/**
+ * A switch that has been asked for. Unconfirmed until the plug answers; once it
+ * has, [confirmed] keeps it as a short hold so a stale reading can't undo it.
+ */
 @Serializable
-data class PendingSwitch(val desiredOn: Boolean, val sinceMs: Long)
+data class PendingSwitch(
+    val desiredOn: Boolean,
+    val sinceMs: Long,
+    val confirmed: Boolean = false,
+)
 
 /** The last known plug states, with the moment they were read. */
 @Serializable
@@ -52,40 +59,60 @@ data class PlugSnapshot(
     fun markPending(plugId: String, desiredOn: Boolean, atMs: Long = System.currentTimeMillis()) =
         copy(pending = pending + (plugId to PendingSwitch(desiredOn, atMs)))
 
-    /** Drop a pending switch — the request failed, or was answered. */
+    /** The plug answered: keep its state as a confirmed hold (see [isHeld]). */
+    fun markConfirmed(plugId: String, on: Boolean, atMs: Long = System.currentTimeMillis()) =
+        copy(pending = pending + (plugId to PendingSwitch(on, atMs, confirmed = true)))
+
+    /** Drop a pending switch — the request failed. */
     fun clearPending(plugId: String) = copy(pending = pending - plugId)
 
     /**
-     * Carry `previous`'s in-flight switches onto this fresh reading, dropping
-     * the ones this reading has caught up to.
+     * Carry `previous`'s marks onto this fresh reading, dropping the ones this
+     * reading has caught up to.
      *
      * The server answers from its poller's cache, which can still describe the
      * pre-switch state for a whole poll interval, so a mark is only retired
      * once a *reachable* plug actually reports the state that was asked for —
      * retiring it earlier would flip the pill back and then flip it again.
-     * Anything older than [PENDING_TIMEOUT_MS] is retired regardless: a plug
-     * that stops answering mid-switch would otherwise never agree, and the pill
-     * would sit "switching" until someone removed the widget.
+     * That holds for confirmed marks too. Anything older than its timeout
+     * ([PENDING_TIMEOUT_MS] unconfirmed, [CONFIRMED_HOLD_MS] confirmed) is
+     * retired regardless: a plug that stops answering mid-switch would
+     * otherwise never agree, and the pill would sit "switching" until someone
+     * removed the widget.
      */
     fun withPendingFrom(previous: PlugSnapshot, nowMs: Long = System.currentTimeMillis()) =
         copy(
             pending = previous.pending.filterNot { (id, switch) ->
-                if (nowMs - switch.sinceMs > PENDING_TIMEOUT_MS) return@filterNot true
+                if (nowMs - switch.sinceMs > timeoutOf(switch)) return@filterNot true
                 val reading = plug(id)
                 reading != null && reading.available && reading.relayOn == switch.desiredOn
             },
         )
 
-    fun isPending(plugId: String, nowMs: Long = System.currentTimeMillis()): Boolean =
-        pending[plugId]?.let { nowMs - it.sinceMs <= PENDING_TIMEOUT_MS } ?: false
+    private fun timeoutOf(switch: PendingSwitch) =
+        if (switch.confirmed) CONFIRMED_HOLD_MS else PENDING_TIMEOUT_MS
 
-    /** What the pill should read: the state asked for while a switch is in
-     *  flight, otherwise the plug's own. */
+    /** An unconfirmed switch still within its timeout: shows "Switching…" and
+     *  drops further taps. */
+    fun isPending(plugId: String, nowMs: Long = System.currentTimeMillis()): Boolean =
+        pending[plugId]?.let { !it.confirmed && nowMs - it.sinceMs <= PENDING_TIMEOUT_MS } ?: false
+
+    /** A confirmed switch still within [CONFIRMED_HOLD_MS]: the plug said yes,
+     *  so the shown state wins over a reading that may still be stale. */
+    fun isHeld(plugId: String, nowMs: Long = System.currentTimeMillis()): Boolean =
+        pending[plugId]?.let { it.confirmed && nowMs - it.sinceMs <= CONFIRMED_HOLD_MS } ?: false
+
+    /** What the pill should read: the state asked for while a switch is pending
+     *  or held, otherwise the plug's own. */
     fun shownOn(plugId: String, nowMs: Long = System.currentTimeMillis()): Boolean =
-        if (isPending(plugId, nowMs)) pending.getValue(plugId).desiredOn
+        if (isPending(plugId, nowMs) || isHeld(plugId, nowMs)) pending.getValue(plugId).desiredOn
         else plug(plugId)?.relayOn ?: false
 
     companion object {
+        /** How long a confirmed switch overrides readings — comfortably past two
+         *  of the server's 3s plug poll intervals. */
+        const val CONFIRMED_HOLD_MS = 10_000L
+
         /** How long a switch may stay unconfirmed before the widget stops
          *  claiming it is happening. Comfortably past the server's own plug
          *  poll interval, and well short of leaving a pill stuck. */
@@ -169,14 +196,15 @@ object PlugWidgetRepository {
             is ApiResult.Ok -> {
                 // Apply the confirmed state and redraw now — the follow-up
                 // reading is another round trip, and waiting for it is what
-                // made a toggle feel like nothing had happened.
+                // made a toggle feel like nothing had happened. The mark stays
+                // as a confirmed hold so a still-stale reading can't flip it back.
                 val confirmed = cached(context).let { snap ->
                     snap.copy(
                         plugs = snap.plugs.map {
                             if (it.id == plugId) it.copy(relayOn = r.value.relayOn) else it
                         },
                         error = null,
-                    ).clearPending(plugId)
+                    ).markConfirmed(plugId, r.value.relayOn)
                 }
                 store(context, confirmed)
                 PlugWidgets.updateAll(context)

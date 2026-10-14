@@ -63,7 +63,9 @@ object PlugWidgets {
     fun requestRefresh(context: Context) {
         if (!anyPlaced(context)) return
         context.sendBroadcast(
-            Intent(context, PlugWidgetActionReceiver::class.java).setAction(ACTION_REFRESH),
+            Intent(context, PlugWidgetActionReceiver::class.java)
+                .setAction(ACTION_REFRESH)
+                .addFlags(Intent.FLAG_RECEIVER_FOREGROUND),
         )
     }
 
@@ -78,9 +80,12 @@ object PlugWidgets {
 
     // ── intents ──────────────────────────────────────────────────────────────
 
+    // Widget broadcasts carry FLAG_RECEIVER_FOREGROUND: the default background
+    // queue can hold them for seconds, which reads as a dead tap.
     fun togglePendingIntent(context: Context, plugId: String, desiredOn: Boolean): PendingIntent {
         val intent = Intent(context, PlugWidgetActionReceiver::class.java)
             .setAction(ACTION_TOGGLE)
+            .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             .putExtra(EXTRA_PLUG_ID, plugId)
             .putExtra(EXTRA_DESIRED_ON, desiredOn)
             // Extras alone don't make PendingIntents distinct, so the plug id
@@ -99,7 +104,9 @@ object PlugWidgets {
         PendingIntent.getBroadcast(
             context,
             0,
-            Intent(context, PlugWidgetActionReceiver::class.java).setAction(ACTION_REFRESH),
+            Intent(context, PlugWidgetActionReceiver::class.java)
+                .setAction(ACTION_REFRESH)
+                .addFlags(Intent.FLAG_RECEIVER_FOREGROUND),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -120,7 +127,9 @@ object PlugWidgets {
         PendingIntent.getBroadcast(
             context,
             1,
-            Intent(context, PlugWidgetActionReceiver::class.java).setAction(ACTION_TOGGLE),
+            Intent(context, PlugWidgetActionReceiver::class.java)
+                .setAction(ACTION_TOGGLE)
+                .addFlags(Intent.FLAG_RECEIVER_FOREGROUND),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
 

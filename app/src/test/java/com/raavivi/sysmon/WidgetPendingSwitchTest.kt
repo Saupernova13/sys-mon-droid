@@ -1,5 +1,6 @@
 package com.raavivi.sysmon
 
+import com.raavivi.sysmon.core.net.SysMonJson
 import com.raavivi.sysmon.widget.PlugSnapshot
 import com.raavivi.sysmon.widget.WidgetPlug
 import org.junit.Assert.assertEquals
@@ -112,6 +113,52 @@ class WidgetPendingSwitchTest {
         assertFalse(snap.isPending("heater", nowMs = 1_000))
         assertFalse(snap.shownOn("heater", nowMs = 1_000))
         assertNull(snap.pending["heater"])
+    }
+
+    // After the plug confirms, the next reading can still describe the old
+    // state for a poll interval or two; the hold keeps the pill from flipping back.
+    @Test
+    fun aConfirmedHoldSurvivesAReadingThatDisagrees() {
+        val held = snapshot(plug("heater", on = true)).markConfirmed("heater", true, atMs = 1_000)
+        val stale = snapshot(plug("heater", on = false)).withPendingFrom(held, nowMs = 4_000)
+
+        assertTrue(stale.shownOn("heater", nowMs = 4_000))
+        assertTrue(stale.isHeld("heater", nowMs = 4_000))
+    }
+
+    @Test
+    fun aConfirmedHoldRetiresWhenTheReadingAgrees() {
+        val held = snapshot(plug("heater", on = true)).markConfirmed("heater", true, atMs = 1_000)
+        val caughtUp = snapshot(plug("heater", on = true)).withPendingFrom(held, nowMs = 4_000)
+
+        assertTrue(caughtUp.pending.isEmpty())
+        assertTrue(caughtUp.shownOn("heater", nowMs = 4_000))
+    }
+
+    @Test
+    fun aConfirmedHoldRetiresAfterTheHoldWindow() {
+        val held = snapshot(plug("heater", on = false)).markConfirmed("heater", true, atMs = 1_000)
+        val late = 1_000 + PlugSnapshot.CONFIRMED_HOLD_MS + 1
+
+        assertFalse(held.isHeld("heater", nowMs = late))
+        assertFalse(held.shownOn("heater", nowMs = late))
+        val next = snapshot(plug("heater", on = false)).withPendingFrom(held, nowMs = late)
+        assertTrue(next.pending.isEmpty())
+    }
+
+    @Test
+    fun aConfirmedHoldIsNotPending() {
+        val held = snapshot(plug("heater", on = true)).markConfirmed("heater", true, atMs = 1_000)
+
+        assertFalse("taps must not be dropped once the plug has answered", held.isPending("heater", nowMs = 1_500))
+    }
+
+    @Test
+    fun cachedJsonWithoutConfirmedStillDecodes() {
+        val json = """{"plugs":[],"pending":{"heater":{"desired_on":true,"since_ms":5}}}"""
+        val snap = SysMonJson.decodeFromString(PlugSnapshot.serializer(), json)
+
+        assertFalse(snap.pending.getValue("heater").confirmed)
     }
 
     @Test
