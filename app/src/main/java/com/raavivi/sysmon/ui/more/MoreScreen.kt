@@ -123,11 +123,11 @@ fun MoreScreen(
 
                 SectionCard(title = "Power", accent = MaterialTheme.colorScheme.error) {
                     ActionButton("Restart host", Icons.Filled.RestartAlt) {
-                        confirm = Confirm("Restart host?", "The host will reboot shortly.", vm::restart)
+                        confirm = Confirm("Restart host?", "The host will reboot shortly.") { vm.restart() }
                     }
                     Spacer(Modifier.height(8.dp))
                     ActionButton("Shut down host", Icons.Filled.PowerSettingsNew) {
-                        confirm = Confirm("Shut down host?", "The host will power off shortly.", vm::shutdown)
+                        confirm = Confirm("Shut down host?", "The host will power off shortly.") { vm.shutdown() }
                     }
                 }
 
@@ -170,6 +170,29 @@ fun MoreScreen(
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+    }
+
+    vm.streamingGate?.let { gate ->
+        val restart = gate.kind == PowerKind.RESTART
+        AlertDialog(
+            onDismissRequest = { vm.streamingGate = null },
+            title = { Text("Someone is watching Jellyfin") },
+            text = {
+                Text("${gate.message} Are you sure you want to ${if (restart) "restart" else "shut down"}?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.streamingGate = null
+                    if (restart) vm.restart(force = true) else vm.shutdown(force = true)
+                }) {
+                    Text(
+                        if (restart) "Restart anyway" else "Shut down anyway",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = { TextButton(onClick = { vm.streamingGate = null }) { Text("Cancel") } },
+        )
     }
 
     confirm?.let { c ->
