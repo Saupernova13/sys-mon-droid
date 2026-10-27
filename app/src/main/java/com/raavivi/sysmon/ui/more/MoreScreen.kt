@@ -1,5 +1,10 @@
 package com.raavivi.sysmon.ui.more
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +31,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,20 +39,26 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.BuildConfig
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.SessionManager
+import com.raavivi.sysmon.core.push.JellyfinAlertNotifier
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun MoreScreen(
@@ -207,6 +219,64 @@ private fun NotificationsCard(
         // Viewers get the read-only schedule list; we can't tell here whether the
         // server has plugs, so the entry is always shown.
         ActionButton("Plug schedules", Icons.Filled.Schedule, onOpenSchedules)
+    }
+
+    JellyfinAlertsCard(pushAvailable = pushAvailable, pushEnabled = enabled)
+}
+
+/**
+ * Jellyfin stream popups. Delivered over the same FCM registration as plug
+ * alerts, so it follows that device opt-in; this switch only decides whether
+ * this phone shows (or silently drops) the stream notifications it receives.
+ */
+@Composable
+private fun JellyfinAlertsCard(pushAvailable: Boolean, pushEnabled: Boolean) {
+    val container = LocalAppContainer.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var on by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { on = container.settings.jellyfinAlertsNow() }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* the switch stays on; popups show once the permission is granted */ }
+
+    SectionCard(title = "Jellyfin") {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Jellyfin alerts", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    when {
+                        !pushAvailable -> "Unavailable — the server has no Firebase push key configured."
+                        !pushEnabled ->
+                            "Turn on phone alerts in Plug alerts first — Jellyfin alerts use the same push registration."
+                        on -> "Show a popup when someone streams on Jellyfin."
+                        else -> "Jellyfin popups are off for this phone."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = on,
+                onCheckedChange = { value ->
+                    on = value
+                    if (value &&
+                        Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS,
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    scope.launch {
+                        container.settings.setJellyfinAlerts(value)
+                        if (!value) JellyfinAlertNotifier.cancelAll(context)
+                    }
+                },
+            )
+        }
     }
 }
 

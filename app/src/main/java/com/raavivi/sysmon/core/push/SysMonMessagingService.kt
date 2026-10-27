@@ -27,6 +27,10 @@ class SysMonMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        if (data["type"] == "jellyfin_stream") {
+            handleJellyfin(data)
+            return
+        }
         if (data["type"] != "plug_alert" && data["type"] != "heater") return
         val app = applicationContext as? SysMonApp ?: return
         val settings = app.container.settings
@@ -39,6 +43,17 @@ class SysMonMessagingService : FirebaseMessagingService() {
         // Widgets are floored at a 30-minute update period; this is what keeps
         // them honest in between.
         PlugWidgets.requestRefresh(this)
+    }
+
+    /**
+     * `type=jellyfin_stream`: rendered by [JellyfinAlertNotifier] unless this
+     * phone turned Jellyfin alerts off, in which case any card already showing
+     * is cleared.
+     */
+    private fun handleJellyfin(data: Map<String, String>) {
+        val app = applicationContext as? SysMonApp ?: return
+        val on = runBlocking { app.container.settings.jellyfinAlertsNow() }
+        if (on) JellyfinAlertNotifier.handle(this, data) else JellyfinAlertNotifier.cancelAll(this)
     }
 
     override fun onNewToken(token: String) {
