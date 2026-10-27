@@ -79,6 +79,13 @@ class SettingsStore(private val context: Context) {
         prefs[KEY_MUTED_PLUGS] = if (muted) current + plugId else current - plugId
     }
 
+    /** Whether this phone shows a popup when someone streams on Jellyfin (default on). */
+    val jellyfinAlerts: Flow<Boolean> = store.data.map { it[KEY_JELLYFIN_ALERTS] ?: true }
+
+    suspend fun jellyfinAlertsNow(): Boolean = jellyfinAlerts.first()
+
+    suspend fun setJellyfinAlerts(on: Boolean) = store.edit { it[KEY_JELLYFIN_ALERTS] = on }
+
     private companion object {
         val KEY_SERVER = stringPreferencesKey("server_url")
         val KEY_TOKEN = stringPreferencesKey("token")
@@ -88,5 +95,6 @@ class SettingsStore(private val context: Context) {
         val KEY_PUSH_ENABLED = booleanPreferencesKey("heater_alerts")
         val KEY_FCM_TOKEN = stringPreferencesKey("fcm_token")
         val KEY_MUTED_PLUGS = stringSetPreferencesKey("muted_plugs")
+        val KEY_JELLYFIN_ALERTS = booleanPreferencesKey("jellyfin_alerts")
     }
 }

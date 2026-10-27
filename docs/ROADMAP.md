@@ -64,6 +64,11 @@ The backend was never modified — this is purely a client.
 - **Plug alerts screen**: the server's per-plug `alert` flag (via
   `POST /api/power/devices`, shared with the dashboard) plus a per-phone mute
   list that filters what `PlugAlertNotifier` renders and re-sums the totals.
+- **Jellyfin stream alerts**: `type=jellyfin_stream` FCM pushes carry the full
+  set of live streams and are rendered by `JellyfinAlertNotifier` (own
+  `jellyfin_streams` channel, per-session cards, only `start` pops). A
+  `jellyfin_alerts` DataStore switch gates it per phone, and the power actions
+  retry with `?force=true` after a 409 `jellyfin_streaming` confirm.
 - **Home-screen widgets**: a configurable per-plug tile and an all-plugs list,
   both driven by `PlugWidgetRepository` — cached snapshot, relay toggles, and no
   dependency on the app having been opened.

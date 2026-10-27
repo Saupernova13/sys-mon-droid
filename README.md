@@ -48,6 +48,12 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   per-plug flag, shared with the web dashboard and every signed-in device (admin
   only). *Mute on this phone* is local: the alert is still sent, this device just
   doesn't show it.
+- **Jellyfin alerts** (More → Jellyfin) — a heads-up popup when someone starts
+  streaming on the host's Jellyfin server: one dismissible card per stream (user,
+  title, position, paused state), grouped when several are playing and cleared
+  when playback ends. Rides the same push registration as plug alerts; a switch
+  silences it on this phone. Shutting down or restarting the host while someone
+  is streaming asks for a second confirmation first.
 - **Roles & feature flags** — the client reads the session role from login
   (`admin` vs the read-only `viewer` account) and `GET /api/features`, so
   viewer sessions hide every mutating control (kill, power, file writes,

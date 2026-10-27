@@ -172,10 +172,10 @@ interface ApiService {
 
     // ── Power / process ──────────────────────────────────────────────────────────
     @POST("api/power/restart")
-    suspend fun restart(): PowerActionResponse
+    suspend fun restart(@Query("force") force: Boolean? = null): PowerActionResponse
 
     @POST("api/power/shutdown")
-    suspend fun shutdown(): PowerActionResponse
+    suspend fun shutdown(@Query("force") force: Boolean? = null): PowerActionResponse
 
     @POST("api/process/kill/prepare")
     suspend fun killPrepare(@Body body: KillPrepareBody): KillPrepareResponse
