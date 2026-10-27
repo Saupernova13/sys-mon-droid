@@ -178,7 +178,7 @@ fun MoreScreen(
             onDismissRequest = { vm.streamingGate = null },
             title = { Text("Someone is watching Jellyfin") },
             text = {
-                Text("${gate.message} Are you sure you want to ${if (restart) "restart" else "shut down"}?")
+                Text("${gate.message.trimEnd().removeSuffix(".")}. Are you sure you want to ${if (restart) "restart" else "shut down"}?")
             },
             confirmButton = {
                 TextButton(onClick = {
