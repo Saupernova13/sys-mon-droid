@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.LocalAppContainer
+import com.raavivi.sysmon.core.model.HostInfo
 import com.raavivi.sysmon.core.model.DriveStat
 import com.raavivi.sysmon.core.model.GpuDeviceStat
 import com.raavivi.sysmon.core.model.SystemSnapshot
@@ -265,7 +266,22 @@ private fun CpuCard(snap: SystemSnapshot) {
             formatTemp(cpu.tempCelsius),
             valueColor = tempInk(temp, cpu.tempCelsius),
         )
+        if (cpu.tempCelsius == null) {
+            val host by LocalAppContainer.current.session.host.collectAsStateWithLifecycle()
+            Text(
+                noTempHint(host),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
+}
+
+/** Why there is no CPU temperature, by host OS (mirrors the web's NO_TEMP_HINT). */
+internal fun noTempHint(host: HostInfo?): String = when (host?.os) {
+    null, "", "windows" -> "CPU temperature unavailable on Windows without LibreHardwareMonitor"
+    "linux" -> "No hwmon CPU temperature sensor found (is the coretemp or k10temp kernel module loaded?)"
+    else -> "CPU temperature unavailable on this machine"
 }
 
 /** Value ink for a temperature row: severity colour only once past Nominal. */

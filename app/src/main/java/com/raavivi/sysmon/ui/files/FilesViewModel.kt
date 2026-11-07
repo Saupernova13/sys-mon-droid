@@ -109,7 +109,8 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
     init {
         loadDrives()
         loadFavorites()
-        open("")
+        // Start at the host's filesystem root when it names one; "" lets the server pick.
+        open(container.session.host.value?.fsRoot.orEmpty())
         loadCaps()
         viewModelScope.launch { transferDetails = container.settings.transferDetailsNow() }
     }
