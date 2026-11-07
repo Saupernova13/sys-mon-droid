@@ -1,6 +1,11 @@
 package com.raavivi.sysmon.core.net
 
 import com.raavivi.sysmon.core.model.ClearResponse
+import com.raavivi.sysmon.core.model.JellyfinConfig
+import com.raavivi.sysmon.core.model.JellyfinConfigPatch
+import com.raavivi.sysmon.core.model.JellyfinStreamsResponse
+import com.raavivi.sysmon.core.model.JellyfinTestBody
+import com.raavivi.sysmon.core.model.JellyfinTestResponse
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaMarkRead
@@ -367,4 +372,16 @@ interface ApiService {
     @POST("api/whatsapp/avatars/refresh")
     suspend fun waAvatarsRefresh(@Body body: WaAvatarsRefreshReq): WaAvatarsRefreshResponse
 
+    // ── Jellyfin ─────────────────────────────────────────────────────────────────
+    @GET("api/jellyfin/config")
+    suspend fun jellyfinConfig(): JellyfinConfig
+
+    @POST("api/jellyfin/config")
+    suspend fun jellyfinSaveConfig(@Body body: JellyfinConfigPatch): JellyfinConfig
+
+    @POST("api/jellyfin/test")
+    suspend fun jellyfinTest(@Body body: JellyfinTestBody): JellyfinTestResponse
+
+    @GET("api/jellyfin/streams")
+    suspend fun jellyfinStreams(): JellyfinStreamsResponse
 }

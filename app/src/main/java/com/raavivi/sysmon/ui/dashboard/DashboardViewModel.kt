@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
+import com.raavivi.sysmon.core.model.JellyfinStreamRow
 import com.raavivi.sysmon.core.model.SystemSnapshot
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.jsonWebSocketFlow
@@ -30,6 +31,14 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
         private set
 
     var backupMessage by mutableStateOf<String?>(null)
+
+    /** Active Jellyfin streams to show in the banner (empty when off, unlinked or `web` is false). */
+    var jellyfinStreams by mutableStateOf<List<JellyfinStreamRow>>(emptyList())
+        private set
+
+    /** The server's last poll error, shown in quiet ink while the previous streams stay up. */
+    var jellyfinError by mutableStateOf<String?>(null)
+        private set
 
     // Rolling utilisation buffers for the charts (oldest -> newest).
     val cpuHistory = mutableStateListOf<Float>()
@@ -91,6 +100,40 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
         while (buf.size > MAX_POINTS) buf.removeAt(0)
     }
 
+    /**
+     * Poll `/api/jellyfin/streams` until cancelled. Run it only while the screen
+     * is visible (the caller scopes it to the STARTED lifecycle state). Cadence:
+     * 60 s when unlinked/disabled, empty or unsupported (404); otherwise the
+     * server's poll interval, never faster than 5 s.
+     */
+    suspend fun pollJellyfin() {
+        var wait = JF_IDLE_MS
+        while (true) {
+            when (val r = safeCall { container.api.api.jellyfinStreams() }) {
+                is ApiResult.Ok -> {
+                    val d = r.value
+                    val on = d.linked && d.enabled
+                    jellyfinStreams = if (on && d.web) d.streams else emptyList()
+                    jellyfinError = if (on && !d.ok) d.error else null
+                    wait = if (on && jellyfinStreams.isNotEmpty()) {
+                        maxOf(JF_MIN_MS, (d.pollIntervalS.takeIf { it > 0 } ?: 10) * 1000L)
+                    } else {
+                        JF_IDLE_MS
+                    }
+                }
+                is ApiResult.Err -> {
+                    // Older server or Jellyfin off: no banner, slow cadence. Anything else keeps what we had.
+                    if (r.code == 404) {
+                        jellyfinStreams = emptyList()
+                        jellyfinError = null
+                        wait = JF_IDLE_MS
+                    }
+                }
+            }
+            delay(wait)
+        }
+    }
+
     fun togglePause() {
         paused = !paused
         if (paused) {
@@ -127,5 +170,7 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
 
     private companion object {
         const val MAX_POINTS = 180
+        const val JF_IDLE_MS = 60_000L
+        const val JF_MIN_MS = 5_000L
     }
 }

@@ -79,3 +79,20 @@ fun formatAxisTime(epochSeconds: Double, spanSeconds: Double): String {
     val fmt = SimpleDateFormat(if (spanSeconds > AXIS_DATE_SPAN_S) "yyyy-MM-dd" else "HH:mm", Locale.US)
     return fmt.format(Date((epochSeconds * 1000).toLong()))
 }
+
+/** Playback clock: "0:59", "59:59", "1:00:00" (hours only past the first hour). */
+fun formatClock(seconds: Double): String {
+    val s = seconds.toLong().coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val ss = s % 60
+    return if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m, ss)
+    else String.format(Locale.US, "%d:%02d", m, ss)
+}
+
+/** "12:34 / 45:00", "12:34", or "" when the position is not reported. */
+fun formatStreamPosition(positionS: Double?, runtimeS: Double?): String = when {
+    positionS == null -> ""
+    runtimeS == null -> formatClock(positionS)
+    else -> "${formatClock(positionS)} / ${formatClock(runtimeS)}"
+}

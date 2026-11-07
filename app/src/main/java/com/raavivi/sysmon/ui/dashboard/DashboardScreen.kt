@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,7 +40,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.model.HostInfo
 import com.raavivi.sysmon.core.model.DriveStat
@@ -78,6 +82,12 @@ fun DashboardScreen(onOpenPower: () -> Unit = {}) {
     val features by container.session.features.collectAsStateWithLifecycle()
     val smartEnabled = features?.crystaldisk == true
     var smartTarget by remember { mutableStateOf<DriveStat?>(null) }
+
+    // Poll Jellyfin only while the screen is on top and the app is in the foreground.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { vm.pollJellyfin() }
+    }
 
     Column(Modifier.fillMaxWidth()) {
         ScreenHeader(title = "Stats", actions = {
@@ -119,6 +129,9 @@ fun DashboardScreen(onOpenPower: () -> Unit = {}) {
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (vm.jellyfinStreams.isNotEmpty()) {
+                item { JellyfinBanner(vm.jellyfinStreams, vm.jellyfinError) }
+            }
             item { OverviewChartCard(vm) }
             if (snap != null) {
                 item { CpuCard(snap) }
