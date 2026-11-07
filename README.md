@@ -12,20 +12,37 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
 
 - **Connect & auth** — point at any `host:port`, log in (JWT), token persisted and
   verified on launch, log out / log out everywhere.
+- **Two themes** (More → Appearance, per phone) — *Classic* (the original slate +
+  mint look, the default) and *Instrument*, which mirrors the sys-mon web panel:
+  warm graphite ramp, one identity hue per subsystem, 2px corners, band headers,
+  ticked meters and unsmoothed traces.
 - **Live dashboard** — CPU (overall + per-core bars + freq/temp), memory (+ swap),
-  GPU/iGPU (usage + VRAM + temp), disks (usage + free + I/O), streamed over
-  `WS /ws/stream` (~400 ms). Pause/resume, one-shot refresh.
+  GPU/iGPU (usage + VRAM + temp), disks (usage + I/O), streamed over
+  `WS /ws/stream` (~400 ms). Pause/resume, one-shot refresh. Readings are graded
+  with sys-mon's severity bands in both themes: load (CPU/GPU) tops out at
+  caution, health (temperatures, capacity, swap) runs to warning. A reading the
+  host could not take shows as a dash, not zero.
+- **Disks & S.M.A.R.T.** — each volume shows its label, bus/media type and model.
+  When the host's S.M.A.R.T. widget is on (CrystalDiskInfo on Windows, smartctl
+  on Linux), it adds a temperature/health fact graded by the drive's verdict and an
+  HDD- or SSD-specific temperature band. Tapping a volume opens a sheet covering
+  every disk the host can see: verdict, identity, usage and sector counters, and
+  the attribute table with failing ones flagged. Admins can rescan.
+- **Jellyfin banner** — who is streaming on the host's Jellyfin, at the top of
+  the dashboard while anyone is.
 - **Charts** — rolling CPU/RAM/GPU/disk utilisation, hydrated from
   `/api/history/recent`, plus a host-side history backup action.
 - **Processes** — top processes by CPU / RAM / Disk / GPU with the two-step
   prepare→confirm kill flow (and rate-limit handling).
-- **Power & remote** — restart / shutdown (confirmed, with the server's delay
-  echoed back) and launch remote control.
+- **Power & remote** — restart / shutdown, confirmed with wording for the host OS
+  and its real delay. A confirmed action then takes the whole screen with a
+  countdown, then "waiting for the machine to go down". Also launches remote control.
 - **Power widget** — when the host has Tasmota smart plugs configured, a power
   card rides the live snapshot stream (watts, load gauge, today's cost) and opens
   a detail screen with a device list (live draw + relay switch per plug) and
   three tabs:
-  - **Live** — usage chart (1h/24h/7d), cost breakdown and projections,
+  - **Live** — usage chart (1h / 6h / 24h / 7d / 30d / 90d / 6m / 12m / All,
+    long ranges served from the host's hourly rollup), cost breakdown and projections,
     electrical quality (voltage / power factor / reactive), and device info.
   - **Calendar** — a month grid of recorded use, each day showing its cost and a
     24-hour sparkline. Every cell shares one vertical scale so days are
@@ -60,26 +77,46 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   terminal, screen share) and disabled server widgets (Model Log, WhatsApp)
   drop out of the navigation instead of erroring.
 - **Server settings** — admins can flip the server's widget feature flags
-  (WhatsApp / Model Log / ollama proxy / Godot / Power) from the phone, with
-  availability hints and restart-required notices.
-- **File explorer** — browse drives & folders, open text files in an editor
-  (read + save), image preview, **PDF preview** (`PdfRenderer`), rename / copy /
-  move / delete, new folder, properties, favorites, recycle bin
-  (restore / delete / empty), and search (with backend indicator).
+  (WhatsApp / Model Log / ollama proxy / Godot / S.M.A.R.T. / Power) from the
+  phone, with availability hints, restart-required notices, and a warning when the
+  server's `settings.json` was unreadable. A Jellyfin section links the host's
+  Jellyfin (URL, write-only API key, poll interval, what notifications include,
+  the shutdown gate) and tests the connection.
+- **File explorer** — a Places strip with every drive (named, capacity meter
+  graded by severity, a hue per drive) and your favourites; icons coloured by
+  file kind and real host thumbnails; open text files in an editor
+  (read + save), image preview, **PDF preview** (`PdfRenderer`), rename, new
+  folder, properties, recycle bin (restore / delete / empty, with a truthful
+  partial result), and search (with backend indicator).
+  - **Multi-select** — long-press to start; batch copy, move, delete, compress,
+    and recycle restore / delete.
+  - **Transfer jobs** — copy, move, delete, extract and compress run on the host
+    as jobs with a progress dialog: a snake animation, percentage, ETA, cancel, and
+    a details view (current file, items, data, speed, errors, files left behind).
+    Closing it leaves the job running. Against a host without `/api/fs/jobs` the
+    app falls back to the old per-item routes.
+  - **Archives** (host needs 7-Zip) — browse inside zip / 7z / rar / tar / iso /
+    … (folders included), preview images, PDFs and text, save anything else;
+    extract here / to a stem folder / to a picked folder; compress to any format
+    the host offers. Passwords are asked for, re-asked when wrong, and never stored.
 - **Model Log** — the LLM audit trail, live over `WS /ws/models`, with COLD START
   badges, proxy status, row detail, and clear.
 - **Terminal** — a PTY shell over `WS /ws/terminal` with a built-in compact ANSI
   emulator (colours, scrollback), a command input + control-key bar (Esc/Tab/^C/
-  arrows), auto-resize, and session resume across reconnects.
+  arrows), auto-resize, and session resume across reconnects. Titled with the
+  host's shell; UTF-8 split across frames decodes correctly.
 - **Screen share** — live JPEG frames over `WS /ws/screen` with absolute
   touch→cursor mapping (tap = click, hold = right-click, drag = move/drag), a
-  scroll mode, and a keyboard bar that types to the PC.
-- **WhatsApp** — chat list + conversation view, live messages over
-  `WS /ws/whatsapp`, inline image/sticker media (authed Coil), send text, pin,
-  load-older/backfill, contact search, and pairing-status guidance.
+  scroll mode, and a keyboard bar that types to the PC. The Windows/Super key is
+  named for the host; Win+V and Win+D appear on Windows hosts only.
+- **WhatsApp** — chat list + conversation view with profile pictures, live
+  messages over `WS /ws/whatsapp`, inline image/sticker media (authed Coil) with a
+  zoomable viewer and Save, send text and files, pin, load-older/backfill,
+  contact search, and pairing-status guidance including why the sync daemon
+  stopped. Reading a chat leaves it unread; *Mark as read* clears it on WhatsApp too.
 
 Found in `More`: Plug alerts, Terminal, Screen share, WhatsApp (when enabled),
-Server settings, and the app + server version line. The Godot editor launcher was
+Server settings, Appearance, and the app + server version line. The Godot editor launcher was
 intentionally left out of this client.
 
 ### Staying signed in

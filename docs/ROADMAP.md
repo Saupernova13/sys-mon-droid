@@ -76,6 +76,35 @@ The backend was never modified — this is purely a client.
   JWT is renewed inside its last 24 hours on app launch and on every widget
   refresh, which is what makes the widgets viable at all.
 
+### Stage 12 — sys-mon parity, Aug–Nov 2026 (0.8.0) ✅
+Everything the web UI gained since the 0.7.0 power work that makes sense on a phone:
+- **Instrument theme** (opt-in, More → Appearance) built from `DESIGN.md` and the
+  `base.css` tokens, beside the unchanged Classic theme. `ui/theme/Palette.kt` is the
+  only place colours live; components read `SysMon.palette`.
+- **Severity** (`ui/common/Severity.kt`, a port of `severity.js`): one band table,
+  load vs health, HDD/SSD temperature bands, CrystalDiskInfo/smartctl verdicts.
+- **Absent is not zero**: drive I/O rates, CPU frequencies and GPU readings are
+  nullable and render as a dash, matching the backend's `Option` fields.
+- **Disks**: label / bus / media type / model per volume; S.M.A.R.T. fact and a
+  sheet over `GET /api/smart` with admin `POST /api/smart/rescan`.
+- **Files**: Places (drives with hue + graded capacity, favourites), kind colours,
+  `/api/fs/thumbnail`, long-press multi-select, transfer jobs over `/api/fs/jobs`
+  (progress, cancel, details, snake animation) with a fallback to the old routes,
+  and archives over `/api/fs/archive/*` + extract/compress jobs with password retry.
+- **Power**: 1h–12m/All history ranges from the hourly rollup; the going-down screen
+  after a confirmed restart/shutdown; prompts worded from `host.power_delay_s`.
+- **WhatsApp**: avatars (`/api/whatsapp/avatar` + batch refresh), explicit
+  `mark-read` (reading no longer marks read server-side), image viewer with Save.
+- **Jellyfin**: `/api/jellyfin/config` + `test` in Server settings; dashboard banner
+  over `/api/jellyfin/streams`.
+- **Host info** (`/api/features` `host`): screen-share key names and Windows-only
+  combos, terminal title from the shell, explorer start at `fs_root`.
+- **Compatibility**: recycle-bin clear reads `{ok, partial, deleted, errors}`;
+  terminal output (now binary frames) decodes UTF-8 across frame boundaries.
+
+Deliberately not ported: window minimise/maximise, the dock, sidebar and window
+edge resizing (desktop window chrome), and `/auth/local` (loopback-only by design).
+
 ## Not included / future
 
 - **Godot editor** — intentionally skipped in this client.
