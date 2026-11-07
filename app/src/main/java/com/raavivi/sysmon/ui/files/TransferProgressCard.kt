@@ -167,7 +167,7 @@ private fun JobDetails(job: FsJob, modifier: Modifier = Modifier) {
         StatRow("From", from)
         job.dest?.let { StatRow("To", it) }
         job.current?.takeIf { it.isNotBlank() && !isTerminal(job.state) }?.let { StatRow("Now", baseName(it)) }
-        if (job.filesTotal != null) {
+        if (job.filesTotal != null && (job.op != "extract" && job.op != "compress" || (job.filesDone ?: 0) > 0 || job.state == "done")) {
             StatRow("Items", "${job.filesDone ?: 0} of ${job.filesTotal}")
         }
         if ((job.bytesTotal ?: 0) > 0) {

@@ -8,6 +8,10 @@ import com.raavivi.sysmon.core.model.FeaturePatch
 import com.raavivi.sysmon.core.model.FeaturesResponse
 import com.raavivi.sysmon.core.model.FileProperties
 import com.raavivi.sysmon.core.model.FolderSize
+import com.raavivi.sysmon.core.model.ArchiveCaps
+import com.raavivi.sysmon.core.model.ArchiveEntryBody
+import com.raavivi.sysmon.core.model.ArchiveListBody
+import com.raavivi.sysmon.core.model.ArchiveListResponse
 import com.raavivi.sysmon.core.model.FsCopyBody
 import com.raavivi.sysmon.core.model.FsJob
 import com.raavivi.sysmon.core.model.FsJobList
@@ -61,12 +65,14 @@ import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 /**
  * The full sys-mon REST surface (per `docs/API.md`). WebSocket streams are handled
@@ -229,6 +235,17 @@ interface ApiService {
 
     @POST("api/fs/jobs/{id}/cancel")
     suspend fun fsJobCancel(@Path("id") id: String): OkResponse
+
+    // Archives (7-Zip on the host)
+    @GET("api/fs/archive/caps")
+    suspend fun archiveCaps(): ArchiveCaps
+
+    @POST("api/fs/archive/list")
+    suspend fun archiveList(@Body body: ArchiveListBody): ArchiveListResponse
+
+    @Streaming
+    @POST("api/fs/archive/entry")
+    suspend fun archiveEntry(@Body body: ArchiveEntryBody): ResponseBody
 
     @GET("api/fs/drives")
     suspend fun fsDrives(): DrivesResponse

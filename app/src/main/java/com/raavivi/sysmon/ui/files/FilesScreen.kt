@@ -47,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,12 +68,29 @@ import com.raavivi.sysmon.ui.common.formatDateTime
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import com.raavivi.sysmon.ui.theme.SysMon
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "ico")
 
 private fun isImage(name: String) = name.substringAfterLast('.', "").lowercase() in IMAGE_EXT
 
 private fun isPdf(name: String) = name.substringAfterLast('.', "").equals("pdf", ignoreCase = true)
+
+/** How an archive row's "Extract" menu items pick their destination. */
+enum class ExtractMode { Here, ToStem, Pick }
+
+/** An extract waiting on the folder picker; [entries] null means the whole archive. */
+data class ExtractRequest(val archivePath: String, val name: String, val entries: List<String>?)
+
+/** The compress form asking for a destination folder. */
+class FolderPick(val current: String, val onPicked: (String) -> Unit)
+
+/** Tapping opens the archive browser only when the host can read this file; else retry caps. */
+private fun archiveTap(vm: FilesViewModel, name: String): Boolean {
+    if (vm.isArchive(name)) return true
+    vm.loadCaps()
+    return false
+}
 
 @Composable
 fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) {
@@ -89,8 +107,42 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
 
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(2500); vm.message = null } }
     BackHandler(enabled = vm.selecting) { vm.clearSelection() }
+    var extractPick by remember { mutableStateOf<ExtractRequest?>(null) }
+    var compressPaths by remember { mutableStateOf<List<String>?>(null) }
+    var folderPick by remember { mutableStateOf<FolderPick?>(null) }
+    val scope = rememberCoroutineScope()
 
-    Column(Modifier.fillMaxSize()) {
+    fun runExtract(entry: FsEntry, mode: ExtractMode) {
+        when (mode) {
+            ExtractMode.Here -> vm.extract(entry.path, vm.path)
+            ExtractMode.ToStem -> vm.extract(entry.path, joinPath(vm.path, archiveStem(entry.name), vm.pathSep))
+            ExtractMode.Pick -> extractPick = ExtractRequest(entry.path, entry.name, null)
+        }
+    }
+
+    fun startCompress(group: List<FsEntry>) {
+        scope.launch {
+            val caps = vm.ensureCaps()
+            if (!caps.available || caps.createFormats.isEmpty()) {
+                vm.message = "7-Zip was not found on the server, so archives cannot be created."
+            } else {
+                compressPaths = group.map { it.path }
+                vm.clearSelection()
+            }
+        }
+    }
+
+    val browser = vm.archive
+
+    if (browser != null) {
+        ArchiveBrowserScreen(
+            browser = browser,
+            vm = vm,
+            canExtract = vm.isAdmin,
+            onExtract = { entries -> extractPick = ExtractRequest(browser.path, browser.name, entries) },
+            onClose = vm::closeArchive,
+        )
+    } else Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "Files", actions = {
             IconButton(onClick = { showSearch = !showSearch }) {
                 Icon(Icons.Filled.Search, contentDescription = "Search")
@@ -158,6 +210,7 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
                     val n = picked.size
                     TextButton(onClick = { transfer = picked to false }) { Text("Copy to…") }
                     TextButton(onClick = { transfer = picked to true }) { Text("Move to…") }
+                    TextButton(onClick = { startCompress(picked) }) { Text("Compress ($n)") }
                     TextButton(onClick = { deleteTargets = picked }) {
                         Text("Delete ($n)", color = MaterialTheme.colorScheme.error)
                     }
@@ -246,6 +299,8 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
                         onRename = { renameTarget = it },
                         onTransfer = { group, move -> transfer = group to move },
                         onDelete = { deleteTargets = it },
+                        onExtract = ::runExtract,
+                        onCompress = ::startCompress,
                     )
                     FilesMode.Recycle -> RecycleList(vm, onDeleteForever = { recycleDeleteTargets = it })
                     FilesMode.Search -> SearchList(vm)
@@ -270,7 +325,7 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
             vm = vm,
             sources = group,
             isMove = isMove,
-            onConfirm = { dst ->
+            onConfirm = { dst, _ ->
                 vm.transfer(group.map { it.path }, dst, isMove)
                 transfer = null
             },
@@ -346,6 +401,54 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
             },
         )
     }
+    extractPick?.let { req ->
+        FolderPickerDialog(
+            vm = vm,
+            sources = emptyList(),
+            isMove = false,
+            title = if (req.entries == null) "Extract ${req.name} to" else "Extract ${req.entries.size} selected to",
+            confirmLabel = "Extract",
+            subfolderName = archiveStem(req.name),
+            onConfirm = { dst, sub ->
+                vm.extract(req.archivePath, if (sub) joinPath(dst, archiveStem(req.name), vm.pathSep) else dst, req.entries)
+                extractPick = null
+            },
+            onDismiss = { extractPick = null },
+        )
+    }
+    compressPaths?.let { paths ->
+        CompressDialog(
+            paths = paths,
+            cwd = vm.path,
+            sep = vm.pathSep,
+            formats = vm.caps?.createFormats.orEmpty(),
+            pickFolder = { current, onPicked -> folderPick = FolderPick(current, onPicked) },
+            onConfirm = { req ->
+                vm.compress(paths, req.dest, req.format, req.password)
+                compressPaths = null
+            },
+            onDismiss = { compressPaths = null },
+        )
+    }
+    folderPick?.let { pick ->
+        FolderPickerDialog(
+            vm = vm,
+            sources = emptyList(),
+            isMove = false,
+            title = "Save archive in",
+            confirmLabel = "Select",
+            startPath = pick.current,
+            onConfirm = { dst, _ -> pick.onPicked(dst); folderPick = null },
+            onDismiss = { folderPick = null },
+        )
+    }
+    vm.passwordRequest?.let { req ->
+        PasswordDialog(
+            message = req.message,
+            onSubmit = { vm.answerPassword(it) },
+            onCancel = { vm.answerPassword(null) },
+        )
+    }
     TransferProgressCard(vm)
 }
 
@@ -354,7 +457,7 @@ fun FilesScreen(onEditFile: (String) -> Unit, onOpenPdf: (String) -> Unit = {}) 
  * buttons so later features can add entries without touching the layout.
  */
 @Composable
-private fun SelectionBar(
+internal fun SelectionBar(
     count: Int,
     onSelectAll: () -> Unit,
     onClear: () -> Unit,
@@ -391,6 +494,8 @@ private fun BrowseList(
     onRename: (FsEntry) -> Unit,
     onTransfer: (List<FsEntry>, Boolean) -> Unit,
     onDelete: (List<FsEntry>) -> Unit,
+    onExtract: (FsEntry, ExtractMode) -> Unit,
+    onCompress: (List<FsEntry>) -> Unit,
 ) {
     LazyColumn(contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
         item(key = "places") { PlacesSection(vm, placesExpanded, onTogglePlaces) }
@@ -405,6 +510,7 @@ private fun BrowseList(
                         entry.isDir -> vm.open(entry.path)
                         isImage(entry.name) -> vm.imagePreviewPath = entry.path
                         isPdf(entry.name) -> onOpenPdf(entry.path)
+                        archiveTap(vm, entry.name) -> vm.openArchive(entry.path)
                         else -> onEditFile(entry.path)
                     }
                 },
@@ -415,6 +521,9 @@ private fun BrowseList(
                 onDelete = { onDelete(menuGroup(vm, entry)) },
                 onProperties = { vm.loadProperties(entry.path) },
                 onFavorite = { vm.addFavorite(entry) },
+                isArchive = vm.isArchive(entry.name),
+                onExtract = { mode -> onExtract(entry, mode) },
+                onCompress = { onCompress(menuGroup(vm, entry)) },
             )
         }
     }
@@ -437,6 +546,9 @@ private fun EntryRow(
     onDelete: () -> Unit,
     onProperties: () -> Unit,
     onFavorite: () -> Unit,
+    isArchive: Boolean,
+    onExtract: (ExtractMode) -> Unit,
+    onCompress: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val canMutate = vm.isAdmin
@@ -486,6 +598,18 @@ private fun EntryRow(
                         onClick = { menu = false; onTransfer(true) },
                     )
                     DropdownMenuItem(text = { Text("Add to favorites") }, onClick = { menu = false; onFavorite() })
+                    if (isArchive && n == 1) {
+                        DropdownMenuItem(text = { Text("Extract here") }, onClick = { menu = false; onExtract(ExtractMode.Here) })
+                        DropdownMenuItem(
+                            text = { Text("Extract to “${archiveStem(entry.name)}/”") },
+                            onClick = { menu = false; onExtract(ExtractMode.ToStem) },
+                        )
+                        DropdownMenuItem(text = { Text("Extract to…") }, onClick = { menu = false; onExtract(ExtractMode.Pick) })
+                    }
+                    DropdownMenuItem(
+                        text = { Text(if (n > 1) "Compress ($n)…" else "Compress…") },
+                        onClick = { menu = false; onCompress() },
+                    )
                 }
                 DropdownMenuItem(text = { Text("Properties") }, onClick = { menu = false; onProperties() })
                 if (canMutate) {

@@ -185,3 +185,39 @@ data class FsJob(
 /** `GET /api/fs/jobs` -> `{jobs: [...]}`. */
 @Serializable
 data class FsJobList(val jobs: List<FsJob> = emptyList())
+
+// ── Archives ───────────────────────────────────────────────────────────────────
+
+/** `GET /api/fs/archive/caps`. */
+@Serializable
+data class ArchiveCaps(
+    val available: Boolean = false,
+    val sevenZip: String? = null,
+    val rar: String? = null,
+    val createFormats: List<String> = emptyList(),
+    val extensions: List<String> = emptyList(),
+)
+
+@Serializable
+data class ArchiveListBody(val path: String, val password: String? = null)
+
+@Serializable
+data class ArchiveEntryBody(val path: String, val entry: String, val password: String? = null)
+
+/** One row of an archive listing; [path] is the listing's own spelling. */
+@Serializable
+data class ArchiveEntry(
+    val path: String = "",
+    val name: String = "",
+    val dir: Boolean = false,
+    val size: Long = 0,
+    val packed: Long = 0,
+    val modified: String? = null,
+    val encrypted: Boolean = false,
+)
+
+@Serializable
+data class ArchiveListResponse(
+    val entries: List<ArchiveEntry> = emptyList(),
+    val encrypted: Boolean = false,
+)

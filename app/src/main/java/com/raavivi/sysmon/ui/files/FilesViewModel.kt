@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
+import com.raavivi.sysmon.core.model.ArchiveCaps
 import com.raavivi.sysmon.core.model.DriveInfo
 import com.raavivi.sysmon.core.model.Favorite
 import com.raavivi.sysmon.core.model.FavoriteBody
@@ -25,6 +26,7 @@ import com.raavivi.sysmon.core.model.SearchResult
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
 import coil.ImageLoader
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -108,6 +110,7 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         loadDrives()
         loadFavorites()
         open("")
+        loadCaps()
         viewModelScope.launch { transferDetails = container.settings.transferDetailsNow() }
     }
 
@@ -373,6 +376,101 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { container.settings.setTransferDetails(on) }
     }
 
+    // ── Archives ───────────────────────────────────────────────────────────────
+
+    /** Host archive support; null until loaded (a failed load is retried on the next need). */
+    var caps by mutableStateOf<ArchiveCaps?>(null)
+        private set
+
+    /** A pending password prompt; the dialog completes [PasswordRequest.answer]. */
+    var passwordRequest by mutableStateOf<PasswordRequest?>(null)
+        private set
+
+    /** The archive open in the browser, if any. */
+    var archive by mutableStateOf<ArchiveBrowser?>(null)
+        private set
+
+    /** Host path separator; backslash when the host is unknown. */
+    val pathSep: String get() = container.session.host.value?.pathSep?.ifBlank { null } ?: "\\"
+
+    fun loadCaps() {
+        if (caps != null) return
+        viewModelScope.launch { ensureCaps() }
+    }
+
+    suspend fun ensureCaps(): ArchiveCaps {
+        caps?.let { return it }
+        val r = safeCall { container.api.api.archiveCaps() }
+        if (r is ApiResult.Ok) {
+            caps = r.value
+            return r.value
+        }
+        return ArchiveCaps()
+    }
+
+    /** Only true when the host can read archives and knows this extension. */
+    fun isArchive(name: String): Boolean =
+        caps?.let { it.available && isArchiveName(name, it.extensions) } == true
+
+    suspend fun askPassword(message: String): String? {
+        val req = PasswordRequest(message)
+        passwordRequest = req
+        try {
+            return req.answer.await()
+        } finally {
+            if (passwordRequest === req) passwordRequest = null
+        }
+    }
+
+    fun answerPassword(password: String?) {
+        passwordRequest?.answer?.complete(password)
+    }
+
+    fun openArchive(path: String) {
+        archive = ArchiveBrowser(container, viewModelScope, path, ::askPassword).also { it.load() }
+    }
+
+    fun closeArchive() {
+        archive?.cleanup()
+        archive = null
+    }
+
+    /** Extract [archivePath] into [dest]; [entries] limits it to those archive paths. */
+    fun extract(archivePath: String, dest: String, entries: List<String>? = null) =
+        startArchiveJob(
+            FsJobStartBody(op = "extract", sources = listOf(archivePath), dest = dest, entries = entries),
+            baseName(archivePath),
+        )
+
+    fun compress(sources: List<String>, dest: String, format: String, password: String?) =
+        startArchiveJob(
+            FsJobStartBody(op = "compress", sources = sources, dest = dest, format = format, password = password),
+            baseName(dest),
+        )
+
+    /**
+     * Start an extract / compress job. The host checks the password before the job
+     * exists, so a 422 loops through the prompt and no progress card opens for a
+     * job that cannot start.
+     */
+    private fun startArchiveJob(body: FsJobStartBody, name: String) {
+        viewModelScope.launch {
+            val out = withPassword(name, body.password, ::askPassword) { pw ->
+                safeCall { container.api.api.fsJobStart(body.copy(password = pw)) }
+            }
+            when (out) {
+                is PasswordOutcome.Done -> track(
+                    FsJob(
+                        id = out.value.id, op = body.op, state = "scanning", sources = body.sources,
+                        dest = body.dest, format = body.format,
+                    ),
+                )
+                is PasswordOutcome.Failed -> message = "Failed: ${archiveErrorMessage(out.error)}"
+                PasswordOutcome.Cancelled -> {}
+            }
+        }
+    }
+
     fun addFavorite(entry: FsEntry) {
         viewModelScope.launch {
             safeCall { container.api.api.addFavorite(FavoriteBody(name = entry.name, path = entry.path)) }
@@ -453,4 +551,9 @@ internal fun recycleClearMessage(r: RecycleClearResponse): String = when {
     !r.ok -> "Could not empty the recycle bin: ${r.errors.firstOrNull() ?: "nothing could be removed"}"
     r.partial -> "Emptied ${r.deleted} items; ${r.errors.size} could not be removed"
     else -> "Recycle bin emptied (${r.deleted} items)"
+}
+
+/** A password prompt waiting on the user; [answer] yields the text, or null for Cancel. */
+class PasswordRequest(val message: String) {
+    val answer = CompletableDeferred<String?>()
 }

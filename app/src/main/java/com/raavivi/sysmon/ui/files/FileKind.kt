@@ -41,7 +41,7 @@ private val THUMB_EXTS = setOf(
 )
 
 /** Lower-case text after the last dot; empty when there is none. */
-private fun extOf(name: String): String {
+internal fun extOf(name: String): String {
     val i = name.lastIndexOf('.')
     return if (i < 0 || name.indexOfAny(charArrayOf('\\', '/'), i) >= 0) "" else name.substring(i + 1).lowercase()
 }
