@@ -38,7 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.raavivi.sysmon.core.model.PowerSchedule
 import com.raavivi.sysmon.ui.common.SectionCard
-import com.raavivi.sysmon.ui.theme.PowerColor
+import com.raavivi.sysmon.ui.theme.SysMon
 import kotlinx.coroutines.delay
 
 /**
@@ -55,10 +55,11 @@ fun PowerSchedulesTab(
     plugName: String,
     isAdmin: Boolean,
 ) {
+    val pwr = SysMon.palette.idPwr
     vm.message?.let { LaunchedEffect(it) { delay(3000); vm.message = null } }
 
     if (plug.isEmpty()) {
-        SectionCard(title = "Schedules", accent = PowerColor) {
+        SectionCard(title = "Schedules", accent = pwr) {
             Text(
                 "Pick a specific plug above to set its on/off schedule.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -70,7 +71,7 @@ fun PowerSchedulesTab(
 
     SectionCard(
         title = "Schedules",
-        accent = PowerColor,
+        accent = pwr,
         trailing = {
             Text(
                 plugName,
@@ -82,7 +83,7 @@ fun PowerSchedulesTab(
         (vm.error ?: vm.message)?.let {
             Text(
                 it,
-                color = if (vm.error != null) MaterialTheme.colorScheme.error else PowerColor,
+                color = if (vm.error != null) MaterialTheme.colorScheme.error else pwr,
                 style = MaterialTheme.typography.bodySmall,
             )
             Spacer(Modifier.height(8.dp))

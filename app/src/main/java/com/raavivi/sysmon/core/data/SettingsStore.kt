@@ -86,6 +86,11 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setJellyfinAlerts(on: Boolean) = store.edit { it[KEY_JELLYFIN_ALERTS] = on }
 
+    /** UI look for this phone: "classic" (default) or "instrument". */
+    val themeStyle: Flow<String> = store.data.map { it[KEY_THEME_STYLE] ?: "classic" }
+
+    suspend fun setThemeStyle(key: String) = store.edit { it[KEY_THEME_STYLE] = key }
+
     private companion object {
         val KEY_SERVER = stringPreferencesKey("server_url")
         val KEY_TOKEN = stringPreferencesKey("token")
@@ -96,5 +101,6 @@ class SettingsStore(private val context: Context) {
         val KEY_FCM_TOKEN = stringPreferencesKey("fcm_token")
         val KEY_MUTED_PLUGS = stringSetPreferencesKey("muted_plugs")
         val KEY_JELLYFIN_ALERTS = booleanPreferencesKey("jellyfin_alerts")
+        val KEY_THEME_STYLE = stringPreferencesKey("theme_style")
     }
 }

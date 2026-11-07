@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.raavivi.sysmon.ui.theme.SysMon
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.ui.common.LoadingBox
@@ -219,7 +220,7 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel) {
     ) {
         Surface(
             color = if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 12.dp),
             modifier = Modifier.widthIn(max = 300.dp),
         ) {
             Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
@@ -235,7 +236,7 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel) {
                             contentDescription = msg.filename ?: "image",
                             modifier = Modifier
                                 .heightIn(max = 220.dp)
-                                .clip(RoundedCornerShape(8.dp)),
+                                .clip(RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 8.dp)),
                         )
                     } else {
                         Text("📎 ${msg.filename ?: msg.mediaType}", style = MaterialTheme.typography.bodySmall,
@@ -377,7 +378,7 @@ private fun StatusBanner(status: WaStatus?) {
 private fun StatusDot(status: WaStatus?) {
     val color = when {
         status == null -> MaterialTheme.colorScheme.tertiary
-        status.authenticated && status.daemonRunning -> MaterialTheme.colorScheme.primary
+        status.authenticated && status.daemonRunning -> SysMon.palette.sigOk
         status.authenticated -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.error
     }

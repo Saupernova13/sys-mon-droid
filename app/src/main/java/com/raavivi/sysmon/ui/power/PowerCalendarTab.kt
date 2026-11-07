@@ -41,7 +41,7 @@ import com.raavivi.sysmon.core.model.PowerCalendarDay
 import com.raavivi.sysmon.core.model.PowerCalendarResponse
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.formatWatts
-import com.raavivi.sysmon.ui.theme.PowerColor
+import com.raavivi.sysmon.ui.theme.SysMon
 import java.util.Calendar
 import java.util.Locale
 
@@ -58,12 +58,13 @@ private val WEEKDAYS = listOf("M", "T", "W", "T", "F", "S", "S")
  */
 @Composable
 fun PowerCalendarTab(vm: PowerCalendarViewModel) {
+    val pwr = SysMon.palette.idPwr
     var selectedDate by remember { mutableStateOf<String?>(null) }
     val data = vm.data
 
     SectionCard(
         title = monthLabel(vm.year, vm.month),
-        accent = PowerColor,
+        accent = pwr,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { vm.step(-1) }) {
@@ -76,7 +77,7 @@ fun PowerCalendarTab(vm: PowerCalendarViewModel) {
         },
     ) {
         if (vm.loading && data == null) {
-            LinearProgressIndicator(Modifier.fillMaxWidth(), color = PowerColor)
+            LinearProgressIndicator(Modifier.fillMaxWidth(), color = pwr)
             Spacer(Modifier.height(8.dp))
         }
         vm.error?.let {
@@ -191,18 +192,19 @@ private fun DayCell(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
+    val pwr = SysMon.palette.idPwr
     val hasData = day != null && day.kwh > 0
-    val shape = RoundedCornerShape(6.dp)
+    val shape = RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 6.dp)
     Column(
         modifier
             .aspectRatio(0.78f)
             .clip(shape)
             .background(
-                if (isSelected) PowerColor.copy(alpha = 0.18f)
+                if (isSelected) pwr.copy(alpha = 0.18f)
                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             )
             .then(
-                if (isToday) Modifier.border(1.dp, PowerColor.copy(alpha = 0.7f), shape)
+                if (isToday) Modifier.border(1.dp, pwr.copy(alpha = 0.7f), shape)
                 else Modifier,
             )
             .clickable(enabled = hasData, onClick = onClick)
@@ -239,7 +241,7 @@ private fun DayCell(
             style = MaterialTheme.typography.labelSmall,
             fontSize = 8.sp,
             fontFamily = FontFamily.Monospace,
-            color = PowerColor,
+            color = pwr,
             maxLines = 1,
         )
     }
@@ -251,6 +253,7 @@ private fun DayCell(
  */
 @Composable
 private fun DaySparkline(hours: List<Double?>, maxW: Double, modifier: Modifier) {
+    val pwr = SysMon.palette.idPwr
     Canvas(modifier) {
         if (hours.isEmpty()) return@Canvas
         val span = maxW.coerceAtLeast(1.0)
@@ -266,12 +269,12 @@ private fun DaySparkline(hours: List<Double?>, maxW: Double, modifier: Modifier)
                     lineTo(run.last().first, baseline)
                     close()
                 }
-                drawPath(area, PowerColor.copy(alpha = 0.35f))
+                drawPath(area, pwr.copy(alpha = 0.35f))
                 val line = Path().apply {
                     moveTo(run.first().first, run.first().second)
                     run.drop(1).forEach { (x, y) -> lineTo(x, y) }
                 }
-                drawPath(line, PowerColor, style = Stroke(width = 1.2f))
+                drawPath(line, pwr, style = Stroke(width = 1.2f))
             }
             run = mutableListOf()
         }

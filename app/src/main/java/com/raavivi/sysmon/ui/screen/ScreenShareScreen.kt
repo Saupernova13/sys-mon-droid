@@ -45,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.raavivi.sysmon.ui.theme.SysMon
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlin.math.min
@@ -214,7 +215,7 @@ private fun KeyBtn(label: String, onClick: () -> Unit) {
 @Composable
 private fun ConnDot(state: ScreenState) {
     val color = when (state) {
-        ScreenState.Connected -> MaterialTheme.colorScheme.primary
+        ScreenState.Connected -> SysMon.palette.sigOk
         ScreenState.Connecting -> MaterialTheme.colorScheme.tertiary
         ScreenState.Disconnected -> MaterialTheme.colorScheme.error
     }

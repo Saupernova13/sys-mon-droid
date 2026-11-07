@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.raavivi.sysmon.ui.theme.SysMon
 import com.raavivi.sysmon.core.model.ModelLogRow
 import com.raavivi.sysmon.ui.common.ErrorBox
 import com.raavivi.sysmon.ui.common.LoadingBox
@@ -170,7 +171,7 @@ private fun ServiceTag(service: String) {
     val color = if (service.contains("ollama", true)) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 4.dp))
             .background(color.copy(alpha = 0.18f))
             .padding(horizontal = 6.dp, vertical = 1.dp),
     ) {
@@ -182,7 +183,7 @@ private fun ServiceTag(service: String) {
 private fun ColdStartBadge() {
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 4.dp))
             .background(MaterialTheme.colorScheme.error.copy(alpha = 0.18f))
             .padding(horizontal = 6.dp, vertical = 1.dp),
     ) {

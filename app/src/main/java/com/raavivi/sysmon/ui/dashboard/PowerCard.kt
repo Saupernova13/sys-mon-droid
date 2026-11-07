@@ -11,15 +11,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.raavivi.sysmon.core.model.PowerReading
+import com.raavivi.sysmon.ui.common.Reading
 import com.raavivi.sysmon.ui.common.SectionCard
+import com.raavivi.sysmon.ui.common.Severity
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.UsageBar
 import com.raavivi.sysmon.ui.common.formatWatts
-import com.raavivi.sysmon.ui.theme.PowerColor
+import com.raavivi.sysmon.ui.theme.SysMon
 import java.util.Locale
 
 /**
@@ -29,10 +29,11 @@ import java.util.Locale
  */
 @Composable
 fun PowerCard(power: PowerReading, onOpen: () -> Unit) {
+    val pwr = SysMon.palette.idPwr
     val agg = power.headline
     SectionCard(
         title = "Power",
-        accent = PowerColor,
+        accent = pwr,
         modifier = Modifier.clickable(onClick = onOpen),
         trailing = {
             val offline = agg.deviceCount - agg.onlineCount
@@ -61,16 +62,10 @@ fun PowerCard(power: PowerReading, onOpen: () -> Unit) {
             return@SectionCard
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                formatWatts(agg.watts),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = PowerColor,
-            )
+            Reading(formatWatts(agg.watts), Severity.Nominal, pwr)
             Spacer(Modifier.size(16.dp))
             Column(Modifier.weight(1f)) {
-                UsageBar(fraction = (agg.load.gaugePct / 100.0).toFloat(), color = PowerColor)
+                UsageBar(fraction = (agg.load.gaugePct / 100.0).toFloat(), color = pwr)
             }
         }
         Spacer(Modifier.height(10.dp))

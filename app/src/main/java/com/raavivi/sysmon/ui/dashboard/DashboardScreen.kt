@@ -40,11 +40,17 @@ import androidx.compose.ui.unit.dp
 import com.raavivi.sysmon.core.model.GpuDeviceStat
 import com.raavivi.sysmon.core.model.SystemSnapshot
 import com.raavivi.sysmon.ui.common.ChartSeries
+import com.raavivi.sysmon.ui.common.Metric
 import com.raavivi.sysmon.ui.common.PercentLineChart
+import com.raavivi.sysmon.ui.common.Reading
+import com.raavivi.sysmon.ui.common.Severity
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.UsageBar
+import com.raavivi.sysmon.ui.common.band
+import com.raavivi.sysmon.ui.common.color
+import com.raavivi.sysmon.ui.common.worst
 import com.raavivi.sysmon.ui.common.formatBytes
 import com.raavivi.sysmon.ui.common.formatMhz
 import com.raavivi.sysmon.ui.common.formatPct
@@ -52,10 +58,7 @@ import com.raavivi.sysmon.ui.common.formatPct1
 import com.raavivi.sysmon.ui.common.formatRate
 import com.raavivi.sysmon.ui.common.formatTemp
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
-import com.raavivi.sysmon.ui.theme.CpuColor
-import com.raavivi.sysmon.ui.theme.DiskColor
-import com.raavivi.sysmon.ui.theme.GpuColor
-import com.raavivi.sysmon.ui.theme.RamColor
+import com.raavivi.sysmon.ui.theme.SysMon
 
 @Composable
 fun DashboardScreen(onOpenPower: () -> Unit = {}) {
@@ -143,34 +146,37 @@ private fun ConnDot(state: ConnState) {
     )
 }
 
+
 @Composable
 private fun OverviewChartCard(vm: DashboardViewModel) {
+    val p = SysMon.palette
     SectionCard(title = "Utilisation (last ~10 min)") {
         PercentLineChart(
             series = listOf(
-                ChartSeries("CPU", CpuColor, vm.cpuHistory.toList()),
-                ChartSeries("RAM", RamColor, vm.ramHistory.toList()),
-                ChartSeries("GPU", GpuColor, vm.gpuHistory.toList()),
-                ChartSeries("Disk", DiskColor, vm.diskHistory.toList()),
+                ChartSeries("CPU", p.idCpu, vm.cpuHistory.toList()),
+                ChartSeries("RAM", p.idMem, vm.ramHistory.toList()),
+                ChartSeries("GPU", p.idGpu, vm.gpuHistory.toList()),
+                ChartSeries("Disk", p.idDisk, vm.diskHistory.toList()),
             ),
         )
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Legend("CPU", CpuColor)
-            Legend("RAM", RamColor)
-            Legend("GPU", GpuColor)
-            Legend("Disk", DiskColor)
+            Legend("CPU", p.idCpu)
+            Legend("RAM", p.idMem)
+            Legend("GPU", p.idGpu)
+            Legend("Disk", p.idDisk)
         }
     }
 }
 
 @Composable
 private fun Legend(label: String, color: Color) {
+    val shape = if (SysMon.palette.isInstrument) RoundedCornerShape(2.dp) else CircleShape
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier
                 .size(8.dp)
-                .clip(CircleShape)
+                .clip(shape)
                 .background(color),
         )
         Spacer(Modifier.size(4.dp))
@@ -178,41 +184,79 @@ private fun Legend(label: String, color: Color) {
     }
 }
 
+/**
+ * The big number plus its meter. Classic: number left, meter beside it. Instrument
+ * (web phone view): device label and number on one line, meter spanning underneath.
+ */
 @Composable
-private fun BigPercent(value: Double, color: Color) {
-    Text(
-        formatPct1(value),
-        style = MaterialTheme.typography.headlineMedium,
-        fontWeight = FontWeight.Bold,
-        fontFamily = FontFamily.Monospace,
-        color = color,
-    )
+private fun ReadingMeter(
+    label: String?,
+    value: Double,
+    state: Severity,
+    identity: Color,
+) {
+    val fraction = (value / 100.0).toFloat()
+    if (SysMon.palette.isInstrument) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text(
+                    label.orEmpty(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Reading(formatPct1(value), state, identity)
+            }
+            Spacer(Modifier.height(6.dp))
+            UsageBar(fraction = fraction, color = identity, barHeight = 10, state = state)
+        }
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Reading(formatPct1(value), state, identity)
+            Spacer(Modifier.size(16.dp))
+            Column(Modifier.weight(1f)) {
+                UsageBar(fraction = fraction, color = identity, state = state)
+            }
+        }
+    }
 }
 
 @Composable
 private fun CpuCard(snap: SystemSnapshot) {
     val cpu = snap.cpu
-    SectionCard(title = "CPU", accent = CpuColor) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BigPercent(cpu.overallPct, CpuColor)
-            Spacer(Modifier.size(16.dp))
-            Column(Modifier.weight(1f)) {
-                UsageBar(fraction = (cpu.overallPct / 100.0).toFloat(), color = CpuColor)
-            }
-        }
+    val p = SysMon.palette
+    val load = band(Metric.CpuLoad, cpu.overallPct)
+    val temp = band(Metric.CpuTemp, cpu.tempCelsius)
+    SectionCard(title = "CPU", accent = p.idCpu, state = worst(load, temp)) {
+        ReadingMeter("Total load", cpu.overallPct, load, p.idCpu)
         Spacer(Modifier.height(10.dp))
         if (cpu.cores.isNotEmpty()) {
-            CoreBars(cpu.cores.map { it.usagePct.toFloat() }, CpuColor)
+            CoreBars(cpu.cores.map { it.usagePct.toFloat() }, p.idCpu)
             Spacer(Modifier.height(10.dp))
         }
         StatRow("Cores", cpu.cores.size.toString())
         StatRow("Frequency", formatMhz(cpu.freqCurrentMhz))
-        StatRow("Temperature", formatTemp(cpu.tempCelsius))
+        StatRow(
+            "Temperature",
+            formatTemp(cpu.tempCelsius),
+            valueColor = tempInk(temp, cpu.tempCelsius),
+        )
     }
 }
 
+/** Value ink for a temperature row: severity colour only once past Nominal. */
+@Composable
+private fun tempInk(state: Severity, temp: Double?): Color =
+    if (temp != null && state != Severity.Nominal) state.color(Color.Unspecified) else Color.Unspecified
+
 @Composable
 private fun CoreBars(cores: List<Float>, color: Color) {
+    val p = SysMon.palette
+    val track = if (p.isInstrument) p.track else color.copy(alpha = 0.25f)
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -225,7 +269,7 @@ private fun CoreBars(cores: List<Float>, color: Color) {
             val h = size.height * (v.coerceIn(0f, 100f) / 100f)
             val x = i * (barW + gap)
             drawRect(
-                color = color.copy(alpha = 0.25f),
+                color = track,
                 topLeft = androidx.compose.ui.geometry.Offset(x, 0f),
                 size = androidx.compose.ui.geometry.Size(barW, size.height),
             )
@@ -241,47 +285,52 @@ private fun CoreBars(cores: List<Float>, color: Color) {
 @Composable
 private fun RamCard(snap: SystemSnapshot) {
     val ram = snap.ram
-    SectionCard(title = "Memory", accent = RamColor) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BigPercent(ram.usagePct, RamColor)
-            Spacer(Modifier.size(16.dp))
-            Column(Modifier.weight(1f)) {
-                UsageBar(fraction = (ram.usagePct / 100.0).toFloat(), color = RamColor)
-            }
-        }
+    val p = SysMon.palette
+    val used = band(Metric.RamUsed, ram.usagePct)
+    val swap = if (ram.swapTotalBytes > 0) band(Metric.RamSwap, ram.swapPct) else Severity.Nominal
+    SectionCard(title = "Memory", accent = p.idMem, state = worst(used, swap)) {
+        ReadingMeter("Used", ram.usagePct, used, p.idMem)
         Spacer(Modifier.height(10.dp))
         StatRow("Used", "${formatBytes(ram.usedBytes)} / ${formatBytes(ram.totalBytes)}")
         StatRow("Available", formatBytes(ram.availableBytes))
-        StatRow("Swap", "${formatBytes(ram.swapUsedBytes)} / ${formatBytes(ram.swapTotalBytes)} (${formatPct(ram.swapPct)})")
+        StatRow(
+            "Swap",
+            "${formatBytes(ram.swapUsedBytes)} / ${formatBytes(ram.swapTotalBytes)} (${formatPct(ram.swapPct)})",
+            valueColor = tempInk(swap, ram.swapPct),
+        )
     }
 }
 
 @Composable
 private fun GpuCard(dev: GpuDeviceStat) {
     val title = if (dev.isIgpu) "GPU (integrated)" else "GPU"
-    SectionCard(title = title, accent = GpuColor) {
+    val p = SysMon.palette
+    val load = band(Metric.GpuLoad, dev.usagePct)
+    val temp = band(Metric.GpuTemp, dev.tempCelsius)
+    SectionCard(title = title, accent = p.idGpu, state = worst(load, temp)) {
         Text(dev.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BigPercent(dev.usagePct, GpuColor)
-            Spacer(Modifier.size(16.dp))
-            Column(Modifier.weight(1f)) {
-                UsageBar(fraction = (dev.usagePct / 100.0).toFloat(), color = GpuColor)
-            }
-        }
+        ReadingMeter(if (p.isInstrument) "Load" else null, dev.usagePct, load, p.idGpu)
         Spacer(Modifier.height(10.dp))
         StatRow(
             "VRAM",
             "${formatBytes((dev.memUsedMb * 1024 * 1024).toLong())} / ${formatBytes((dev.memTotalMb * 1024 * 1024).toLong())} (${formatPct(dev.memPct)})",
         )
-        StatRow("Temperature", formatTemp(dev.tempCelsius))
+        StatRow(
+            "Temperature",
+            formatTemp(dev.tempCelsius),
+            valueColor = tempInk(temp, dev.tempCelsius),
+        )
     }
 }
 
 @Composable
 private fun DiskCard(snap: SystemSnapshot) {
-    SectionCard(title = "Disks", accent = DiskColor) {
+    val p = SysMon.palette
+    val states = snap.disk.drives.map { band(Metric.DiskUsed, it.usagePct) }
+    SectionCard(title = "Disks", accent = p.idDisk, state = worst(*states.toTypedArray())) {
         snap.disk.drives.forEachIndexed { i, d ->
+            val state = states[i]
             if (i > 0) Spacer(Modifier.height(14.dp))
             Row(
                 Modifier.fillMaxWidth(),
@@ -292,10 +341,23 @@ private fun DiskCard(snap: SystemSnapshot) {
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = FontFamily.Monospace,
                 )
-                Text(formatPct(d.usagePct), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    formatPct(d.usagePct),
+                    fontFamily = if (p.monoNumbers) FontFamily.Monospace else null,
+                    color = if (state == Severity.Nominal) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        state.color(p.idDisk)
+                    },
+                )
             }
             Spacer(Modifier.height(6.dp))
-            UsageBar(fraction = (d.usagePct / 100.0).toFloat(), color = DiskColor, barHeight = 8)
+            UsageBar(
+                fraction = (d.usagePct / 100.0).toFloat(),
+                color = p.idDisk,
+                barHeight = if (p.isInstrument) 6 else 8,
+                state = state,
+            )
             Spacer(Modifier.height(6.dp))
             StatRow("Free", "${formatBytes(d.freeBytes)} of ${formatBytes(d.totalBytes)}")
             StatRow("I/O", "R ${formatRate(d.readBytesSec)} · W ${formatRate(d.writeBytesSec)}")

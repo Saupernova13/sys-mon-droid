@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.raavivi.sysmon.ui.theme.SysMon
 
 /** One named line on the chart. [points] are percentages 0..100, oldest -> newest. */
 data class ChartSeries(
@@ -31,22 +32,27 @@ fun PercentLineChart(
     series: List<ChartSeries>,
     modifier: Modifier = Modifier,
     height: Dp = 140.dp,
-    gridColor: Color = Color(0x1FFFFFFF),
+    gridColor: Color = Color.Unspecified,
     fillUnderFirst: Boolean = true,
 ) {
+    val palette = SysMon.palette
+    val grid = if (gridColor != Color.Unspecified) gridColor else if (palette.isInstrument) palette.hairline else Color(0x1FFFFFFF)
+    val solidGrid = palette.isInstrument
+    val stroke = palette.chartStroke
+    val fill = palette.chartFill
     Canvas(
         modifier
             .fillMaxWidth()
             .height(height),
     ) {
-        drawGrid(gridColor)
+        drawGrid(grid, solidGrid)
         series.forEachIndexed { index, s ->
-            drawSeries(s, fillUnder = fillUnderFirst && index == 0)
+            drawSeries(s, fillUnder = fill && fillUnderFirst && index == 0, strokeWidth = stroke)
         }
     }
 }
 
-private fun DrawScope.drawGrid(gridColor: Color) {
+private fun DrawScope.drawGrid(gridColor: Color, solid: Boolean) {
     val rows = 4
     for (i in 0..rows) {
         val y = size.height * i / rows
@@ -55,12 +61,12 @@ private fun DrawScope.drawGrid(gridColor: Color) {
             start = Offset(0f, y),
             end = Offset(size.width, y),
             strokeWidth = 1f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
+            pathEffect = if (solid) null else PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
         )
     }
 }
 
-private fun DrawScope.drawSeries(s: ChartSeries, fillUnder: Boolean) {
+private fun DrawScope.drawSeries(s: ChartSeries, fillUnder: Boolean, strokeWidth: Float) {
     val pts = s.points
     if (pts.size < 2) return
     val maxIndex = pts.size - 1
@@ -90,6 +96,6 @@ private fun DrawScope.drawSeries(s: ChartSeries, fillUnder: Boolean) {
     drawPath(
         path = line,
         color = s.color,
-        style = Stroke(width = 3f),
+        style = Stroke(width = strokeWidth),
     )
 }

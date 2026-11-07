@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,6 +33,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +60,7 @@ import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
+import com.raavivi.sysmon.ui.theme.ThemeStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -143,6 +147,8 @@ fun MoreScreen(
                     ActionButton("Server settings", Icons.Filled.Settings, onOpenSettings)
                 }
             }
+
+            AppearanceCard()
 
             SectionCard(title = "Account") {
                 ActionButton("Log out", Icons.AutoMirrored.Filled.Logout) { vm.logout() }
@@ -311,5 +317,42 @@ private fun ActionButton(label: String, icon: ImageVector, onClick: () -> Unit) 
         Icon(icon, contentDescription = null)
         Spacer(Modifier.width(8.dp))
         Text(label)
+    }
+}
+
+/** Local, per-phone look: Classic or Instrument (the sys-mon web panel's style). */
+@Composable
+private fun AppearanceCard() {
+    val container = LocalAppContainer.current
+    val scope = rememberCoroutineScope()
+    val key by container.settings.themeStyle.collectAsStateWithLifecycle(initialValue = ThemeStyle.Classic.key)
+    val current = ThemeStyle.fromKey(key)
+
+    SectionCard(title = "Appearance") {
+        ThemeStyle.entries.forEach { style ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = style == current,
+                        role = Role.RadioButton,
+                        onClick = { scope.launch { container.settings.setThemeStyle(style.key) } },
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = style == current, onClick = null)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.padding(vertical = 8.dp)) {
+                    Text(style.label, style = MaterialTheme.typography.bodyLarge)
+                    if (style == ThemeStyle.Instrument) {
+                        Text(
+                            "Matches the sys-mon web panel",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

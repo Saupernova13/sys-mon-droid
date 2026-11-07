@@ -44,7 +44,7 @@ import com.raavivi.sysmon.core.model.PowerDeviceRow
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
-import com.raavivi.sysmon.ui.theme.PowerColor
+import com.raavivi.sysmon.ui.theme.SysMon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun PlugAlertsScreen(onBack: () -> Unit) {
+    val pwr = SysMon.palette.idPwr
     val vm = rememberContainerViewModel { PlugAlertsViewModel(it) }
     val container = LocalAppContainer.current
     val role by container.session.role.collectAsStateWithLifecycle()
@@ -80,7 +81,7 @@ fun PlugAlertsScreen(onBack: () -> Unit) {
         (vm.error ?: vm.message)?.let {
             Text(
                 it,
-                color = if (vm.error != null) MaterialTheme.colorScheme.error else PowerColor,
+                color = if (vm.error != null) MaterialTheme.colorScheme.error else pwr,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
@@ -89,7 +90,7 @@ fun PlugAlertsScreen(onBack: () -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DeviceOptInCard(pushAvailable)
 
-            SectionCard(title = "Plugs", accent = PowerColor) {
+            SectionCard(title = "Plugs", accent = pwr) {
                 when {
                     vm.loading -> Muted("Loading plugs…")
                     vm.devices.isEmpty() -> Muted("No smart plugs are configured on the server.")
@@ -118,6 +119,7 @@ fun PlugAlertsScreen(onBack: () -> Unit) {
 
 @Composable
 private fun PlugAlertRow(vm: PlugAlertsViewModel, device: PowerDeviceRow, isAdmin: Boolean) {
+    val pwr = SysMon.palette.idPwr
     val isMuted = device.id in vm.muted
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -126,7 +128,7 @@ private fun PlugAlertRow(vm: PlugAlertsViewModel, device: PowerDeviceRow, isAdmi
                 Text(
                     statusLine(vm, device, isMuted),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (vm.willNotify(device)) PowerColor
+                    color = if (vm.willNotify(device)) pwr
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

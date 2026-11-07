@@ -58,6 +58,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.raavivi.sysmon.ui.theme.SysMon
 import com.raavivi.sysmon.core.term.TerminalEmulator
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
@@ -218,7 +219,7 @@ private fun InputRow(onSubmit: (String) -> Unit) {
 @Composable
 private fun ConnDot(state: TermState) {
     val color = when (state) {
-        TermState.Connected -> MaterialTheme.colorScheme.primary
+        TermState.Connected -> SysMon.palette.sigOk
         TermState.Connecting -> MaterialTheme.colorScheme.tertiary
         TermState.Disconnected -> MaterialTheme.colorScheme.error
     }
