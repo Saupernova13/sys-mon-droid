@@ -16,10 +16,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-enum class PowerRange(val label: String, val seconds: Long) {
+/** History window presets (mirrors the web power card); [seconds] null means all recorded data. */
+enum class PowerRange(val label: String, val seconds: Long?) {
     Hour("1h", 3_600),
+    SixHours("6h", 21_600),
     Day("24h", 86_400),
-    Week("7d", 604_800),
+    Week("7d", 7 * 86_400L),
+    Month("30d", 30 * 86_400L),
+    Quarter("90d", 90 * 86_400L),
+    HalfYear("6m", 182 * 86_400L),
+    Year("12m", 365 * 86_400L),
+    All("All", null),
 }
 
 /** The Power screen's tabs, matching the web dashboard's expanded power card. */
@@ -36,7 +43,7 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
         private set
     var history by mutableStateOf<PowerHistoryResponse?>(null)
         private set
-    var range by mutableStateOf(PowerRange.Day)
+    var range by mutableStateOf(PowerRange.SixHours)
         private set
 
     /** [ALL] for the aggregate view, or a plug id for its detail. */
@@ -61,6 +68,7 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
             while (isActive) {
                 delay(POLL_MS)
                 poll()
+                if (tab == PowerTab.Live) loadHistory()
             }
         }
     }
@@ -165,8 +173,8 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
         val now = System.currentTimeMillis() / 1000.0
         val r = safeCall {
             container.api.api.powerHistory(
-                start = now - range.seconds,
-                end = now,
+                start = range.seconds?.let { now - it },
+                targetPoints = TARGET_POINTS,
                 plug = selected.takeIf { it != ALL },
             )
         }
@@ -176,5 +184,6 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
     companion object {
         const val ALL = "all"
         private const val POLL_MS = 5_000L
+        private const val TARGET_POINTS = 700
     }
 }

@@ -70,3 +70,12 @@ fun relativeTime(epochSeconds: Double?): String {
         else -> "${s / 86400}d ago"
     }
 }
+
+/** A span longer than this labels chart axes with dates instead of clock times. */
+const val AXIS_DATE_SPAN_S = 2 * 86_400.0
+
+/** Axis/tooltip label for [epochSeconds] on a chart spanning [spanSeconds]: "HH:mm", or "yyyy-MM-dd" for long spans. */
+fun formatAxisTime(epochSeconds: Double, spanSeconds: Double): String {
+    val fmt = SimpleDateFormat(if (spanSeconds > AXIS_DATE_SPAN_S) "yyyy-MM-dd" else "HH:mm", Locale.US)
+    return fmt.format(Date((epochSeconds * 1000).toLong()))
+}

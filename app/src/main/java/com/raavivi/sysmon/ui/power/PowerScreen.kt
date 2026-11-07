@@ -43,6 +43,7 @@ import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.UsageBar
+import com.raavivi.sysmon.ui.common.formatAxisTime
 import com.raavivi.sysmon.ui.common.formatDateTime
 import com.raavivi.sysmon.ui.common.formatWatts
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
@@ -329,6 +330,17 @@ private fun HistoryCard(vm: PowerViewModel) {
                 (((it.watts ?: 0.0) / maxW) * 100.0).toFloat()
             }
             PercentLineChart(series = listOf(ChartSeries("W", pwr, pts)))
+            val first = hist.items.first().ts
+            val last = hist.items.last().ts
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                listOf(first, last).forEach { t ->
+                    Text(
+                        formatAxisTime(t, last - first),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 "peak ${formatWatts(hist.items.mapNotNull { it.watts }.maxOrNull() ?: 0.0)} · scale ${formatWatts(maxW)}",
@@ -337,7 +349,10 @@ private fun HistoryCard(vm: PowerViewModel) {
             )
         }
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             PowerRange.entries.forEach { r ->
                 FilterChip(
                     selected = vm.range == r,
