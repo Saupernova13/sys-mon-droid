@@ -1,6 +1,9 @@
 package com.raavivi.sysmon.core.net
 
 import com.raavivi.sysmon.core.model.ClearResponse
+import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
+import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
+import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.DrivesResponse
 import com.raavivi.sysmon.core.model.Favorite
 import com.raavivi.sysmon.core.model.FavoriteBody
@@ -357,4 +360,11 @@ interface ApiService {
 
     @POST("api/whatsapp/backfill")
     suspend fun waBackfill(@Body body: WaBackfill): OkResponse
+
+    @POST("api/whatsapp/mark-read")
+    suspend fun waMarkRead(@Body body: WaMarkRead): OkResponse
+
+    @POST("api/whatsapp/avatars/refresh")
+    suspend fun waAvatarsRefresh(@Body body: WaAvatarsRefreshReq): WaAvatarsRefreshResponse
+
 }

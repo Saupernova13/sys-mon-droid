@@ -93,6 +93,13 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
             .build()
             .toString()
 
+    /** Cached contact/group picture; 404 until the avatar has been fetched. */
+    fun whatsappAvatarUrl(jid: String): String =
+        "$baseUrl/api/whatsapp/avatar".toHttpUrl().newBuilder()
+            .addQueryParameter("jid", jid)
+            .build()
+            .toString()
+
     /**
      * Open a WebSocket on the shared client. OkHttp accepts http(s) URLs for the
      * handshake and upgrades them to ws(s) itself, so we keep [baseUrl] as-is and

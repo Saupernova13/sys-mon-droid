@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
@@ -44,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,12 +54,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
 import com.raavivi.sysmon.ui.theme.SysMon
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaStatus
+import com.raavivi.sysmon.core.model.waInitials
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.formatTime
@@ -95,7 +101,7 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
             }
         })
 
-        StatusBanner(vm.status)
+        StatusBanner(vm.status, onRetry = { vm.loadStatus(); vm.loadChats() })
         vm.message?.let { Toast(it) }
 
         OutlinedTextField(
@@ -123,7 +129,7 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Avatar(chat.name)
+                                Avatar(chat.name, chat.jid, vm)
                                 Spacer(Modifier.size(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -155,12 +161,18 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
 
 @Composable
 private fun ConversationView(vm: WhatsAppViewModel) {
+    var viewing by remember { mutableStateOf<WaMessage?>(null) }
     Column(
         Modifier
             .fillMaxSize()
             .imePadding(),
     ) {
         ScreenHeader(title = vm.currentName, actions = {
+            vm.currentJid?.let { Avatar(vm.currentName, it, vm, size = 28.dp) }
+            Spacer(Modifier.size(4.dp))
+            IconButton(onClick = { vm.markRead() }, enabled = vm.currentUnread > 0) {
+                Icon(Icons.Filled.DoneAll, contentDescription = "Mark as read")
+            }
             IconButton(onClick = { vm.loadOlder() }) { Icon(Icons.Filled.ExpandLess, contentDescription = "Load older") }
             IconButton(onClick = { vm.togglePin() }) {
                 Icon(
@@ -183,7 +195,7 @@ private fun ConversationView(vm: WhatsAppViewModel) {
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(vm.messages, key = { it.id.ifBlank { "${it.ts}-${it.text.hashCode()}" } }) { msg ->
-                        MessageBubble(msg, vm)
+                        MessageBubble(msg, vm, onOpenImage = { viewing = it })
                     }
                 }
             }
@@ -209,10 +221,12 @@ private fun ConversationView(vm: WhatsAppViewModel) {
             enabled = !vm.sending,
         )
     }
+
+    viewing?.let { ImageViewer(it, vm, onClose = { viewing = null }) }
 }
 
 @Composable
-private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel) {
+private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel, onOpenImage: (WaMessage) -> Unit) {
     val mine = msg.fromMe
     Row(
         Modifier.fillMaxWidth(),
@@ -230,17 +244,42 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel) {
                 }
                 if (msg.mediaType != null) {
                     if (msg.mediaType.contains("image", true) || msg.mediaType.contains("sticker", true)) {
+                        // A failed load (media not downloaded, 502) shows a retry prompt; the
+                        // nonce changes the cache keys so the retry really refetches.
+                        var failed by remember(msg.id) { mutableStateOf(false) }
+                        var nonce by remember(msg.id) { mutableIntStateOf(0) }
+                        val url = vm.mediaUrl(msg)
                         AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current).data(vm.mediaUrl(msg)).build(),
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(url)
+                                .memoryCacheKey("$url#$nonce")
+                                .diskCacheKey("$url#$nonce")
+                                .build(),
                             imageLoader = vm.imageLoader,
                             contentDescription = msg.filename ?: "image",
+                            onState = { failed = it is AsyncImagePainter.State.Error },
                             modifier = Modifier
                                 .heightIn(max = 220.dp)
-                                .clip(RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 8.dp)),
+                                .clip(RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 8.dp))
+                                .clickable { onOpenImage(msg) },
                         )
+                        if (failed) {
+                            Text(
+                                "Tap to load image",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clickable { failed = false; nonce++ }
+                                    .padding(vertical = 8.dp),
+                            )
+                        }
                     } else {
-                        Text("📎 ${msg.filename ?: msg.mediaType}", style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.size(4.dp))
+                            Text(msg.filename ?: msg.mediaType, style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium)
+                        }
                     }
                 }
                 if (msg.text.isNotBlank()) Text(msg.text)
@@ -346,7 +385,7 @@ private fun NewChatDialog(vm: WhatsAppViewModel, onDismiss: () -> Unit) {
                                 .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Avatar(c.name)
+                            Avatar(c.name, c.jid, vm)
                             Spacer(Modifier.size(10.dp))
                             Text(c.name, maxLines = 1)
                         }
@@ -358,7 +397,7 @@ private fun NewChatDialog(vm: WhatsAppViewModel, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun StatusBanner(status: WaStatus?) {
+private fun StatusBanner(status: WaStatus?, onRetry: () -> Unit) {
     val s = status ?: return
     val note = when {
         !s.enabled -> "WhatsApp widget is disabled on the server (SYS_MON_WHATSAPP=0)."
@@ -368,9 +407,25 @@ private fun StatusBanner(status: WaStatus?) {
         else -> return
     }
     Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
-        Text(note, style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        Row(
+            Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(note, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer)
+                // The server's reason when it could not tell (e.g. "sync daemon exited (code 1): ...").
+                if (!s.authenticated) {
+                    s.error?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
+                }
+            }
+            TextButton(onClick = onRetry) {
+                Text("Retry", color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        }
     }
 }
 
@@ -391,18 +446,30 @@ private fun StatusDot(status: WaStatus?) {
     Spacer(Modifier.size(8.dp))
 }
 
+/** Initials on a tinted disc; the cached picture, once it loads, covers them (a 404 leaves the initials). */
 @Composable
-private fun Avatar(name: String) {
-    val initials = name.trim().split(Regex("\\s+")).take(2)
-        .mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
+private fun Avatar(name: String, jid: String, vm: WhatsAppViewModel, size: Dp = 40.dp) {
+    val version = vm.avatarVersions[jid] ?: 0
+    val key = "avatar:$jid:$version"
     Box(
         Modifier
-            .size(40.dp)
+            .size(size)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.secondaryContainer),
         contentAlignment = Alignment.Center,
     ) {
-        Text(initials.ifBlank { "?" }, color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Medium)
+        Text(waInitials(name), color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Medium)
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(vm.avatarUrl(jid))
+                .memoryCacheKey(key)
+                .diskCacheKey(key)
+                .build(),
+            imageLoader = vm.imageLoader,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
