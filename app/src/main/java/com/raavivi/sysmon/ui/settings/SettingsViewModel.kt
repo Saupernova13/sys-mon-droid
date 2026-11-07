@@ -73,6 +73,15 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
                 "power", "Power (smart plug)", d.power.enabled,
                 hint = if (!d.power.urlSet) "plug URL not set on host" else null,
             ),
+            FlagRow(
+                "crystaldisk", "S.M.A.R.T. disk health", d.crystaldisk.enabled,
+                hint = when {
+                    d.crystaldisk.installed -> d.crystaldisk.path
+                    d.crystaldisk.source == "smartctl" ->
+                        "smartctl not found - install smartmontools (SYS_MON_SMARTCTL)"
+                    else -> "CrystalDiskInfo not found at ${d.crystaldisk.path ?: "its configured path"}"
+                },
+            ),
         )
     }
 
@@ -86,6 +95,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
             "ollama_proxy" -> FeaturePatch(ollamaProxy = value)
             "godot" -> FeaturePatch(godot = value)
             "power" -> FeaturePatch(power = value)
+            "crystaldisk" -> FeaturePatch(crystaldisk = value)
             else -> return
         }
         viewModelScope.launch {

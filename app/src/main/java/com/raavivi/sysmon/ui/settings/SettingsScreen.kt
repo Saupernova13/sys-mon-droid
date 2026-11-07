@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
+import com.raavivi.sysmon.ui.theme.SysMon
 import kotlinx.coroutines.delay
 
 /** Admin-only: flips the server's widget feature flags via `POST /api/settings`. */
@@ -45,6 +46,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
         })
+
+        if (vm.features?.settingsUnreadable == true) {
+            Text(
+                "The server's settings file was unreadable and has been archived (settings.json.corrupt-<timestamp>). " +
+                    "The flags shown may be defaults, not your saved configuration.",
+                color = SysMon.palette.sigWarn,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
 
         (vm.message ?: vm.error)?.let {
             Text(

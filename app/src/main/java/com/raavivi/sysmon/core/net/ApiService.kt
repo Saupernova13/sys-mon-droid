@@ -36,9 +36,10 @@ import com.raavivi.sysmon.core.model.PowerSchedulesResponse
 import com.raavivi.sysmon.core.model.PushRegisterBody
 import com.raavivi.sysmon.core.model.PushRegisterResponse
 import com.raavivi.sysmon.core.model.PushStatusResponse
-import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleClearResponse
+import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
+import com.raavivi.sysmon.core.model.SmartResponse
 import com.raavivi.sysmon.core.model.RefreshResponse
 import com.raavivi.sysmon.core.model.RelayBody
 import com.raavivi.sysmon.core.model.RelayResponse
@@ -236,6 +237,13 @@ interface ApiService {
 
     @DELETE("api/fs/recycle/clear")
     suspend fun recycleClear(): RecycleClearResponse
+
+    // S.M.A.R.T. (404 when the widget is off)
+    @GET("api/smart")
+    suspend fun smart(): SmartResponse
+
+    @POST("api/smart/rescan")
+    suspend fun smartRescan(): SmartResponse
 
     // Search
     @GET("api/fs/search")

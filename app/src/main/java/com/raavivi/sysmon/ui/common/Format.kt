@@ -18,8 +18,8 @@ fun formatBytes(bytes: Long?): String {
 }
 
 /** Bytes-per-second rate, e.g. "2.4 MB/s". */
-fun formatRate(bytesPerSec: Double): String =
-    formatBytes(bytesPerSec.toLong()) + "/s"
+fun formatRate(bytesPerSec: Double?): String =
+    if (bytesPerSec == null) "—" else formatBytes(bytesPerSec.toLong()) + "/s"
 
 fun formatPct(pct: Double?): String =
     if (pct == null) "—" else String.format(Locale.US, "%.0f%%", pct)
@@ -27,8 +27,8 @@ fun formatPct(pct: Double?): String =
 fun formatPct1(pct: Double?): String =
     if (pct == null) "—" else String.format(Locale.US, "%.1f%%", pct)
 
-fun formatMhz(mhz: Double): String =
-    if (mhz <= 0) "—" else String.format(Locale.US, "%.2f GHz", mhz / 1000.0)
+fun formatMhz(mhz: Double?): String =
+    if (mhz == null || mhz <= 0) "—" else String.format(Locale.US, "%.2f GHz", mhz / 1000.0)
 
 fun formatTemp(celsius: Double?): String =
     if (celsius == null) "—" else String.format(Locale.US, "%.0f°C", celsius)

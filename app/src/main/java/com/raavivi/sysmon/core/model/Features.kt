@@ -18,6 +18,11 @@ data class FeaturesResponse(
     val remoteControl: Boolean = false,
     /** Config-driven: the server has a Firebase key and can send FCM pushes. */
     val push: Boolean = false,
+    /** S.M.A.R.T. widget on AND CrystalDiskInfo / smartctl available. */
+    val crystaldisk: Boolean = false,
+    /** The server's settings.json was unreadable (archived); flags may be defaults. */
+    val settingsUnreadable: Boolean = false,
+    val host: HostInfo? = null,
     val detail: FeatureDetail? = null,
     /** Only present on `POST /api/settings`: flags needing a server restart. */
     val restartRequired: List<String> = emptyList(),
@@ -32,10 +37,37 @@ data class FeatureDetail(
     val power: PowerFeatureDetail = PowerFeatureDetail(),
     val remoteControl: RemoteControlDetail = RemoteControlDetail(),
     val push: PushFeatureDetail = PushFeatureDetail(),
+    val crystaldisk: CrystalDiskDetail = CrystalDiskDetail(),
 )
 
 @Serializable
-data class PushFeatureDetail(val configured: Boolean = false, val devices: Int = 0)
+data class PushFeatureDetail(
+    val configured: Boolean = false,
+    val devices: Int = 0,
+    val error: String? = null,
+)
+
+@Serializable
+data class CrystalDiskDetail(
+    val enabled: Boolean = false,
+    val installed: Boolean = false,
+    /** "CrystalDiskInfo" or "smartctl". */
+    val source: String = "",
+    val path: String? = null,
+)
+
+/** Host facts from `GET /api/features`; absent on servers that predate it. */
+@Serializable
+data class HostInfo(
+    val os: String = "",
+    val fsRoot: String = "",
+    val pathSep: String = "",
+    val shell: String = "",
+    val powerDelayS: Int? = null,
+) {
+    /** An older server without `host` is a Windows box. */
+    val isWindows: Boolean get() = os.isBlank() || os == "windows"
+}
 
 @Serializable
 data class WhatsAppDetail(val enabled: Boolean = false, val wacliFound: Boolean = false)
@@ -63,4 +95,5 @@ data class FeaturePatch(
     val ollamaProxy: Boolean? = null,
     val godot: Boolean? = null,
     val power: Boolean? = null,
+    val crystaldisk: Boolean? = null,
 )

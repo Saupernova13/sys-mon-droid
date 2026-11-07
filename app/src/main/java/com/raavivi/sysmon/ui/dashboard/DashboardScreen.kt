@@ -2,6 +2,7 @@ package com.raavivi.sysmon.ui.dashboard
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +37,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.raavivi.sysmon.LocalAppContainer
+import com.raavivi.sysmon.core.model.DriveStat
 import com.raavivi.sysmon.core.model.GpuDeviceStat
 import com.raavivi.sysmon.core.model.SystemSnapshot
 import com.raavivi.sysmon.ui.common.ChartSeries
@@ -49,6 +54,8 @@ import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.UsageBar
 import com.raavivi.sysmon.ui.common.band
+import com.raavivi.sysmon.ui.common.diskTempMetric
+import com.raavivi.sysmon.ui.common.healthState
 import com.raavivi.sysmon.ui.common.color
 import com.raavivi.sysmon.ui.common.worst
 import com.raavivi.sysmon.ui.common.formatBytes
@@ -59,12 +66,17 @@ import com.raavivi.sysmon.ui.common.formatRate
 import com.raavivi.sysmon.ui.common.formatTemp
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import com.raavivi.sysmon.ui.theme.SysMon
+import java.util.Locale
 
 @Composable
 fun DashboardScreen(onOpenPower: () -> Unit = {}) {
     val vm = rememberContainerViewModel { DashboardViewModel(it) }
     var menuOpen by remember { mutableStateOf(false) }
     val snap = vm.snapshot
+    val container = LocalAppContainer.current
+    val features by container.session.features.collectAsStateWithLifecycle()
+    val smartEnabled = features?.crystaldisk == true
+    var smartTarget by remember { mutableStateOf<DriveStat?>(null) }
 
     Column(Modifier.fillMaxWidth()) {
         ScreenHeader(title = "Stats", actions = {
@@ -113,7 +125,7 @@ fun DashboardScreen(onOpenPower: () -> Unit = {}) {
                 if (snap.gpu.available) {
                     snap.gpu.devices.forEach { dev -> item { GpuCard(dev) } }
                 }
-                item { DiskCard(snap) }
+                item { DiskCard(snap, smartEnabled) { smartTarget = it } }
                 snap.power?.takeIf { it.configured }?.let { p ->
                     item { PowerCard(p, onOpen = onOpenPower) }
                 }
@@ -127,6 +139,14 @@ fun DashboardScreen(onOpenPower: () -> Unit = {}) {
                 }
             }
         }
+    }
+
+    smartTarget?.let { d ->
+        SmartSheet(
+            diskId = d.smartDiskId,
+            volumeKey = d.mountpoint.ifBlank { d.device },
+            onDismiss = { smartTarget = null },
+        )
     }
 }
 
@@ -191,11 +211,11 @@ private fun Legend(label: String, color: Color) {
 @Composable
 private fun ReadingMeter(
     label: String?,
-    value: Double,
+    value: Double?,
     state: Severity,
     identity: Color,
 ) {
-    val fraction = (value / 100.0).toFloat()
+    val fraction = ((value ?: 0.0) / 100.0).toFloat()
     if (SysMon.palette.isInstrument) {
         Column(Modifier.fillMaxWidth()) {
             Row(
@@ -314,7 +334,7 @@ private fun GpuCard(dev: GpuDeviceStat) {
         Spacer(Modifier.height(10.dp))
         StatRow(
             "VRAM",
-            "${formatBytes((dev.memUsedMb * 1024 * 1024).toLong())} / ${formatBytes((dev.memTotalMb * 1024 * 1024).toLong())} (${formatPct(dev.memPct)})",
+            "${formatBytes(mbToBytes(dev.memUsedMb))} / ${formatBytes(mbToBytes(dev.memTotalMb))} (${formatPct(dev.memPct)})",
         )
         StatRow(
             "Temperature",
@@ -324,43 +344,108 @@ private fun GpuCard(dev: GpuDeviceStat) {
     }
 }
 
+
+private fun mbToBytes(mb: Double?): Long? = mb?.let { (it * 1024 * 1024).toLong() }
+
+/** "C:\" or "/home", plus " (label)" once the volume has one (render/disk.js driveTitle). */
+internal fun driveTitle(d: DriveStat): String {
+    val name = d.mountpoint.ifBlank { d.device }
+    return if (d.label.isNotBlank()) "$name (${d.label})" else name
+}
+
+/** "NVMe SSD" or whichever half the device reported. */
+internal fun driveType(d: DriveStat): String =
+    listOf(d.busType, d.mediaType).filter { it.isNotBlank() }.joinToString(" ")
+
+/** "NVMe SSD · Model" with blanks omitted. */
+internal fun driveHardware(d: DriveStat): String =
+    listOf(driveType(d), d.model).filter { it.isNotBlank() }.joinToString(" · ")
+
+/** The S.M.A.R.T. fact text, or null when there is no reading at all. */
+internal fun smartFactText(d: DriveStat): String? {
+    if (d.smartHealth == null && d.smartTempC == null) return null
+    val temp = d.smartTempC?.let { String.format(Locale.US, "%.0f°C", it) } ?: "—"
+    val health = healthLabel(d.smartHealth) ?: "—"
+    return "$temp · $health"
+}
+
+/** Worse of the source's own verdict and the temperature band; null with no reading. */
 @Composable
-private fun DiskCard(snap: SystemSnapshot) {
+private fun smartState(d: DriveStat): Severity? {
+    if (d.smartHealth == null && d.smartTempC == null) return null
+    return worst(
+        healthState(d.smartHealth),
+        band(diskTempMetric(d.mediaType, d.smartRotational), d.smartTempC),
+    )
+}
+
+@Composable
+private fun DiskCard(snap: SystemSnapshot, smartEnabled: Boolean, onOpenSmart: (DriveStat) -> Unit) {
     val p = SysMon.palette
-    val states = snap.disk.drives.map { band(Metric.DiskUsed, it.usagePct) }
-    SectionCard(title = "Disks", accent = p.idDisk, state = worst(*states.toTypedArray())) {
-        snap.disk.drives.forEachIndexed { i, d ->
-            val state = states[i]
+    val drives = snap.disk.drives
+    val capacity = drives.map { band(Metric.DiskUsed, it.usagePct) }
+    val smart = drives.map { smartState(it) }
+    val cardState = worst(*(capacity + smart.filterNotNull()).toTypedArray())
+    SectionCard(title = "Disks", accent = p.idDisk, state = cardState) {
+        drives.forEachIndexed { i, d ->
+            val state = capacity[i]
+            val canOpen = smartEnabled && d.smartDiskId != null
             if (i > 0) Spacer(Modifier.height(14.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (canOpen) Modifier.clickable { onOpenSmart(d) } else Modifier),
             ) {
-                Text(
-                    d.mountpoint.ifBlank { d.device },
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = FontFamily.Monospace,
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        driveTitle(d),
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        formatPct(d.usagePct),
+                        fontFamily = if (p.monoNumbers) FontFamily.Monospace else null,
+                        color = if (state == Severity.Nominal) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            state.color(p.idDisk)
+                        },
+                    )
+                }
+                driveHardware(d).takeIf { it.isNotEmpty() }?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = p.quietInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                UsageBar(
+                    fraction = (d.usagePct / 100.0).toFloat(),
+                    color = p.idDisk,
+                    barHeight = if (p.isInstrument) 6 else 8,
+                    state = state,
                 )
-                Text(
-                    formatPct(d.usagePct),
-                    fontFamily = if (p.monoNumbers) FontFamily.Monospace else null,
-                    color = if (state == Severity.Nominal) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        state.color(p.idDisk)
-                    },
-                )
+                Spacer(Modifier.height(6.dp))
+                StatRow("Used", "${formatBytes(d.usedBytes)} / ${formatBytes(d.totalBytes)}")
+                StatRow("I/O", "R ${formatRate(d.readBytesSec)} · W ${formatRate(d.writeBytesSec)}")
+                smartFactText(d)?.let { text ->
+                    val s = smart[i]
+                    StatRow(
+                        "S.M.A.R.T.",
+                        text,
+                        valueColor = if (s != null && s != Severity.Nominal) s.color(p.sigOk) else Color.Unspecified,
+                    )
+                }
             }
-            Spacer(Modifier.height(6.dp))
-            UsageBar(
-                fraction = (d.usagePct / 100.0).toFloat(),
-                color = p.idDisk,
-                barHeight = if (p.isInstrument) 6 else 8,
-                state = state,
-            )
-            Spacer(Modifier.height(6.dp))
-            StatRow("Free", "${formatBytes(d.freeBytes)} of ${formatBytes(d.totalBytes)}")
-            StatRow("I/O", "R ${formatRate(d.readBytesSec)} · W ${formatRate(d.writeBytesSec)}")
         }
     }
 }

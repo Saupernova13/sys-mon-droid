@@ -22,8 +22,8 @@ data class SystemSnapshot(
 data class CpuSnapshot(
     val overallPct: Double = 0.0,
     val cores: List<CoreStat> = emptyList(),
-    val freqCurrentMhz: Double = 0.0,
-    val freqMaxMhz: Double = 0.0,
+    val freqCurrentMhz: Double? = null,
+    val freqMaxMhz: Double? = null,
     val tempCelsius: Double? = null,
     val topProcesses: List<ProcessStat> = emptyList(),
 )
@@ -32,7 +32,7 @@ data class CpuSnapshot(
 data class CoreStat(
     val id: Int = 0,
     val usagePct: Double = 0.0,
-    val freqMhz: Double = 0.0,
+    val freqMhz: Double? = null,
 )
 
 @Serializable
@@ -45,10 +45,10 @@ data class GpuSnapshot(
 data class GpuDeviceStat(
     val index: Int = 0,
     val name: String = "",
-    val usagePct: Double = 0.0,
-    val memUsedMb: Double = 0.0,
-    val memTotalMb: Double = 0.0,
-    val memPct: Double = 0.0,
+    val usagePct: Double? = null,
+    val memUsedMb: Double? = null,
+    val memTotalMb: Double? = null,
+    val memPct: Double? = null,
     val tempCelsius: Double? = null,
     val topProcesses: List<GpuProcessStat> = emptyList(),
     val processListAvailable: Boolean = false,
@@ -82,8 +82,17 @@ data class DriveStat(
     val usedBytes: Long = 0,
     val freeBytes: Long = 0,
     val usagePct: Double = 0.0,
-    val readBytesSec: Double = 0.0,
-    val writeBytesSec: Double = 0.0,
+    val readBytesSec: Double? = null,
+    val writeBytesSec: Double? = null,
+    val label: String = "",
+    val mediaType: String = "",
+    val busType: String = "",
+    val model: String = "",
+    val smartTempC: Double? = null,
+    /** "good" / "caution" / "bad" / "unknown"; null means no reading at all. */
+    val smartHealth: String? = null,
+    val smartDiskId: String? = null,
+    val smartRotational: Boolean? = null,
 )
 
 @Serializable
