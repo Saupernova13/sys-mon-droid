@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -28,6 +29,8 @@ import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.UsageBar
 import com.raavivi.sysmon.ui.common.formatBytes
 import com.raavivi.sysmon.ui.common.formatRate
+import com.raavivi.sysmon.ui.common.snake.SnakeProgress
+import com.raavivi.sysmon.ui.common.snake.SnakeStatus
 import com.raavivi.sysmon.ui.theme.SysMon
 
 /**
@@ -78,6 +81,20 @@ fun TransferProgressCard(
                     else -> jobVerb(job)
                 }
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+
+                SnakeProgress(
+                    progress = if (job.state == "scanning") null else fraction,
+                    status = when (job.state) {
+                        "done" -> SnakeStatus.Done
+                        "failed" -> SnakeStatus.Failed
+                        "cancelled", STATE_LOST -> SnakeStatus.Cancelled
+                        else -> SnakeStatus.Running
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .height(48.dp),
+                )
 
                 if (job.state == "scanning") {
                     LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp))

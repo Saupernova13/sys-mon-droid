@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,7 +52,8 @@ import com.raavivi.sysmon.core.model.ArchiveListBody
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
 import com.raavivi.sysmon.ui.common.ErrorBox
-import com.raavivi.sysmon.ui.common.LoadingBox
+import com.raavivi.sysmon.ui.common.snake.SnakeProgress
+import com.raavivi.sysmon.ui.common.snake.SnakeStatus
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.formatBytes
 import com.raavivi.sysmon.ui.theme.SysMon
@@ -313,7 +315,7 @@ fun ArchiveBrowserScreen(
 
         Box(Modifier.fillMaxSize()) {
             when {
-                browser.loading -> LoadingBox()
+                browser.loading -> ArchiveWait()
                 browser.error != null -> ErrorBox(browser.error!!, onRetry = browser::load)
                 else -> {
                     val nodes = browser.nodes
@@ -340,7 +342,7 @@ fun ArchiveBrowserScreen(
                             }
                         }
                     }
-                    if (browser.fetching) LoadingBox()
+                    if (browser.fetching) ArchiveWait()
                 }
             }
         }
@@ -423,5 +425,19 @@ private fun ArchiveRow(
                 modifier = Modifier.size(18.dp),
             )
         }
+    }
+}
+
+/** Wait for an archive listing or entry fetch, which has no percentage: the busy snake. */
+@Composable
+private fun ArchiveWait() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        SnakeProgress(
+            progress = null,
+            status = SnakeStatus.Running,
+            modifier = Modifier
+                .fillMaxWidth(0.8f)
+                .height(48.dp),
+        )
     }
 }
