@@ -77,6 +77,14 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
             .build()
             .toString()
 
+    /** Shell thumbnail for [path]; 404 when the file has none. Same auth as [fileUrl]. */
+    fun thumbnailUrl(path: String, size: Int = 128): String =
+        "$baseUrl/api/fs/thumbnail".toHttpUrl().newBuilder()
+            .addQueryParameter("path", path)
+            .addQueryParameter("size", size.toString())
+            .build()
+            .toString()
+
     /** `/api/whatsapp/media` URL for a message's media (Coil with the authed client). */
     fun whatsappMediaUrl(chat: String, id: String): String =
         "$baseUrl/api/whatsapp/media".toHttpUrl().newBuilder()

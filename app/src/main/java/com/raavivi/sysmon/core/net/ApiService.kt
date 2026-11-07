@@ -9,6 +9,10 @@ import com.raavivi.sysmon.core.model.FeaturesResponse
 import com.raavivi.sysmon.core.model.FileProperties
 import com.raavivi.sysmon.core.model.FolderSize
 import com.raavivi.sysmon.core.model.FsCopyBody
+import com.raavivi.sysmon.core.model.FsJob
+import com.raavivi.sysmon.core.model.FsJobList
+import com.raavivi.sysmon.core.model.FsJobStartBody
+import com.raavivi.sysmon.core.model.FsJobStarted
 import com.raavivi.sysmon.core.model.FsListResponse
 import com.raavivi.sysmon.core.model.FsMkdirBody
 import com.raavivi.sysmon.core.model.FsMoveBody
@@ -212,6 +216,19 @@ interface ApiService {
 
     @POST("api/fs/mkdir")
     suspend fun fsMkdir(@Body body: FsMkdirBody): OkResponse
+
+    // Transfer jobs (admin only; an older host answers 404)
+    @POST("api/fs/jobs")
+    suspend fun fsJobStart(@Body body: FsJobStartBody): FsJobStarted
+
+    @GET("api/fs/jobs")
+    suspend fun fsJobs(): FsJobList
+
+    @GET("api/fs/jobs/{id}")
+    suspend fun fsJob(@Path("id") id: String): FsJob
+
+    @POST("api/fs/jobs/{id}/cancel")
+    suspend fun fsJobCancel(@Path("id") id: String): OkResponse
 
     @GET("api/fs/drives")
     suspend fun fsDrives(): DrivesResponse

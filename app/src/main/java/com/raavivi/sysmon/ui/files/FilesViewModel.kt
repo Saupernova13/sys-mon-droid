@@ -11,6 +11,9 @@ import com.raavivi.sysmon.core.model.Favorite
 import com.raavivi.sysmon.core.model.FavoriteBody
 import com.raavivi.sysmon.core.model.FileProperties
 import com.raavivi.sysmon.core.model.FsCopyBody
+import com.raavivi.sysmon.core.model.FsJob
+import com.raavivi.sysmon.core.model.FsJobError
+import com.raavivi.sysmon.core.model.FsJobStartBody
 import com.raavivi.sysmon.core.model.FsEntry
 import com.raavivi.sysmon.core.model.FsMkdirBody
 import com.raavivi.sysmon.core.model.FsMoveBody
@@ -22,6 +25,7 @@ import com.raavivi.sysmon.core.model.SearchResult
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
 import coil.ImageLoader
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 enum class FilesMode { Browse, Recycle, Search }
@@ -73,16 +77,61 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
 
     val imageLoader: ImageLoader = container.imageLoader
 
+    /** Selected rows: entry paths when browsing, recycle `iFile` ids in the bin. */
+    var selected by mutableStateOf<Set<String>>(emptySet())
+        private set
+    val selecting: Boolean get() = selected.isNotEmpty()
+
+    /** Every transfer started this session, oldest first. */
+    var jobs by mutableStateOf<List<FsJob>>(emptyList())
+        private set
+
+    /** The job whose progress card is open; null when closed (jobs keep running). */
+    var shownJobId by mutableStateOf<String?>(null)
+        private set
+    var cancelStates by mutableStateOf<Map<String, CancelState>>(emptyMap())
+        private set
+
+    /** Progress card view: compact (false) or details (true); persisted. */
+    var transferDetails by mutableStateOf(false)
+        private set
+
+    val runningJobs: List<FsJob> get() = jobs.filter { !isTerminal(it.state) }
+    val shownJob: FsJob? get() = shownJobId?.let { id -> jobs.firstOrNull { it.id == id } }
+
+    private val isPosix: Boolean get() = container.session.host.value?.isWindows == false
+
+    /** Index into [drives] of the drive the browsed path lives on. */
+    val currentDriveIndex: Int? get() = driveIndexForPath(drives, path, isPosix)
+
     init {
         loadDrives()
         loadFavorites()
         open("")
+        viewModelScope.launch { transferDetails = container.settings.transferDetailsNow() }
     }
 
     fun fileUrl(p: String): String = container.api.fileUrl(p)
 
+    fun thumbnailUrl(p: String): String = container.api.thumbnailUrl(p)
+
+    // ── Selection ──────────────────────────────────────────────────────────────
+
+    fun toggleSelected(key: String) {
+        selected = if (key in selected) selected - key else selected + key
+    }
+
+    fun selectAll(keys: Collection<String>) {
+        selected = keys.toSet()
+    }
+
+    fun clearSelection() {
+        selected = emptySet()
+    }
+
     fun open(target: String) {
         mode = FilesMode.Browse
+        selected = emptySet()
         loading = true
         error = null
         viewModelScope.launch {
@@ -127,6 +176,7 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
             FilesMode.Search -> {}
         }
         loadFavorites()
+        loadDrives()
     }
 
     fun navigateUp() {
@@ -147,6 +197,7 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
 
     fun openRecycle() {
         mode = FilesMode.Recycle
+        selected = emptySet()
         loading = true
         error = null
         viewModelScope.launch {
@@ -161,6 +212,7 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
     fun search(query: String, root: String?) {
         if (query.isBlank()) return
         mode = FilesMode.Search
+        selected = emptySet()
         loading = true
         error = null
         viewModelScope.launch {
@@ -186,16 +238,139 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         container.api.api.fsRename(FsRenameBody(path = target, newName = newName))
     }
 
-    fun delete(target: String) = mutate("Deleted") {
-        container.api.api.fsDelete(target)
+    // ── Transfer jobs ──────────────────────────────────────────────────────────
+
+    fun deleteMany(sources: List<String>) = startJob("delete", sources, null)
+
+    fun transfer(sources: List<String>, dest: String, move: Boolean) =
+        startJob(if (move) "move" else "copy", sources, dest)
+
+    /**
+     * Start copy / move / delete as a server-side job and track it. A host that
+     * predates `/api/fs/jobs` answers 404; then the per-item routes are used.
+     */
+    private fun startJob(op: String, sources: List<String>, dest: String?) {
+        if (sources.isEmpty()) return
+        viewModelScope.launch {
+            when (val r = safeCall { container.api.api.fsJobStart(FsJobStartBody(op, sources, dest)) }) {
+                is ApiResult.Ok -> track(FsJob(id = r.value.id, op = op, state = "scanning", sources = sources, dest = dest))
+                is ApiResult.Err ->
+                    if (r.code == 404) legacyTransfer(op, sources, dest) else message = "Failed: ${r.message}"
+            }
+        }
     }
 
-    fun copyTo(src: String, dst: String) = mutate("Copied") {
-        container.api.api.fsCopy(FsCopyBody(src = src, dst = dst))
+    private suspend fun legacyTransfer(op: String, sources: List<String>, dest: String?) {
+        val errors = mutableListOf<FsJobError>()
+        for (src in sources) {
+            val r = safeCall {
+                when (op) {
+                    "copy" -> container.api.api.fsCopy(FsCopyBody(src = src, dst = dest.orEmpty()))
+                    "move" -> container.api.api.fsMove(FsMoveBody(src = src, dst = dest.orEmpty()))
+                    else -> container.api.api.fsDelete(src)
+                }
+            }
+            if (r is ApiResult.Err) errors += FsJobError(src, r.message)
+        }
+        val summary = FsJob(op = op, state = "done", sources = sources, errors = errors)
+        message = if (errors.size == sources.size && errors.isNotEmpty()) {
+            "Failed: ${errors.first().message}"
+        } else {
+            finishMessage(summary)
+        }
+        afterTransfer()
     }
 
-    fun moveTo(src: String, dst: String) = mutate("Moved") {
-        container.api.api.fsMove(FsMoveBody(src = src, dst = dst))
+    private fun track(job: FsJob) {
+        jobs = jobs + job
+        shownJobId = job.id
+        selected = emptySet()
+        viewModelScope.launch { pollJob(job.id) }
+    }
+
+    private fun updateJob(job: FsJob) {
+        jobs = jobs.map { if (it.id == job.id) job else it }
+    }
+
+    private fun jobById(id: String): FsJob? = jobs.firstOrNull { it.id == id }
+
+    private fun setCancel(id: String, state: CancelState) {
+        cancelStates = cancelStates + (id to state)
+    }
+
+    /** Polls fast while the card is open, slowly otherwise so the header chip stays honest. */
+    private suspend fun pollJob(id: String) {
+        var failures = 0
+        while (true) {
+            val r = safeCall { container.api.api.fsJob(id) }
+            val snap = (r as? ApiResult.Ok)?.value
+            val outcome = classifyPoll(snap, (r as? ApiResult.Err)?.message, failures)
+            failures = outcome.failures
+            when (outcome.kind) {
+                PollKind.Snapshot -> updateJob(snap!!)
+                PollKind.Retry -> {}
+                PollKind.Lost -> jobById(id)?.let { updateJob(lostJob(it)) }
+            }
+            val current = jobById(id) ?: return
+            if (isTerminal(current.state)) {
+                settle(current)
+                return
+            }
+            delay(if (shownJobId == id) POLL_ATTACHED_MS else POLL_DETACHED_MS)
+        }
+    }
+
+    private suspend fun settle(job: FsJob) {
+        setCancel(job.id, nextCancel(cancelStates[job.id] ?: CancelState.Idle, CancelEvent.Settled))
+        message = finishMessage(job)
+        afterTransfer()
+        if (shouldAutoClose(job, transferDetails)) {
+            delay(AUTO_CLOSE_MS)
+            val now = jobById(job.id)
+            if (shownJobId == job.id && now != null && shouldAutoClose(now, transferDetails)) shownJobId = null
+        }
+    }
+
+    /** Re-list whatever the user is looking at once a transfer finishes. */
+    private fun afterTransfer() {
+        when (mode) {
+            FilesMode.Browse -> open(path)
+            FilesMode.Recycle -> openRecycle()
+            FilesMode.Search -> {}
+        }
+    }
+
+    fun cancelJob(id: String) {
+        val before = cancelStates[id] ?: CancelState.Idle
+        val next = nextCancel(before, CancelEvent.Click)
+        if (next == before) return
+        setCancel(id, next)
+        viewModelScope.launch {
+            if (safeCall { container.api.api.fsJobCancel(id) } is ApiResult.Err) {
+                setCancel(id, nextCancel(cancelStates[id] ?: next, CancelEvent.RequestFailed))
+                return@launch
+            }
+            delay(CANCEL_RETRY_MS)
+            val job = jobById(id)
+            if (job != null && !isTerminal(job.state)) {
+                setCancel(id, nextCancel(cancelStates[id] ?: next, CancelEvent.GraceElapsed))
+            }
+        }
+    }
+
+    /** Close the card; the job keeps running. */
+    fun detachJob() {
+        shownJobId = null
+    }
+
+    /** Reopen the card of the most recent running job (the header chip). */
+    fun showLatestRunning() {
+        runningJobs.lastOrNull()?.let { shownJobId = it.id }
+    }
+
+    fun toggleTransferDetails(on: Boolean) {
+        transferDetails = on
+        viewModelScope.launch { container.settings.setTransferDetails(on) }
     }
 
     fun addFavorite(entry: FsEntry) {
@@ -222,12 +397,12 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun recycleRestore(item: RecycleItem) = recycleOp("Restored") {
-        container.api.api.recycleRestore(RecycleRestoreBody(item.iFile))
+    fun recycleRestore(items: List<RecycleItem>) = recycleMany(items, "Restored") {
+        container.api.api.recycleRestore(RecycleRestoreBody(it.iFile))
     }
 
-    fun recycleDelete(item: RecycleItem) = recycleOp("Permanently deleted") {
-        container.api.api.recycleDelete(item.iFile)
+    fun recycleDelete(items: List<RecycleItem>) = recycleMany(items, "Permanently deleted") {
+        container.api.api.recycleDelete(it.iFile)
     }
 
     fun recycleClear() {
@@ -250,11 +425,23 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun recycleOp(okMsg: String, block: suspend () -> Any) {
+    /** Runs [block] per item (the bin has no batch route) and reports one summary. */
+    private fun recycleMany(items: List<RecycleItem>, verb: String, block: suspend (RecycleItem) -> Any) {
+        if (items.isEmpty()) return
         viewModelScope.launch {
-            message = when (val r = safeCall { block() }) {
-                is ApiResult.Ok -> okMsg
-                is ApiResult.Err -> "Failed: ${r.message}"
+            var failed = 0
+            var firstError: String? = null
+            for (item in items) {
+                val r = safeCall { block(item) }
+                if (r is ApiResult.Err) {
+                    failed++
+                    firstError = firstError ?: r.message
+                }
+            }
+            message = when {
+                failed == 0 -> "$verb ${itemsLabel(items.size)}"
+                failed == items.size -> "Failed: $firstError"
+                else -> "$verb ${items.size - failed} of ${items.size}; $failed failed"
             }
             openRecycle()
         }

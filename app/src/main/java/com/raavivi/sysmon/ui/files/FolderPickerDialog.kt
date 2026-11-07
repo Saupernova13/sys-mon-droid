@@ -47,7 +47,7 @@ import com.raavivi.sysmon.ui.common.LoadingBox
 @Composable
 fun FolderPickerDialog(
     vm: FilesViewModel,
-    entry: FsEntry,
+    sources: List<FsEntry>,
     isMove: Boolean,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -67,7 +67,8 @@ fun FolderPickerDialog(
                 .fillMaxHeight(0.85f),
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("$verb “${entry.name}” to", style = MaterialTheme.typography.titleLarge)
+                val what = if (sources.size == 1) "“${sources.first().name}”" else "${sources.size} items"
+                Text("$verb $what to", style = MaterialTheme.typography.titleLarge)
 
                 if (typing) {
                     OutlinedTextField(
@@ -136,7 +137,7 @@ fun FolderPickerDialog(
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     TextButton(
                         onClick = { onConfirm(vm.pickerPath) },
-                        enabled = !typing && !vm.pickerLoading && canTransferTo(entry.path, vm.pickerPath, isMove),
+                        enabled = !typing && !vm.pickerLoading && sources.all { canTransferTo(it.path, vm.pickerPath, isMove) },
                     ) { Text("$verb here") }
                 }
             }
