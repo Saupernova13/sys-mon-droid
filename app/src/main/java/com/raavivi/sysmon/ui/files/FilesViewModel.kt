@@ -15,6 +15,7 @@ import com.raavivi.sysmon.core.model.FsEntry
 import com.raavivi.sysmon.core.model.FsMkdirBody
 import com.raavivi.sysmon.core.model.FsMoveBody
 import com.raavivi.sysmon.core.model.FsRenameBody
+import com.raavivi.sysmon.core.model.RecycleClearResponse
 import com.raavivi.sysmon.core.model.RecycleItem
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
 import com.raavivi.sysmon.core.model.SearchResult
@@ -229,8 +230,14 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         container.api.api.recycleDelete(item.iFile)
     }
 
-    fun recycleClear() = recycleOp("Recycle bin emptied") {
-        container.api.api.recycleClear()
+    fun recycleClear() {
+        viewModelScope.launch {
+            message = when (val r = safeCall { container.api.api.recycleClear() }) {
+                is ApiResult.Ok -> recycleClearMessage(r.value)
+                is ApiResult.Err -> "Failed: ${r.message}"
+            }
+            openRecycle()
+        }
     }
 
     private fun mutate(okMsg: String, block: suspend () -> Any) {
@@ -252,4 +259,11 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
             openRecycle()
         }
     }
+}
+
+/** Status line for `DELETE /api/fs/recycle/clear`, which can partly succeed. */
+internal fun recycleClearMessage(r: RecycleClearResponse): String = when {
+    !r.ok -> "Could not empty the recycle bin: ${r.errors.firstOrNull() ?: "nothing could be removed"}"
+    r.partial -> "Emptied ${r.deleted} items; ${r.errors.size} could not be removed"
+    else -> "Recycle bin emptied (${r.deleted} items)"
 }

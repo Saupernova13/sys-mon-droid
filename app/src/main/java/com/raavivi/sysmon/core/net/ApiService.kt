@@ -37,6 +37,7 @@ import com.raavivi.sysmon.core.model.PushRegisterBody
 import com.raavivi.sysmon.core.model.PushRegisterResponse
 import com.raavivi.sysmon.core.model.PushStatusResponse
 import com.raavivi.sysmon.core.model.RecycleListResponse
+import com.raavivi.sysmon.core.model.RecycleClearResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
 import com.raavivi.sysmon.core.model.RefreshResponse
 import com.raavivi.sysmon.core.model.RelayBody
@@ -234,7 +235,7 @@ interface ApiService {
     suspend fun recycleDelete(@Query("i_file") iFile: String): OkResponse
 
     @DELETE("api/fs/recycle/clear")
-    suspend fun recycleClear(): OkResponse
+    suspend fun recycleClear(): RecycleClearResponse
 
     // Search
     @GET("api/fs/search")

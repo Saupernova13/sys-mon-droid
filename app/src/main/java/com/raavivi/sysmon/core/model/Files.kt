@@ -127,3 +127,12 @@ data class Favorite(
 
 @Serializable
 data class FavoriteBody(val name: String, val path: String)
+
+/** `DELETE /api/fs/recycle/clear`: [ok] is false when nothing could be removed. */
+@Serializable
+data class RecycleClearResponse(
+    val ok: Boolean = true,
+    val partial: Boolean = false,
+    val deleted: Int = 0,
+    val errors: List<String> = emptyList(),
+)
