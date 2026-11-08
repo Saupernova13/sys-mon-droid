@@ -1,6 +1,7 @@
 package com.raavivi.sysmon.ui.more
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -58,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.BuildConfig
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.SessionManager
+import com.raavivi.sysmon.core.push.FindMeAlertNotifier
 import com.raavivi.sysmon.core.push.JellyfinAlertNotifier
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
@@ -116,6 +118,7 @@ fun MoreScreen(
 
             NotificationsCard(
                 pushAvailable = features?.push == true,
+                findMeAvailable = isAdmin && features?.findme == true,
                 onOpenAlerts = onOpenAlerts,
                 onOpenSchedules = onOpenSchedules,
             )
@@ -238,6 +241,7 @@ fun MoreScreen(
 @Composable
 private fun NotificationsCard(
     pushAvailable: Boolean,
+    findMeAvailable: Boolean,
     onOpenAlerts: () -> Unit,
     onOpenSchedules: () -> Unit,
 ) {
@@ -263,37 +267,68 @@ private fun NotificationsCard(
         ActionButton("Plug schedules", Icons.Filled.Schedule, onOpenSchedules)
     }
 
-    JellyfinAlertsCard(pushAvailable = pushAvailable, pushEnabled = enabled)
+    // Jellyfin stream popups and Find Me reachability alerts ride the same FCM
+    // registration as plug alerts, so they follow that opt-in; these switches
+    // only decide whether this phone shows (or silently drops) what it receives.
+    PushSwitchCard(
+        title = "Jellyfin",
+        label = "Jellyfin alerts",
+        onText = "Show a popup when someone streams on Jellyfin.",
+        offText = "Jellyfin popups are off for this phone.",
+        pushAvailable = pushAvailable,
+        pushEnabled = enabled,
+        load = { container.settings.jellyfinAlertsNow() },
+        save = { container.settings.setJellyfinAlerts(it) },
+        clear = { JellyfinAlertNotifier.cancelAll(it) },
+    )
+    if (findMeAvailable) {
+        PushSwitchCard(
+            title = "Find Me",
+            label = "Find Me alerts",
+            onText = "Notify me when a tracked device stops reporting, and when it is back.",
+            offText = "Find Me alerts are off for this phone.",
+            pushAvailable = pushAvailable,
+            pushEnabled = enabled,
+            load = { container.settings.findmeAlertsNow() },
+            save = { container.settings.setFindmeAlerts(it) },
+            clear = { FindMeAlertNotifier.cancelAll(it) },
+        )
+    }
 }
 
-/**
- * Jellyfin stream popups. Delivered over the same FCM registration as plug
- * alerts, so it follows that device opt-in; this switch only decides whether
- * this phone shows (or silently drops) the stream notifications it receives.
- */
+/** A per-phone switch for one kind of push popup (default on). */
 @Composable
-private fun JellyfinAlertsCard(pushAvailable: Boolean, pushEnabled: Boolean) {
-    val container = LocalAppContainer.current
+private fun PushSwitchCard(
+    title: String,
+    label: String,
+    onText: String,
+    offText: String,
+    pushAvailable: Boolean,
+    pushEnabled: Boolean,
+    load: suspend () -> Boolean,
+    save: suspend (Boolean) -> Unit,
+    clear: (Context) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var on by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) { on = container.settings.jellyfinAlertsNow() }
+    LaunchedEffect(Unit) { on = load() }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { /* the switch stays on; popups show once the permission is granted */ }
 
-    SectionCard(title = "Jellyfin") {
+    SectionCard(title = title) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Jellyfin alerts", style = MaterialTheme.typography.bodyLarge)
+                Text(label, style = MaterialTheme.typography.bodyLarge)
                 Text(
                     when {
                         !pushAvailable -> "Unavailable — the server has no Firebase push key configured."
                         !pushEnabled ->
-                            "Turn on phone alerts in Plug alerts first — Jellyfin alerts use the same push registration."
-                        on -> "Show a popup when someone streams on Jellyfin."
-                        else -> "Jellyfin popups are off for this phone."
+                            "Turn on phone alerts in Plug alerts first — $label use the same push registration."
+                        on -> onText
+                        else -> offText
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -313,8 +348,8 @@ private fun JellyfinAlertsCard(pushAvailable: Boolean, pushEnabled: Boolean) {
                         permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
                     scope.launch {
-                        container.settings.setJellyfinAlerts(value)
-                        if (!value) JellyfinAlertNotifier.cancelAll(context)
+                        save(value)
+                        if (!value) clear(context)
                     }
                 },
             )

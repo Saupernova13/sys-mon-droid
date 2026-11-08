@@ -4,6 +4,11 @@ import com.raavivi.sysmon.core.model.FindMeCommand
 import com.raavivi.sysmon.core.model.FindMeDevice
 import com.raavivi.sysmon.ui.common.Severity
 import com.raavivi.sysmon.ui.common.worst
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 /** Pure Find Me display logic, ported from the web window's `findme-state.js`. */
@@ -156,4 +161,54 @@ fun formatInterval(intervalS: Int): String = when {
     intervalS < 60 -> "$intervalS s"
     intervalS % 60 == 0 -> "${intervalS / 60} min"
     else -> String.format(Locale.US, "%.1f min", intervalS / 60.0)
+}
+
+/** "14:02" today, "yesterday 14:02", else "Sat 7 Nov 14:02", in [zone]. */
+fun formatSince(
+    ts: Double,
+    nowS: Double,
+    zone: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+): String {
+    val t = Instant.ofEpochMilli((ts * 1000).toLong()).atZone(zone)
+    val now = Instant.ofEpochMilli((nowS * 1000).toLong()).atZone(zone)
+    val clock = t.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
+    return when (ChronoUnit.DAYS.between(t.toLocalDate(), now.toLocalDate())) {
+        0L -> clock
+        1L -> "yesterday $clock"
+        else -> "${t.format(DateTimeFormatter.ofPattern("EEE d MMM", locale))} $clock"
+    }
+}
+
+/** Live status line: "Moving", "Stationary since 13:05", "Unreachable - last seen 14:02". */
+fun statusText(
+    device: FindMeDevice,
+    nowS: Double,
+    zone: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+): String = when (device.status) {
+    "moving" -> "Moving"
+    "stationary" -> device.statusSince?.let { "Stationary since ${formatSince(it, nowS, zone, locale)}" } ?: "Stationary"
+    "unreachable" -> device.lastSeen?.let { "Unreachable - last seen ${formatSince(it, nowS, zone, locale)}" } ?: "Unreachable"
+    else -> "Status unknown"
+}
+
+/** Unreachable is the only alarm; moving and stationary are both normal (web `statusState`). */
+fun statusSeverity(status: String?): Severity = when (status) {
+    "unreachable" -> Severity.Warning
+    "moving", "stationary" -> Severity.Nominal
+    else -> Severity.Offline
+}
+
+/** Street-level imagery for one position: Google Street View and Mapillary (open imagery). */
+data class StreetViewLinks(val google: String, val mapillary: String)
+
+/** Same URLs as the web's `streetViewLinks` (6-decimal coordinates). */
+fun streetViewLinks(lat: Double, lon: Double): StreetViewLinks {
+    val la = String.format(Locale.US, "%.6f", lat)
+    val lo = String.format(Locale.US, "%.6f", lon)
+    return StreetViewLinks(
+        google = "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=$la,$lo",
+        mapillary = "https://www.mapillary.com/app/?lat=$la&lng=$lo&z=17",
+    )
 }

@@ -86,6 +86,13 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setJellyfinAlerts(on: Boolean) = store.edit { it[KEY_JELLYFIN_ALERTS] = on }
 
+    /** Whether this phone shows Find Me "device unreachable" alerts (default on). */
+    val findmeAlerts: Flow<Boolean> = store.data.map { it[KEY_FINDME_ALERTS] ?: true }
+
+    suspend fun findmeAlertsNow(): Boolean = findmeAlerts.first()
+
+    suspend fun setFindmeAlerts(on: Boolean) = store.edit { it[KEY_FINDME_ALERTS] = on }
+
     /** UI look for this phone: "classic" (default) or "instrument". */
     val themeStyle: Flow<String> = store.data.map { it[KEY_THEME_STYLE] ?: "classic" }
 
@@ -108,6 +115,7 @@ class SettingsStore(private val context: Context) {
         val KEY_FCM_TOKEN = stringPreferencesKey("fcm_token")
         val KEY_MUTED_PLUGS = stringSetPreferencesKey("muted_plugs")
         val KEY_JELLYFIN_ALERTS = booleanPreferencesKey("jellyfin_alerts")
+        val KEY_FINDME_ALERTS = booleanPreferencesKey("findme_alerts")
         val KEY_THEME_STYLE = stringPreferencesKey("theme_style")
         val KEY_TRANSFER_DETAILS = booleanPreferencesKey("transfer_details")
     }

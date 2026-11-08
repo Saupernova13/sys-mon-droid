@@ -31,6 +31,10 @@ class SysMonMessagingService : FirebaseMessagingService() {
             handleJellyfin(data)
             return
         }
+        if (data["type"] == FindMeAlert.TYPE) {
+            handleFindMe(data)
+            return
+        }
         if (data["type"] != "plug_alert" && data["type"] != "heater") return
         val app = applicationContext as? SysMonApp ?: return
         val settings = app.container.settings
@@ -54,6 +58,16 @@ class SysMonMessagingService : FirebaseMessagingService() {
         val app = applicationContext as? SysMonApp ?: return
         val on = runBlocking { app.container.settings.jellyfinAlertsNow() }
         if (on) JellyfinAlertNotifier.handle(this, data) else JellyfinAlertNotifier.cancelAll(this)
+    }
+
+    /**
+     * `type=findme_device`: a tracked device went quiet or came back. Rendered by
+     * [FindMeAlertNotifier] unless this phone turned Find Me alerts off.
+     */
+    private fun handleFindMe(data: Map<String, String>) {
+        val app = applicationContext as? SysMonApp ?: return
+        val on = runBlocking { app.container.settings.findmeAlertsNow() }
+        if (on) FindMeAlertNotifier.handle(this, data) else FindMeAlertNotifier.cancelAll(this)
     }
 
     override fun onNewToken(token: String) {

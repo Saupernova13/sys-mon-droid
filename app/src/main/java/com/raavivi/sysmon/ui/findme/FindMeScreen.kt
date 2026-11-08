@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -236,6 +237,16 @@ fun FindMeScreen(onBack: () -> Unit) {
                     }
                 }
 
+                // Street-level imagery of the selected device's last fix.
+                vm.devices.firstOrNull { it.id == vm.selectedId }?.lastFix?.let { fix ->
+                    val links = streetViewLinks(fix.lat, fix.lon)
+                    val uri = LocalUriHandler.current
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { uri.openUri(links.google) }) { Text("Street View") }
+                        TextButton(onClick = { uri.openUri(links.mapillary) }) { Text("Mapillary") }
+                    }
+                }
+
                 SlippyMap(
                     state = mapState,
                     pins = vm.devices.mapIndexedNotNull { i, d ->
@@ -394,6 +405,14 @@ private fun DeviceRow(
             color = ageState.color(ink),
             fontFamily = if (palette.monoNumbers) FontFamily.Monospace else null,
         )
+        // Live status from servers that send it: Moving / Stationary since / Unreachable.
+        if (device.status != null) {
+            Text(
+                statusText(device, nowS),
+                style = MaterialTheme.typography.bodySmall,
+                color = statusSeverity(device.status).color(ink),
+            )
+        }
         val battery = device.batteryPct?.let { "${it.toInt()}%" + if (device.charging == true) " charging" else "" }
         val batteryLine = listOfNotNull(
             battery?.let { "Battery $it" },

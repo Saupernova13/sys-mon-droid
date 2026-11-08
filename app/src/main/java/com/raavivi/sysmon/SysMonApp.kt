@@ -9,6 +9,7 @@ import com.raavivi.sysmon.core.auth.TokenRenewer
 import com.raavivi.sysmon.core.data.SettingsStore
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.push.PushRegistrar
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * Manual dependency container — kept deliberately small so the first build has no
@@ -23,6 +24,9 @@ class AppContainer(application: Application) {
     val pushRegistrar: PushRegistrar = PushRegistrar(appContext, settings, api)
     val tokenRenewer: TokenRenewer = TokenRenewer(settings, api)
     val session: SessionManager = SessionManager(settings, api, pushRegistrar, tokenRenewer)
+
+    /** A route a notification asked to open; the nav host takes it and clears it. */
+    val pendingRoute: MutableStateFlow<String?> = MutableStateFlow(null)
 
     /** Coil loader that reuses the authed OkHttp client so `/api/fs/file` images
      *  and WhatsApp media carry the bearer token. */
