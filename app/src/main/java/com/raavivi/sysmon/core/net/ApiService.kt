@@ -1,6 +1,14 @@
 package com.raavivi.sysmon.core.net
 
 import com.raavivi.sysmon.core.model.ClearResponse
+import com.raavivi.sysmon.core.model.JellyfinConfig
+import com.raavivi.sysmon.core.model.JellyfinConfigPatch
+import com.raavivi.sysmon.core.model.JellyfinStreamsResponse
+import com.raavivi.sysmon.core.model.JellyfinTestBody
+import com.raavivi.sysmon.core.model.JellyfinTestResponse
+import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
+import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
+import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.DrivesResponse
 import com.raavivi.sysmon.core.model.Favorite
 import com.raavivi.sysmon.core.model.FavoriteBody
@@ -8,7 +16,15 @@ import com.raavivi.sysmon.core.model.FeaturePatch
 import com.raavivi.sysmon.core.model.FeaturesResponse
 import com.raavivi.sysmon.core.model.FileProperties
 import com.raavivi.sysmon.core.model.FolderSize
+import com.raavivi.sysmon.core.model.ArchiveCaps
+import com.raavivi.sysmon.core.model.ArchiveEntryBody
+import com.raavivi.sysmon.core.model.ArchiveListBody
+import com.raavivi.sysmon.core.model.ArchiveListResponse
 import com.raavivi.sysmon.core.model.FsCopyBody
+import com.raavivi.sysmon.core.model.FsJob
+import com.raavivi.sysmon.core.model.FsJobList
+import com.raavivi.sysmon.core.model.FsJobStartBody
+import com.raavivi.sysmon.core.model.FsJobStarted
 import com.raavivi.sysmon.core.model.FsListResponse
 import com.raavivi.sysmon.core.model.FsMkdirBody
 import com.raavivi.sysmon.core.model.FsMoveBody
@@ -36,8 +52,10 @@ import com.raavivi.sysmon.core.model.PowerSchedulesResponse
 import com.raavivi.sysmon.core.model.PushRegisterBody
 import com.raavivi.sysmon.core.model.PushRegisterResponse
 import com.raavivi.sysmon.core.model.PushStatusResponse
+import com.raavivi.sysmon.core.model.RecycleClearResponse
 import com.raavivi.sysmon.core.model.RecycleListResponse
 import com.raavivi.sysmon.core.model.RecycleRestoreBody
+import com.raavivi.sysmon.core.model.SmartResponse
 import com.raavivi.sysmon.core.model.RefreshResponse
 import com.raavivi.sysmon.core.model.RelayBody
 import com.raavivi.sysmon.core.model.RelayResponse
@@ -55,12 +73,14 @@ import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 /**
  * The full sys-mon REST surface (per `docs/API.md`). WebSocket streams are handled
@@ -211,6 +231,30 @@ interface ApiService {
     @POST("api/fs/mkdir")
     suspend fun fsMkdir(@Body body: FsMkdirBody): OkResponse
 
+    // Transfer jobs (admin only; an older host answers 404)
+    @POST("api/fs/jobs")
+    suspend fun fsJobStart(@Body body: FsJobStartBody): FsJobStarted
+
+    @GET("api/fs/jobs")
+    suspend fun fsJobs(): FsJobList
+
+    @GET("api/fs/jobs/{id}")
+    suspend fun fsJob(@Path("id") id: String): FsJob
+
+    @POST("api/fs/jobs/{id}/cancel")
+    suspend fun fsJobCancel(@Path("id") id: String): OkResponse
+
+    // Archives (7-Zip on the host)
+    @GET("api/fs/archive/caps")
+    suspend fun archiveCaps(): ArchiveCaps
+
+    @POST("api/fs/archive/list")
+    suspend fun archiveList(@Body body: ArchiveListBody): ArchiveListResponse
+
+    @Streaming
+    @POST("api/fs/archive/entry")
+    suspend fun archiveEntry(@Body body: ArchiveEntryBody): ResponseBody
+
     @GET("api/fs/drives")
     suspend fun fsDrives(): DrivesResponse
 
@@ -234,7 +278,14 @@ interface ApiService {
     suspend fun recycleDelete(@Query("i_file") iFile: String): OkResponse
 
     @DELETE("api/fs/recycle/clear")
-    suspend fun recycleClear(): OkResponse
+    suspend fun recycleClear(): RecycleClearResponse
+
+    // S.M.A.R.T. (404 when the widget is off)
+    @GET("api/smart")
+    suspend fun smart(): SmartResponse
+
+    @POST("api/smart/rescan")
+    suspend fun smartRescan(): SmartResponse
 
     // Search
     @GET("api/fs/search")
@@ -314,4 +365,23 @@ interface ApiService {
 
     @POST("api/whatsapp/backfill")
     suspend fun waBackfill(@Body body: WaBackfill): OkResponse
+
+    @POST("api/whatsapp/mark-read")
+    suspend fun waMarkRead(@Body body: WaMarkRead): OkResponse
+
+    @POST("api/whatsapp/avatars/refresh")
+    suspend fun waAvatarsRefresh(@Body body: WaAvatarsRefreshReq): WaAvatarsRefreshResponse
+
+    // ── Jellyfin ─────────────────────────────────────────────────────────────────
+    @GET("api/jellyfin/config")
+    suspend fun jellyfinConfig(): JellyfinConfig
+
+    @POST("api/jellyfin/config")
+    suspend fun jellyfinSaveConfig(@Body body: JellyfinConfigPatch): JellyfinConfig
+
+    @POST("api/jellyfin/test")
+    suspend fun jellyfinTest(@Body body: JellyfinTestBody): JellyfinTestResponse
+
+    @GET("api/jellyfin/streams")
+    suspend fun jellyfinStreams(): JellyfinStreamsResponse
 }

@@ -32,6 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
+import com.raavivi.sysmon.LocalAppContainer
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.raavivi.sysmon.ui.common.ErrorBox
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.common.ScreenHeader
@@ -48,6 +52,7 @@ private const val MAX_PAGES = 60
 class PdfViewerViewModel(
     private val container: AppContainer,
     private val path: String,
+    private val local: File? = null,
 ) : ViewModel() {
 
     var pages by mutableStateOf<List<ImageBitmap>>(emptyList())
@@ -73,12 +78,14 @@ class PdfViewerViewModel(
     }
 
     private fun render(): List<ImageBitmap> {
-        val cacheFile = File(container.appContext.cacheDir, "pdf_preview_${path.hashCode()}.pdf")
-        val request = Request.Builder().url(container.api.fileUrl(path)).build()
-        container.api.okHttpClient.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code} fetching file")
-            val body = resp.body ?: throw IllegalStateException("empty response")
-            cacheFile.outputStream().use { out -> body.byteStream().copyTo(out) }
+        val cacheFile = local ?: File(container.appContext.cacheDir, "pdf_preview_${path.hashCode()}.pdf")
+        if (local == null) {
+            val request = Request.Builder().url(container.api.fileUrl(path)).build()
+            container.api.okHttpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code} fetching file")
+                val body = resp.body ?: throw IllegalStateException("empty response")
+                cacheFile.outputStream().use { out -> body.byteStream().copyTo(out) }
+            }
         }
 
         val out = ArrayList<ImageBitmap>()
@@ -99,7 +106,7 @@ class PdfViewerViewModel(
                 }
             }
         }
-        cacheFile.delete()
+        if (local == null) cacheFile.delete()
         return out
     }
 }
@@ -107,9 +114,25 @@ class PdfViewerViewModel(
 @Composable
 fun PdfViewerScreen(path: String, onBack: () -> Unit) {
     val vm = rememberContainerViewModel { PdfViewerViewModel(it, path) }
+    PdfViewerContent(vm, path.substringAfterLast('\\').substringAfterLast('/'), onBack)
+}
+
+/** Viewer for a PDF already on this device (e.g. an archive entry); the file is kept. */
+@Composable
+fun PdfViewerScreen(file: File, title: String, onBack: () -> Unit) {
+    val container = LocalAppContainer.current
+    val vm = viewModel<PdfViewerViewModel>(
+        key = "pdf:${file.path}",
+        factory = viewModelFactory { initializer { PdfViewerViewModel(container, file.path, file) } },
+    )
+    PdfViewerContent(vm, title, onBack)
+}
+
+@Composable
+private fun PdfViewerContent(vm: PdfViewerViewModel, title: String, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
-            title = path.substringAfterLast('\\').substringAfterLast('/'),
+            title = title,
             actions = {
                 IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

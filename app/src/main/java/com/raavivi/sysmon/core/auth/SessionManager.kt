@@ -2,14 +2,20 @@ package com.raavivi.sysmon.core.auth
 
 import com.raavivi.sysmon.core.data.SettingsStore
 import com.raavivi.sysmon.core.model.FeaturesResponse
+import com.raavivi.sysmon.core.model.HostInfo
 import com.raavivi.sysmon.core.model.LoginRequest
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
 import com.raavivi.sysmon.core.push.PushRegistrar
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 enum class AuthState { Loading, LoggedOut, LoggedIn }
 
@@ -35,6 +41,11 @@ class SessionManager(
     /** Server feature flags; null until the first successful fetch. */
     private val _features = MutableStateFlow<FeaturesResponse?>(null)
     val features: StateFlow<FeaturesResponse?> = _features.asStateFlow()
+
+    /** Host OS facts; null until features load. Use [HostInfo.isWindows] for wording. */
+    val host: StateFlow<HostInfo?> = _features
+        .map { it?.host }
+        .stateIn(CoroutineScope(Dispatchers.Unconfined), SharingStarted.Eagerly, null)
 
     @Volatile
     var currentUser: String? = null

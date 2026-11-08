@@ -22,6 +22,8 @@ data class WaStatus(
     val storeDir: String = "",
     val unreadTotal: Int = 0,
     val error: String? = null,
+    val daemonPhase: String? = null,
+    val daemonUptimeS: Double? = null,
 )
 
 // wacli returns loosely-shaped rows (PascalCase or snake_case), so the list
@@ -41,6 +43,28 @@ data class WaSendText(val to: String, val message: String, val replyTo: String? 
 
 @Serializable
 data class WaPinReq(val chat: String, val pinned: Boolean = true)
+
+@Serializable
+data class WaMarkRead(val chat: String)
+
+@Serializable
+data class WaAvatarsRefreshReq(val jids: List<String>, val limit: Int = 40)
+
+/** `POST /api/whatsapp/avatars/refresh`; [updated] are the jids whose avatar is now cached. */
+@Serializable
+data class WaAvatarsRefreshResponse(
+    val ok: Boolean = true,
+    val updated: List<String> = emptyList(),
+    val attempted: Int = 0,
+    val limit: Int = 0,
+)
+
+/** Initials for an avatar placeholder: first letter of the first two words, uppercase; "#" if none. */
+fun waInitials(name: String): String =
+    name.trim().split(Regex("\\s+")).take(2)
+        .mapNotNull { w -> w.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() }
+        .joinToString("")
+        .ifEmpty { "#" }
 
 @Serializable
 data class WaBackfill(val chat: String, val count: Int = 50, val requests: Int = 1)

@@ -17,6 +17,9 @@ enum class PowerKind { RESTART, SHUTDOWN }
 /** A power action the server held back because of live Jellyfin streams. */
 data class StreamingGate(val kind: PowerKind, val message: String)
 
+/** A restart/shutdown the server accepted; drives the full-screen overlay. */
+data class GoingDown(val kind: PowerKind, val delaySeconds: Int)
+
 private const val JELLYFIN_STREAMING = "jellyfin_streaming"
 
 class MoreViewModel(private val container: AppContainer) : ViewModel() {
@@ -49,23 +52,28 @@ class MoreViewModel(private val container: AppContainer) : ViewModel() {
      */
     var streamingGate by mutableStateOf<StreamingGate?>(null)
 
+    /** Set after a 2xx from restart/shutdown; cleared when the user dismisses the overlay. */
+    var goingDown by mutableStateOf<GoingDown?>(null)
+
     fun restart(force: Boolean? = null) =
-        powerAction("Restart", PowerKind.RESTART) { container.api.api.restart(force) }
+        powerAction(PowerKind.RESTART) { container.api.api.restart(force) }
 
     fun shutdown(force: Boolean? = null) =
-        powerAction("Shutdown", PowerKind.SHUTDOWN) { container.api.api.shutdown(force) }
+        powerAction(PowerKind.SHUTDOWN) { container.api.api.shutdown(force) }
 
     fun remoteControl() = run("Launched remote control on host") { container.api.api.remoteControl() }
     fun backup() = run("History backup written on host") { container.api.api.historyBackup() }
 
     private fun powerAction(
-        label: String,
         kind: PowerKind,
         block: suspend () -> PowerActionResponse,
     ) {
         viewModelScope.launch {
             message = when (val r = safeCall { block() }) {
-                is ApiResult.Ok -> "$label in ${r.value.delaySeconds.toInt()}s on host"
+                is ApiResult.Ok -> {
+                    goingDown = GoingDown(kind, r.value.delaySeconds.toInt())
+                    null
+                }
                 is ApiResult.Err -> {
                     if (r.code == 409 && r.apiCode == JELLYFIN_STREAMING) {
                         streamingGate = StreamingGate(kind, r.message)

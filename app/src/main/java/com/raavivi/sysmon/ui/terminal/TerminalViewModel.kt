@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
 import com.raavivi.sysmon.core.net.SysMonJson
 import com.raavivi.sysmon.core.term.TerminalEmulator
+import com.raavivi.sysmon.core.term.Utf8StreamDecoder
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -27,13 +28,17 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     var state by mutableStateOf(TermState.Connecting)
         private set
-    var title by mutableStateOf("Terminal")
+    /** The host's shell name until the session frame supplies a title. */
+    var title by mutableStateOf(container.session.host.value?.shell?.ifBlank { null } ?: "Terminal")
         private set
     var lines by mutableStateOf<List<List<TerminalEmulator.TermSpan>>>(emptyList())
         private set
 
     private val emulator = TerminalEmulator(cols = 80, rows = 24)
     private val frames = Channel<String>(Channel.UNLIMITED)
+
+    /** Carries a split multi-byte character across binary frames; reset on reconnect. */
+    private val utf8 = Utf8StreamDecoder()
     private var ws: WebSocket? = null
 
     private var sessionId: String? = null
@@ -56,6 +61,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     fun connect() {
         ws?.cancel()
+        utf8.reset()
         state = TermState.Connecting
         viewModelScope.launch {
             val sid = container.settings.terminalSessionNow()
@@ -72,7 +78,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
                 }
 
                 override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                    frames.trySend(bytes.utf8())
+                    frames.trySend(utf8.decode(bytes.toByteArray()))
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {

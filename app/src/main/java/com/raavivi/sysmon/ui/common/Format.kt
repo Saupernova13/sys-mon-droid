@@ -18,8 +18,8 @@ fun formatBytes(bytes: Long?): String {
 }
 
 /** Bytes-per-second rate, e.g. "2.4 MB/s". */
-fun formatRate(bytesPerSec: Double): String =
-    formatBytes(bytesPerSec.toLong()) + "/s"
+fun formatRate(bytesPerSec: Double?): String =
+    if (bytesPerSec == null) "—" else formatBytes(bytesPerSec.toLong()) + "/s"
 
 fun formatPct(pct: Double?): String =
     if (pct == null) "—" else String.format(Locale.US, "%.0f%%", pct)
@@ -27,8 +27,8 @@ fun formatPct(pct: Double?): String =
 fun formatPct1(pct: Double?): String =
     if (pct == null) "—" else String.format(Locale.US, "%.1f%%", pct)
 
-fun formatMhz(mhz: Double): String =
-    if (mhz <= 0) "—" else String.format(Locale.US, "%.2f GHz", mhz / 1000.0)
+fun formatMhz(mhz: Double?): String =
+    if (mhz == null || mhz <= 0) "—" else String.format(Locale.US, "%.2f GHz", mhz / 1000.0)
 
 fun formatTemp(celsius: Double?): String =
     if (celsius == null) "—" else String.format(Locale.US, "%.0f°C", celsius)
@@ -69,4 +69,30 @@ fun relativeTime(epochSeconds: Double?): String {
         s < 86400 -> "${s / 3600}h ago"
         else -> "${s / 86400}d ago"
     }
+}
+
+/** A span longer than this labels chart axes with dates instead of clock times. */
+const val AXIS_DATE_SPAN_S = 2 * 86_400.0
+
+/** Axis/tooltip label for [epochSeconds] on a chart spanning [spanSeconds]: "HH:mm", or "yyyy-MM-dd" for long spans. */
+fun formatAxisTime(epochSeconds: Double, spanSeconds: Double): String {
+    val fmt = SimpleDateFormat(if (spanSeconds > AXIS_DATE_SPAN_S) "yyyy-MM-dd" else "HH:mm", Locale.US)
+    return fmt.format(Date((epochSeconds * 1000).toLong()))
+}
+
+/** Playback clock: "0:59", "59:59", "1:00:00" (hours only past the first hour). */
+fun formatClock(seconds: Double): String {
+    val s = seconds.toLong().coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val ss = s % 60
+    return if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m, ss)
+    else String.format(Locale.US, "%d:%02d", m, ss)
+}
+
+/** "12:34 / 45:00", "12:34", or "" when the position is not reported. */
+fun formatStreamPosition(positionS: Double?, runtimeS: Double?): String = when {
+    positionS == null -> ""
+    runtimeS == null -> formatClock(positionS)
+    else -> "${formatClock(positionS)} / ${formatClock(runtimeS)}"
 }

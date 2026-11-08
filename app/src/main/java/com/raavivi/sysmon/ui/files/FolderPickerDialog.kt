@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -47,16 +48,21 @@ import com.raavivi.sysmon.ui.common.LoadingBox
 @Composable
 fun FolderPickerDialog(
     vm: FilesViewModel,
-    entry: FsEntry,
+    sources: List<FsEntry>,
     isMove: Boolean,
-    onConfirm: (String) -> Unit,
+    onConfirm: (String, Boolean) -> Unit,
     onDismiss: () -> Unit,
+    title: String? = null,
+    confirmLabel: String? = null,
+    subfolderName: String? = null,
+    startPath: String? = null,
 ) {
     val verb = if (isMove) "Move" else "Copy"
     var typing by remember { mutableStateOf(false) }
     var typed by remember { mutableStateOf("") }
+    var intoSubfolder by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) { vm.pickerOpen(vm.path) }
+    LaunchedEffect(Unit) { vm.pickerOpen(startPath ?: vm.path) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
@@ -67,7 +73,8 @@ fun FolderPickerDialog(
                 .fillMaxHeight(0.85f),
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("$verb “${entry.name}” to", style = MaterialTheme.typography.titleLarge)
+                val what = if (sources.size == 1) "“${sources.first().name}”" else "${sources.size} items"
+                Text(title ?: "$verb $what to", style = MaterialTheme.typography.titleLarge)
 
                 if (typing) {
                     OutlinedTextField(
@@ -132,12 +139,24 @@ fun FolderPickerDialog(
                     }
                 }
 
+                if (subfolderName != null) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { intoSubfolder = !intoSubfolder },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = intoSubfolder, onCheckedChange = { intoSubfolder = it })
+                        Text("Extract into a new folder named $subfolderName", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     TextButton(
-                        onClick = { onConfirm(vm.pickerPath) },
-                        enabled = !typing && !vm.pickerLoading && canTransferTo(entry.path, vm.pickerPath, isMove),
-                    ) { Text("$verb here") }
+                        onClick = { onConfirm(vm.pickerPath, subfolderName != null && intoSubfolder) },
+                        enabled = !typing && !vm.pickerLoading && vm.pickerPath.isNotBlank() && sources.all { canTransferTo(it.path, vm.pickerPath, isMove) },
+                    ) { Text(confirmLabel ?: "$verb here") }
                 }
             }
         }

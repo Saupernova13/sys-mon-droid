@@ -8,7 +8,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
+import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPinReq
@@ -69,6 +71,13 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     val imageLoader: ImageLoader = container.imageLoader
 
+    /** Per-jid counter folded into the avatar's cache key; bumped when a refresh cached a new picture. */
+    var avatarVersions by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
+
+    /** Jids already offered to the server's avatar refresh this session. */
+    private val avatarTried = mutableSetOf<String>()
+
     private val frames = Channel<String>(Channel.UNLIMITED)
     private var ws: WebSocket? = null
 
@@ -80,6 +89,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun mediaUrl(msg: WaMessage): String = container.api.whatsappMediaUrl(msg.chat, msg.id)
+
+    fun avatarUrl(jid: String): String = container.api.whatsappAvatarUrl(jid)
 
     fun loadStatus() {
         viewModelScope.launch {
@@ -96,6 +107,30 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                 is ApiResult.Err -> error = r.message
             }
             loadingChats = false
+            refreshAvatars()
+        }
+    }
+
+    /**
+     * Ask the server to fetch avatars it has not cached, then re-point the rows
+     * it filled. The server does at most `limit` per call, so go again while it
+     * reports it hit the limit (bounded). Chats already offered are not resent.
+     */
+    private suspend fun refreshAvatars() {
+        val pending = chats.map { it.jid }.filter { it.isNotBlank() && it !in avatarTried }.toMutableList()
+        if (pending.isEmpty()) return
+        avatarTried += pending
+        repeat(MAX_AVATAR_PASSES) {
+            if (pending.isEmpty()) return
+            val r = safeCall {
+                container.api.api.waAvatarsRefresh(WaAvatarsRefreshReq(jids = pending.toList(), limit = AVATAR_LIMIT))
+            }
+            val ok = (r as? ApiResult.Ok)?.value ?: return
+            if (ok.updated.isNotEmpty()) {
+                avatarVersions = avatarVersions + ok.updated.associateWith { (avatarVersions[it] ?: 0) + 1 }
+                pending.removeAll(ok.updated.toSet())
+            }
+            if (ok.attempted < ok.limit) return
         }
     }
 
@@ -104,8 +139,45 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         currentName = name
         currentPinned = chats.firstOrNull { it.jid == jid }?.pinned ?: false
         loadMessages(jid)
-        // Opening clears the local unread badge (server does the same).
-        chats = chats.map { if (it.jid == jid) it.copy(unread = 0) else it }
+    }
+
+    /** Whether the open chat has unread messages (enables "Mark as read"). */
+    val currentUnread: Int get() = chats.firstOrNull { it.jid == currentJid }?.unread ?: 0
+
+    /** The server no longer marks a chat read on its own; this does it explicitly. */
+    fun markRead() {
+        val jid = currentJid ?: return
+        val cleared = currentUnread
+        if (cleared <= 0) return
+        viewModelScope.launch {
+            when (val r = safeCall { container.api.api.waMarkRead(WaMarkRead(chat = jid)) }) {
+                is ApiResult.Ok -> {
+                    chats = chats.map { if (it.jid == jid) it.copy(unread = 0) else it }
+                    status = status?.let { it.copy(unreadTotal = (it.unreadTotal - cleared).coerceAtLeast(0)) }
+                }
+                is ApiResult.Err -> message = "Mark read failed: ${r.message}"
+            }
+        }
+    }
+
+    /** Download an image message and store it in the public Pictures collection. */
+    fun saveImage(msg: WaMessage) {
+        viewModelScope.launch {
+            message = "Saving..."
+            message = withContext(Dispatchers.IO) {
+                runCatching {
+                    val req = okhttp3.Request.Builder().url(mediaUrl(msg)).build()
+                    container.api.okHttpClient.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) error("HTTP ${resp.code}")
+                        val mime = resp.header("Content-Type")?.substringBefore(';')?.trim()
+                        val body = resp.body ?: error("empty response")
+                        val name = MediaSaver.fileName(msg, mime)
+                        val where = MediaSaver.save(container.appContext, name, mime, body.byteStream())
+                        "Saved to $where"
+                    }
+                }.getOrElse { "Save failed: ${it.message ?: "unknown error"}" }
+            }
+        }
     }
 
     fun closeChat() {
@@ -278,6 +350,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     private companion object {
         const val DEFAULT_UPLOAD_NAME = "upload.bin"
+        const val AVATAR_LIMIT = 40
+        const val MAX_AVATAR_PASSES = 6
         const val MAX_UPLOAD_BYTES = 100L * 1024 * 1024
         val chatOrder = compareByDescending<WaChat> { it.pinned }.thenByDescending { it.lastTs }
     }

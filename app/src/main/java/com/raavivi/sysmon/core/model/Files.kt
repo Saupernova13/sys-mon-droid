@@ -39,6 +39,7 @@ data class FsMkdirBody(val parent: String, val name: String)
 @Serializable
 data class DriveInfo(
     val mountpoint: String = "",
+    val label: String = "",
     val fstype: String = "",
     val total: Long? = null,
     val free: Long? = null,
@@ -127,3 +128,96 @@ data class Favorite(
 
 @Serializable
 data class FavoriteBody(val name: String, val path: String)
+
+/** `DELETE /api/fs/recycle/clear`: [ok] is false when nothing could be removed. */
+@Serializable
+data class RecycleClearResponse(
+    val ok: Boolean = true,
+    val partial: Boolean = false,
+    val deleted: Int = 0,
+    val errors: List<String> = emptyList(),
+)
+
+// ── Transfer jobs ──────────────────────────────────────────────────────────────
+
+/** `POST /api/fs/jobs`; null fields are omitted (explicitNulls=false). */
+@Serializable
+data class FsJobStartBody(
+    val op: String,
+    val sources: List<String>,
+    val dest: String? = null,
+    val password: String? = null,
+    val format: String? = null,
+    val entries: List<String>? = null,
+)
+
+@Serializable
+data class FsJobStarted(val id: String = "")
+
+@Serializable
+data class FsJobError(val path: String = "", val message: String = "")
+
+/**
+ * One job snapshot (`transfer_jobs.rs snapshot()`). [state] is scanning, running,
+ * done, failed or cancelled; the client adds `lost` when contact is gone.
+ */
+@Serializable
+data class FsJob(
+    val id: String = "",
+    val op: String = "",
+    val state: String = "",
+    val sources: List<String> = emptyList(),
+    val dest: String? = null,
+    val format: String? = null,
+    val filesTotal: Long? = null,
+    val filesDone: Long? = null,
+    val bytesTotal: Long? = null,
+    val bytesDone: Long? = null,
+    val current: String? = null,
+    val startedAt: Double? = null,
+    val finishedAt: Double? = null,
+    val elapsed: Double? = null,
+    val speed: Double? = null,
+    val errors: List<FsJobError> = emptyList(),
+    val partial: List<String> = emptyList(),
+)
+
+/** `GET /api/fs/jobs` -> `{jobs: [...]}`. */
+@Serializable
+data class FsJobList(val jobs: List<FsJob> = emptyList())
+
+// ── Archives ───────────────────────────────────────────────────────────────────
+
+/** `GET /api/fs/archive/caps`. */
+@Serializable
+data class ArchiveCaps(
+    val available: Boolean = false,
+    val sevenZip: String? = null,
+    val rar: String? = null,
+    val createFormats: List<String> = emptyList(),
+    val extensions: List<String> = emptyList(),
+)
+
+@Serializable
+data class ArchiveListBody(val path: String, val password: String? = null)
+
+@Serializable
+data class ArchiveEntryBody(val path: String, val entry: String, val password: String? = null)
+
+/** One row of an archive listing; [path] is the listing's own spelling. */
+@Serializable
+data class ArchiveEntry(
+    val path: String = "",
+    val name: String = "",
+    val dir: Boolean = false,
+    val size: Long = 0,
+    val packed: Long = 0,
+    val modified: String? = null,
+    val encrypted: Boolean = false,
+)
+
+@Serializable
+data class ArchiveListResponse(
+    val entries: List<ArchiveEntry> = emptyList(),
+    val encrypted: Boolean = false,
+)

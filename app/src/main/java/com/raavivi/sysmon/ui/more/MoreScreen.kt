@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -28,9 +30,11 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +47,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -57,6 +62,8 @@ import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
+import com.raavivi.sysmon.ui.theme.SysMon
+import com.raavivi.sysmon.ui.theme.ThemeStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -73,6 +80,7 @@ fun MoreScreen(
     val container = LocalAppContainer.current
     val role by container.session.role.collectAsStateWithLifecycle()
     val features by container.session.features.collectAsStateWithLifecycle()
+    val host by container.session.host.collectAsStateWithLifecycle()
     val isAdmin = role == SessionManager.ROLE_ADMIN
     var confirm by remember { mutableStateOf<Confirm?>(null) }
 
@@ -122,12 +130,13 @@ fun MoreScreen(
                 }
 
                 SectionCard(title = "Power", accent = MaterialTheme.colorScheme.error) {
-                    ActionButton("Restart host", Icons.Filled.RestartAlt) {
-                        confirm = Confirm("Restart host?", "The host will reboot shortly.") { vm.restart() }
+                    // Caution for restart, warning for shutdown (the web grid's warn/danger tiles).
+                    ToneButton("Restart host", Icons.Filled.RestartAlt, SysMon.palette.sigWarn) {
+                        confirm = Confirm("Restart host?", powerPrompt("Restart", host)) { vm.restart() }
                     }
                     Spacer(Modifier.height(8.dp))
-                    ActionButton("Shut down host", Icons.Filled.PowerSettingsNew) {
-                        confirm = Confirm("Shut down host?", "The host will power off shortly.") { vm.shutdown() }
+                    ToneButton("Shut down host", Icons.Filled.PowerSettingsNew, SysMon.palette.sigCrit) {
+                        confirm = Confirm("Shut down host?", powerPrompt("Shut down", host)) { vm.shutdown() }
                     }
                 }
 
@@ -143,6 +152,8 @@ fun MoreScreen(
                     ActionButton("Server settings", Icons.Filled.Settings, onOpenSettings)
                 }
             }
+
+            AppearanceCard()
 
             SectionCard(title = "Account") {
                 ActionButton("Log out", Icons.AutoMirrored.Filled.Logout) { vm.logout() }
@@ -171,6 +182,8 @@ fun MoreScreen(
             )
         }
     }
+
+    vm.goingDown?.let { PowerGoingDownOverlay(it, onDismiss = { vm.goingDown = null }) }
 
     vm.streamingGate?.let { gate ->
         val restart = gate.kind == PowerKind.RESTART
@@ -306,10 +319,57 @@ private fun JellyfinAlertsCard(pushAvailable: Boolean, pushEnabled: Boolean) {
 private data class Confirm(val title: String, val body: String, val action: () -> Unit)
 
 @Composable
-private fun ActionButton(label: String, icon: ImageVector, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+private fun ActionButton(label: String, icon: ImageVector, onClick: () -> Unit) =
+    ToneButton(label, icon, Color.Unspecified, onClick)
+
+/** An [ActionButton] whose label and icon use [tint] (Unspecified keeps the default). */
+@Composable
+private fun ToneButton(label: String, icon: ImageVector, tint: Color, onClick: () -> Unit) {
+    val colors = if (tint == Color.Unspecified) {
+        ButtonDefaults.outlinedButtonColors()
+    } else {
+        ButtonDefaults.outlinedButtonColors(contentColor = tint)
+    }
+    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth(), colors = colors) {
         Icon(icon, contentDescription = null)
         Spacer(Modifier.width(8.dp))
         Text(label)
+    }
+}
+
+/** Local, per-phone look: Classic or Instrument (the sys-mon web panel's style). */
+@Composable
+private fun AppearanceCard() {
+    val container = LocalAppContainer.current
+    val scope = rememberCoroutineScope()
+    val key by container.settings.themeStyle.collectAsStateWithLifecycle(initialValue = ThemeStyle.Classic.key)
+    val current = ThemeStyle.fromKey(key)
+
+    SectionCard(title = "Appearance") {
+        ThemeStyle.entries.forEach { style ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = style == current,
+                        role = Role.RadioButton,
+                        onClick = { scope.launch { container.settings.setThemeStyle(style.key) } },
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = style == current, onClick = null)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.padding(vertical = 8.dp)) {
+                    Text(style.label, style = MaterialTheme.typography.bodyLarge)
+                    if (style == ThemeStyle.Instrument) {
+                        Text(
+                            "Matches the sys-mon web panel",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

@@ -92,6 +92,14 @@ class ScreenShareViewModel(private val container: AppContainer) : ViewModel() {
         send(ScreenEvent("keyup", key = key))
     }
 
+    /** Hold [modifier], tap [key], release both (e.g. Meta+v). */
+    fun pressCombo(modifier: String, key: String) {
+        send(ScreenEvent("keydown", key = modifier))
+        send(ScreenEvent("keydown", key = key))
+        send(ScreenEvent("keyup", key = key))
+        send(ScreenEvent("keyup", key = modifier))
+    }
+
     fun typeString(s: String) {
         for (ch in s) pressKey(ch.toString())
     }

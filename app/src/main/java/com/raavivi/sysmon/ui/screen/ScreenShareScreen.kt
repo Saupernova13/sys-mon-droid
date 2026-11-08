@@ -45,6 +45,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.raavivi.sysmon.LocalAppContainer
+import com.raavivi.sysmon.ui.theme.SysMon
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlin.math.min
@@ -179,6 +182,8 @@ fun ScreenShareScreen(onBack: () -> Unit) {
 @Composable
 private fun KeyboardBar(vm: ScreenShareViewModel) {
     var text by remember { mutableStateOf("") }
+    val host by LocalAppContainer.current.session.host.collectAsStateWithLifecycle()
+    val windows = host?.isWindows ?: true
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
@@ -199,7 +204,12 @@ private fun KeyboardBar(vm: ScreenShareViewModel) {
             KeyBtn("Tab") { vm.pressKey("Tab") }
             KeyBtn("Esc") { vm.pressKey("Escape") }
             KeyBtn("Bksp") { vm.pressKey("Backspace") }
-            KeyBtn("Win") { vm.pressKey("Meta") }
+            KeyBtn(if (windows) "Windows" else "Super") { vm.pressKey("Meta") }
+            // Win+V (clipboard history) and Win+D (show desktop) only mean something on Windows.
+            if (windows) {
+                KeyBtn("Win+V") { vm.pressCombo("Meta", "v") }
+                KeyBtn("Win+D") { vm.pressCombo("Meta", "d") }
+            }
         }
     }
 }
@@ -214,7 +224,7 @@ private fun KeyBtn(label: String, onClick: () -> Unit) {
 @Composable
 private fun ConnDot(state: ScreenState) {
     val color = when (state) {
-        ScreenState.Connected -> MaterialTheme.colorScheme.primary
+        ScreenState.Connected -> SysMon.palette.sigOk
         ScreenState.Connecting -> MaterialTheme.colorScheme.tertiary
         ScreenState.Disconnected -> MaterialTheme.colorScheme.error
     }

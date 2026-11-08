@@ -43,10 +43,11 @@ import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
 import com.raavivi.sysmon.ui.common.UsageBar
+import com.raavivi.sysmon.ui.common.formatAxisTime
 import com.raavivi.sysmon.ui.common.formatDateTime
 import com.raavivi.sysmon.ui.common.formatWatts
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
-import com.raavivi.sysmon.ui.theme.PowerColor
+import com.raavivi.sysmon.ui.theme.SysMon
 import java.util.Locale
 import kotlinx.coroutines.delay
 
@@ -155,6 +156,7 @@ private fun TabBar(vm: PowerViewModel) {
 
 @Composable
 private fun LiveTab(vm: PowerViewModel, env: PowerReading) {
+    val pwr = SysMon.palette.idPwr
     val d = vm.detail() ?: return
     val isAll = vm.selected == PowerViewModel.ALL
 
@@ -171,7 +173,7 @@ private fun LiveTab(vm: PowerViewModel, env: PowerReading) {
         CostCard(d, env.currency)
 
         if (!isAll) {
-            SectionCard(title = "Electrical", accent = PowerColor) {
+            SectionCard(title = "Electrical", accent = pwr) {
                 StatRow("Voltage", "${fmt1(d.voltage)} V (${d.quality.voltage.label})")
                 StatRow("Current", "${String.format(Locale.US, "%.3f", d.current)} A")
                 StatRow("Power factor", "${fmt2(d.powerFactor)} (${d.quality.powerFactor.label})")
@@ -192,10 +194,11 @@ private fun LiveTab(vm: PowerViewModel, env: PowerReading) {
 /** Every plug with its live draw and an admin-only relay switch. */
 @Composable
 private fun DevicesCard(vm: PowerViewModel, env: PowerReading, isAdmin: Boolean) {
+    val pwr = SysMon.palette.idPwr
     val agg = env.headline
     SectionCard(
         title = "Devices",
-        accent = PowerColor,
+        accent = pwr,
         trailing = {
             if (agg.deviceCount > 0) {
                 Text(
@@ -229,7 +232,7 @@ private fun DevicesCard(vm: PowerViewModel, env: PowerReading, isAdmin: Boolean)
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                         fontFamily = FontFamily.Monospace,
-                        color = PowerColor,
+                        color = pwr,
                     )
                 }
                 // Open this plug's schedules; read-only for viewers.
@@ -281,19 +284,20 @@ private fun SelectorChips(vm: PowerViewModel, env: PowerReading) {
 
 @Composable
 private fun HeadlineCard(d: PowerReading, isAll: Boolean) {
+    val pwr = SysMon.palette.idPwr
     val title = if (isAll) "All plugs" else d.deviceName.ifBlank { "Live reading" }
-    SectionCard(title = title, accent = PowerColor) {
+    SectionCard(title = title, accent = pwr) {
         Row {
             Text(
                 formatWatts(d.watts),
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
-                color = PowerColor,
+                color = pwr,
             )
         }
         Spacer(Modifier.height(8.dp))
-        UsageBar(fraction = (d.load.gaugePct / 100.0).toFloat(), color = PowerColor)
+        UsageBar(fraction = (d.load.gaugePct / 100.0).toFloat(), color = pwr)
         Spacer(Modifier.height(10.dp))
         StatRow("Load", listOf(d.load.label, d.load.hint).filter { it.isNotBlank() }.joinToString(" — "))
         if (isAll) {
@@ -308,7 +312,8 @@ private fun HeadlineCard(d: PowerReading, isAll: Boolean) {
 
 @Composable
 private fun HistoryCard(vm: PowerViewModel) {
-    SectionCard(title = "Usage (${vm.range.label})", accent = PowerColor) {
+    val pwr = SysMon.palette.idPwr
+    SectionCard(title = "Usage (${vm.range.label})", accent = pwr) {
         val hist = vm.history
         if (hist == null || hist.items.size < 2) {
             Text(
@@ -324,7 +329,18 @@ private fun HistoryCard(vm: PowerViewModel) {
             val pts = hist.items.map {
                 (((it.watts ?: 0.0) / maxW) * 100.0).toFloat()
             }
-            PercentLineChart(series = listOf(ChartSeries("W", PowerColor, pts)))
+            PercentLineChart(series = listOf(ChartSeries("W", pwr, pts)))
+            val first = hist.items.first().ts
+            val last = hist.items.last().ts
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                listOf(first, last).forEach { t ->
+                    Text(
+                        formatAxisTime(t, last - first),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 "peak ${formatWatts(hist.items.mapNotNull { it.watts }.maxOrNull() ?: 0.0)} · scale ${formatWatts(maxW)}",
@@ -333,7 +349,10 @@ private fun HistoryCard(vm: PowerViewModel) {
             )
         }
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             PowerRange.entries.forEach { r ->
                 FilterChip(
                     selected = vm.range == r,
@@ -347,7 +366,8 @@ private fun HistoryCard(vm: PowerViewModel) {
 
 @Composable
 private fun CostCard(d: PowerReading, currency: String) {
-    SectionCard(title = "Cost", accent = PowerColor) {
+    val pwr = SysMon.palette.idPwr
+    SectionCard(title = "Cost", accent = pwr) {
         StatRow("Today", "$currency${fmt2(d.cost.today)} · ${fmt2(d.todayKwh)} kWh")
         StatRow("Yesterday", "$currency${fmt2(d.cost.yesterday)} · ${fmt2(d.yesterdayKwh)} kWh")
         d.cost.projectedToday?.let { proj ->
