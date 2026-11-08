@@ -99,6 +99,15 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
     … (folders included), preview images, PDFs and text, save anything else;
     extract here / to a stem folder / to a picked folder; compress to any format
     the host offers. Passwords are asked for, re-asked when wrong, and never stored.
+- **Find Me** (More -> Find Me, admin, when the server's Find Me flag is on) — your paired
+  Android devices on a map. Per device: fix age and accuracy, battery and network,
+  Locate, Ring / Stop ring (with a "Locating..." / "Ring sent..." state read from the
+  server's command list), rename, report interval and remove. The map is a built-in
+  slippy map over the server's tile proxy (drag, pinch, +/-, Fit all), darkened to
+  match the theme, with an accuracy circle per device and the selected device's 24 h /
+  7 d / 30 d trail. Add device shows the pairing code, its expiry, the link and a QR,
+  and closes when the phone pairs. Polls every 5 s while a command is pending or the
+  pair dialog is open, otherwise every 30 s, only while the screen is visible.
 - **Model Log** — the LLM audit trail, live over `WS /ws/models`, with COLD START
   badges, proxy status, row detail, and clear.
 - **Terminal** — a PTY shell over `WS /ws/terminal` with a built-in compact ANSI

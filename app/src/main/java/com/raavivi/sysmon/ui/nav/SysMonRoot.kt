@@ -26,6 +26,7 @@ import com.raavivi.sysmon.ui.alerts.PlugAlertsScreen
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.dashboard.DashboardScreen
 import com.raavivi.sysmon.ui.files.FilesScreen
+import com.raavivi.sysmon.ui.findme.FindMeScreen
 import com.raavivi.sysmon.ui.files.PdfViewerScreen
 import com.raavivi.sysmon.ui.files.TextEditorScreen
 import com.raavivi.sysmon.ui.modellog.ModelLogScreen
@@ -78,6 +79,7 @@ private fun MainScaffold() {
         val onHiddenTool = when (currentRoute) {
             Routes.TERMINAL, Routes.SCREEN, Routes.SETTINGS -> !isAdmin
             Routes.MODEL_LOG -> !isAdmin || features?.modelLog != true
+            Routes.FIND_ME -> !isAdmin || features?.findme != true
             else -> false
         }
         if (onHiddenTab || onHiddenTool) {
@@ -129,6 +131,7 @@ private fun MainScaffold() {
                     onOpenTerminal = { nav.navigate(Routes.TERMINAL) },
                     onOpenScreen = { nav.navigate(Routes.SCREEN) },
                     onOpenModelLog = { nav.navigate(Routes.MODEL_LOG) },
+                    onOpenFindMe = { nav.navigate(Routes.FIND_ME) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
                     onOpenSchedules = { nav.navigate(Routes.POWER_SCHEDULES) },
@@ -151,6 +154,7 @@ private fun MainScaffold() {
             composable(Routes.TERMINAL) { TerminalScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SCREEN) { ScreenShareScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.MODEL_LOG) { ModelLogScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.FIND_ME) { FindMeScreen(onBack = { nav.popBackStack() }) }
             composable(
                 route = "${Routes.POWER}?tab={tab}",
                 arguments = listOf(

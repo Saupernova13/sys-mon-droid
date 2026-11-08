@@ -42,6 +42,7 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+coil-svg = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
