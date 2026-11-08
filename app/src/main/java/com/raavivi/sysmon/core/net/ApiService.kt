@@ -15,6 +15,14 @@ import com.raavivi.sysmon.core.model.FavoriteBody
 import com.raavivi.sysmon.core.model.FeaturePatch
 import com.raavivi.sysmon.core.model.FeaturesResponse
 import com.raavivi.sysmon.core.model.FileProperties
+import com.raavivi.sysmon.core.model.FindMeCommandResponse
+import com.raavivi.sysmon.core.model.FindMeDevice
+import com.raavivi.sysmon.core.model.FindMeDevicesResponse
+import com.raavivi.sysmon.core.model.FindMeGeocodeResponse
+import com.raavivi.sysmon.core.model.FindMeHistoryResponse
+import com.raavivi.sysmon.core.model.FindMePairBody
+import com.raavivi.sysmon.core.model.FindMePairResponse
+import com.raavivi.sysmon.core.model.FindMePatchBody
 import com.raavivi.sysmon.core.model.FolderSize
 import com.raavivi.sysmon.core.model.ArchiveCaps
 import com.raavivi.sysmon.core.model.ArchiveEntryBody
@@ -77,6 +85,7 @@ import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -327,6 +336,42 @@ interface ApiService {
 
     @POST("api/models/clear")
     suspend fun modelClear(): ClearResponse
+
+    // Find Me (admin; every route 404s while the feature is off)────────────
+    @GET("api/findme/devices")
+    suspend fun findMeDevices(): FindMeDevicesResponse
+
+    @POST("api/findme/pair")
+    suspend fun findMePair(@Body body: FindMePairBody): FindMePairResponse
+
+    @PATCH("api/findme/devices/{id}")
+    suspend fun findMePatch(@Path("id") id: String, @Body body: FindMePatchBody): FindMeDevice
+
+    @DELETE("api/findme/devices/{id}")
+    suspend fun findMeRemove(@Path("id") id: String): OkResponse
+
+    @GET("api/findme/devices/{id}/history")
+    suspend fun findMeHistory(
+        @Path("id") id: String,
+        @Query("start") start: Double? = null,
+        @Query("end") end: Double? = null,
+        @Query("limit") limit: Int = 2000,
+    ): FindMeHistoryResponse
+
+    @POST("api/findme/devices/{id}/locate")
+    suspend fun findMeLocate(@Path("id") id: String): FindMeCommandResponse
+
+    @POST("api/findme/devices/{id}/ring")
+    suspend fun findMeRing(@Path("id") id: String): FindMeCommandResponse
+
+    @POST("api/findme/devices/{id}/ring/stop")
+    suspend fun findMeRingStop(@Path("id") id: String): FindMeCommandResponse
+
+    @GET("api/findme/geocode")
+    suspend fun findMeGeocode(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+    ): FindMeGeocodeResponse
 
     // ── WhatsApp ─────────────────────────────────────────────────────────────────
     @GET("api/whatsapp/status")

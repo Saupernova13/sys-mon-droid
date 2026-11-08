@@ -105,6 +105,13 @@ Everything the web UI gained since the 0.7.0 power work that makes sense on a ph
 Deliberately not ported: window minimise/maximise, the dock, sidebar and window
 edge resizing (desktop window chrome), and `/auth/local` (loopback-only by design).
 
+### Stage 13 — Find Me (0.9.0) ✅
+- Admin Find Me screen over `/api/findme/*` (gated on `features.findme`): device list with
+  Locate / Ring / Stop ring and pending-command state, rename / interval / remove, pairing
+  dialog (code, countdown, link, QR via `coil-svg`), address line from `/api/findme/geocode`.
+- Compose slippy map (`ui/findme/SlippyMap.kt`, pure `MapMath.kt`) over the authed tile
+  proxy; no map SDK. Trail for 24 h / 7 d / 30 d from `/api/findme/devices/{id}/history`.
+
 ## Not included / future
 
 - **Godot editor** — intentionally skipped in this client.

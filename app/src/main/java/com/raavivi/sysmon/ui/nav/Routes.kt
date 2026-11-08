@@ -28,6 +28,7 @@ object Routes {
     const val SCREEN = "screen"
     const val WHATSAPP = "whatsapp"
     const val MODEL_LOG = "modellog"
+    const val FIND_ME = "findme"
     const val POWER = "power"
     const val POWER_SCHEDULES = "power?tab=schedules"
     const val SETTINGS = "settings"

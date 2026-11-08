@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Psychology
@@ -72,6 +73,7 @@ fun MoreScreen(
     onOpenTerminal: () -> Unit = {},
     onOpenScreen: () -> Unit = {},
     onOpenModelLog: () -> Unit = {},
+    onOpenFindMe: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAlerts: () -> Unit = {},
     onOpenSchedules: () -> Unit = {},
@@ -147,6 +149,10 @@ fun MoreScreen(
                     if (features?.modelLog == true) {
                         Spacer(Modifier.height(8.dp))
                         ActionButton("Model log", Icons.Filled.Psychology, onOpenModelLog)
+                    }
+                    if (features?.findme == true) {
+                        Spacer(Modifier.height(8.dp))
+                        ActionButton("Find Me", Icons.Filled.MyLocation, onOpenFindMe)
                     }
                     Spacer(Modifier.height(8.dp))
                     ActionButton("Server settings", Icons.Filled.Settings, onOpenSettings)

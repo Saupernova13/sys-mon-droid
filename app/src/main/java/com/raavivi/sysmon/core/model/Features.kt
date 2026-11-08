@@ -16,6 +16,8 @@ data class FeaturesResponse(
     val godot: Boolean = false,
     val power: Boolean = false,
     val remoteControl: Boolean = false,
+    /** Find Me is on server-side; its whole router 404s otherwise. */
+    val findme: Boolean = false,
     /** Config-driven: the server has a Firebase key and can send FCM pushes. */
     val push: Boolean = false,
     /** S.M.A.R.T. widget on AND CrystalDiskInfo / smartctl available. */
@@ -38,6 +40,7 @@ data class FeatureDetail(
     val remoteControl: RemoteControlDetail = RemoteControlDetail(),
     val push: PushFeatureDetail = PushFeatureDetail(),
     val crystaldisk: CrystalDiskDetail = CrystalDiskDetail(),
+    val findme: FindMeFeatureDetail = FindMeFeatureDetail(),
 )
 
 @Serializable
@@ -45,6 +48,14 @@ data class PushFeatureDetail(
     val configured: Boolean = false,
     val devices: Int = 0,
     val error: String? = null,
+)
+
+/** `detail.findme`: raw toggle, paired device count and whether an FCM key is configured. */
+@Serializable
+data class FindMeFeatureDetail(
+    val enabled: Boolean = false,
+    val devices: Int = 0,
+    val push: Boolean = false,
 )
 
 @Serializable
@@ -96,4 +107,5 @@ data class FeaturePatch(
     val godot: Boolean? = null,
     val power: Boolean? = null,
     val crystaldisk: Boolean? = null,
+    val findme: Boolean? = null,
 )

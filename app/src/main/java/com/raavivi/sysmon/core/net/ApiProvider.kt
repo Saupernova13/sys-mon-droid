@@ -100,6 +100,9 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
             .build()
             .toString()
 
+    /** Find Me map tile; needs the bearer, so load it with the authed Coil loader. */
+    fun findMeTileUrl(z: Int, x: Int, y: Int): String = "$baseUrl/api/findme/tiles/$z/$x/$y.png"
+
     /**
      * Open a WebSocket on the shared client. OkHttp accepts http(s) URLs for the
      * handshake and upgrades them to ws(s) itself, so we keep [baseUrl] as-is and

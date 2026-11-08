@@ -14,8 +14,8 @@ android {
         applicationId = "com.raavivi.sysmon"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.8.0"
+        versionCode = 11
+        versionName = "0.9.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.firebase.messaging)
 
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
 
     testImplementation(libs.junit)
 }

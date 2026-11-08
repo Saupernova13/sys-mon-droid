@@ -214,6 +214,10 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
                     else -> "CrystalDiskInfo not found at ${d.crystaldisk.path ?: "its configured path"}"
                 },
             ),
+            FlagRow(
+                "findme", "Find Me", d.findme.enabled,
+                hint = "Locate and ring your phones (needs the Find Me tracker app)",
+            ),
         )
     }
 
@@ -228,6 +232,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
             "godot" -> FeaturePatch(godot = value)
             "power" -> FeaturePatch(power = value)
             "crystaldisk" -> FeaturePatch(crystaldisk = value)
+            "findme" -> FeaturePatch(findme = value)
             else -> return
         }
         viewModelScope.launch {
