@@ -51,7 +51,16 @@ data class FindMeDevice(
     val charging: Boolean? = null,
     val network: String? = null,
     val commands: List<FindMeCommand> = emptyList(),
+    /** Live status: `moving`, `stationary`, `unreachable` or `unknown` (older servers omit it). */
+    val status: String? = null,
+    /** When the current [status] began (Unix seconds). */
+    val statusSince: Double? = null,
+    /** Where a stationary device sits. */
+    val stationaryAt: FindMeStationaryAt? = null,
 )
+
+@Serializable
+data class FindMeStationaryAt(val lat: Double = 0.0, val lon: Double = 0.0, val radiusM: Double = 0.0)
 
 @Serializable
 data class FindMeDevicesResponse(
