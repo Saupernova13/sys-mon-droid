@@ -90,6 +90,23 @@ private fun MainScaffold() {
         }
     }
 
+    // A notification asked for a screen (MainActivity.openIntent). Wait for the
+    // feature flags, or the hidden-tool check above would bounce straight back.
+    val pendingRoute by container.pendingRoute.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingRoute, isAdmin, features) {
+        val route = pendingRoute ?: return@LaunchedEffect
+        val flags = features ?: return@LaunchedEffect
+        container.pendingRoute.value = null
+        if (route == Routes.FIND_ME && isAdmin && flags.findme) {
+            nav.navigate(TopDest.More.route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            nav.navigate(Routes.FIND_ME) { launchSingleTop = true }
+        }
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
