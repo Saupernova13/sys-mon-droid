@@ -1,5 +1,7 @@
 package com.raavivi.sysmon.ui.findme
 
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -13,8 +15,21 @@ import com.raavivi.sysmon.core.model.FindMePairBody
 import com.raavivi.sysmon.core.model.FindMePairResponse
 import com.raavivi.sysmon.core.model.FindMePatchBody
 import com.raavivi.sysmon.core.net.ApiResult
+import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.net.safeCall
+import com.raavivi.sysmon.core.tracker.TrackerPermissionState
+import com.raavivi.sysmon.core.tracker.TrackerPermissions
+import com.raavivi.sysmon.core.tracker.data.TrackerState
+import com.raavivi.sysmon.core.tracker.net.DeviceResult
+import com.raavivi.sysmon.core.tracker.net.normalizeCode
+import com.raavivi.sysmon.core.tracker.net.normalizeServer
+import com.raavivi.sysmon.core.tracker.net.pairErrorMessage
+import com.raavivi.sysmon.core.tracker.track.TrackerService
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -68,6 +83,112 @@ class FindMeViewModel(private val container: AppContainer) : ViewModel() {
     private var pairKnownIds: Set<String> = emptySet()
     private var trailKey: Triple<String?, TrailRange, Double?>? = null
     private var addressKey: String? = null
+
+    // This phone (built-in tracker) --------------------------------------------
+
+    private val tracker = container.tracker
+    private val context = container.appContext
+
+    /** Tracker pairing and status; null until the first read. */
+    val phone: StateFlow<TrackerState?> = tracker.settings.state
+        .map<TrackerState, TrackerState?> { it }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val queued: StateFlow<Int> = tracker.queue.size
+    val pushAvailable: Boolean get() = tracker.push.available
+
+    var perms by mutableStateOf<TrackerPermissionState>(TrackerPermissions.read(context))
+        private set
+
+    /** Pairing needs an admin; viewers never see the switch. */
+    var phoneIsAdmin by mutableStateOf(true)
+        private set
+
+    /** Set after a successful pairing from this screen; the screen then walks the permission checklist. */
+    var walkRequested by mutableStateOf(false)
+    var phoneBusy by mutableStateOf(false)
+        private set
+    var phoneError by mutableStateOf<String?>(null)
+        private set
+
+    init {
+        viewModelScope.launch {
+            phoneIsAdmin = (container.settings.roleNow() ?: SessionManager.ROLE_ADMIN) != SessionManager.ROLE_VIEWER
+        }
+    }
+
+    fun refreshPermissions() {
+        perms = TrackerPermissions.read(context)
+    }
+
+    /** Switch handler: pairs this phone first when needed, else pauses or resumes tracking. */
+    fun trackThisPhone(on: Boolean) {
+        val state = phone.value ?: return
+        phoneError = null
+        if (state.paired) {
+            viewModelScope.launch {
+                tracker.settings.setTracking(on)
+                if (on) TrackerService.start(context) else TrackerService.stop(context)
+            }
+        } else if (on && phoneIsAdmin && !phoneBusy) {
+            pairThisPhone()
+        }
+    }
+
+    /** Mints a code with the admin API, then redeems it as this phone through the device API. */
+    private fun pairThisPhone() {
+        phoneBusy = true
+        viewModelScope.launch {
+            val server = normalizeServer(container.api.httpBaseUrl())
+            val name = defaultPhoneName()
+            if (server == null) {
+                phoneError = "No server address"
+            } else {
+                when (val minted = safeCall { container.api.api.findMePair(FindMePairBody(name = name, server = server)) }) {
+                    is ApiResult.Err ->
+                        phoneError = if (minted.code == 404) "Find Me is off on the server" else minted.message
+                    is ApiResult.Ok -> {
+                        val code = normalizeCode(minted.value.code)
+                        if (code == null) {
+                            phoneError = "The server sent an unusable pairing code"
+                        } else {
+                            when (val r = tracker.pair(server, code, name)) {
+                                is DeviceResult.Ok -> {
+                                    message = "This phone is now tracked"
+                                    walkRequested = true
+                                }
+                                is DeviceResult.Err -> phoneError = pairErrorMessage(r)
+                            }
+                        }
+                    }
+                }
+            }
+            phoneBusy = false
+            wake.trySend(Unit)
+        }
+    }
+
+    /** Starts the tracker when it should be running and location is allowed. */
+    fun ensureTracking() {
+        TrackerService.start(context)
+    }
+
+    fun reportNow() {
+        TrackerService.start(context, TrackerService.ACTION_REPORT_NOW)
+    }
+
+    fun unpairThisPhone() {
+        tracker.appScope.launch {
+            tracker.unpair()
+            wake.trySend(Unit)
+        }
+    }
+
+    fun dismissPhoneNotice() {
+        viewModelScope.launch { tracker.settings.clearNotice() }
+    }
+
+    private fun defaultPhoneName(): String =
+        Settings.Global.getString(context.contentResolver, "device_name")?.takeIf { it.isNotBlank() } ?: Build.MODEL
 
     val selected: FindMeDevice? get() = devices.firstOrNull { it.id == selectedId }
 

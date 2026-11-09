@@ -4,6 +4,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.raavivi.sysmon.SysMonApp
 import com.raavivi.sysmon.core.auth.SessionManager
+import com.raavivi.sysmon.core.tracker.model.Command
 import com.raavivi.sysmon.widget.PlugWidgets
 import kotlinx.coroutines.runBlocking
 
@@ -29,6 +30,10 @@ class SysMonMessagingService : FirebaseMessagingService() {
         val data = message.data
         if (data["type"] == "jellyfin_stream") {
             handleJellyfin(data)
+            return
+        }
+        if (data["type"] == TRACKER_TYPE) {
+            handleTracker(data)
             return
         }
         if (data["type"] == FindMeAlert.TYPE) {
@@ -70,11 +75,31 @@ class SysMonMessagingService : FirebaseMessagingService() {
         if (on) FindMeAlertNotifier.handle(this, data) else FindMeAlertNotifier.cancelAll(this)
     }
 
+    /**
+     * `type=findme`: a command for this phone's built-in tracker (`cmd` = locate,
+     * ring, stop_ring; `id`). Ignored unless the tracker is paired; the processor
+     * runs it in the tracker's app scope so it outlives this callback.
+     */
+    private fun handleTracker(data: Map<String, String>) {
+        val kind = data["cmd"] ?: return
+        val id = data["id"] ?: return
+        val app = applicationContext as? SysMonApp ?: return
+        val tracker = app.container.tracker
+        if (!runBlocking { tracker.settings.stateNow().paired }) return
+        tracker.commands.process(listOf(Command(id = id, kind = kind)))
+    }
+
     override fun onNewToken(token: String) {
         val app = applicationContext as? SysMonApp ?: return
         runBlocking {
             app.container.pushRegistrar.ensureApiReady()
             app.container.pushRegistrar.refreshToken(token)
         }
+        // The tracker has its own device token; it only sends when paired.
+        runBlocking { app.container.tracker.push.send(token) }
+    }
+
+    private companion object {
+        const val TRACKER_TYPE = "findme"
     }
 }
