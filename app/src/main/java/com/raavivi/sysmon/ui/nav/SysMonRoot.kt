@@ -22,6 +22,7 @@ import androidx.navigation.navArgument
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.AuthState
 import com.raavivi.sysmon.core.auth.SessionManager
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.ui.alerts.PlugAlertsScreen
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.dashboard.DashboardScreen
@@ -59,6 +60,7 @@ private fun MainScaffold() {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    LaunchedEffect(currentRoute) { currentRoute?.let { AppLog.i("Nav", it) } }
     val role by container.session.role.collectAsStateWithLifecycle()
     val features by container.session.features.collectAsStateWithLifecycle()
     val isAdmin = role == SessionManager.ROLE_ADMIN

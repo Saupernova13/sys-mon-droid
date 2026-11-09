@@ -7,6 +7,7 @@ import coil.ImageLoader
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.auth.TokenRenewer
 import com.raavivi.sysmon.core.data.SettingsStore
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.push.PushRegistrar
 import com.raavivi.sysmon.core.tracker.TrackerContainer
@@ -45,6 +46,7 @@ class SysMonApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.init(this)
         container = AppContainer(this)
         // Heater alerts now arrive by FCM push; no foreground watcher to start.
         // Token (re)registration happens after login in SessionManager.

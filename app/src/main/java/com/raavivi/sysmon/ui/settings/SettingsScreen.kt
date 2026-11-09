@@ -21,6 +21,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import android.content.Intent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -111,6 +114,8 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             if (vm.jfAvailable) JellyfinCard(vm)
 
+            LogsCard(vm)
+
             Text(
                 "Flags apply live where the host supports it; the ollama proxy " +
                     "only unbinds its port after a server restart.",
@@ -182,6 +187,54 @@ private fun JellyfinCard(vm: SettingsViewModel) {
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp),
             )
+        }
+    }
+}
+
+/** On-device logs: on/off switch, folder, share (zip + share sheet) and clear. */
+@Composable
+private fun LogsCard(vm: SettingsViewModel) {
+    val context = LocalContext.current
+    SectionCard(title = "Logs") {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Write logs", style = MaterialTheme.typography.bodyLarge)
+                if (!vm.loggingEnabled) {
+                    Text(
+                        "Logging is off",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SysMon.palette.sigWarn,
+                    )
+                }
+            }
+            Switch(checked = vm.loggingEnabled, onCheckedChange = vm::setLogging)
+        }
+        Text(
+            "Folder: ${vm.logsLocation}",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            "Kept for 24 hours, then deleted. No tokens, bodies or coordinates are logged.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    vm.shareLogs { file ->
+                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.logs", file)
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/zip"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(send, "Share logs"))
+                    }
+                },
+                enabled = !vm.logsBusy,
+            ) { Text("Share logs") }
+            OutlinedButton(onClick = vm::clearLogs, enabled = !vm.logsBusy) { Text("Clear logs") }
         }
     }
 }

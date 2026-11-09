@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.model.FeaturePatch
 import com.raavivi.sysmon.core.model.FeaturesResponse
 import com.raavivi.sysmon.core.model.JellyfinConfig
@@ -14,7 +15,10 @@ import com.raavivi.sysmon.core.model.JellyfinNotifyPatch
 import com.raavivi.sysmon.core.model.JellyfinTestBody
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /** One toggleable server feature flag, as shown in the settings list. */
 data class FlagRow(
@@ -65,9 +69,46 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     /** The config the form was last filled from; Save sends only what differs from it. */
     private var jfBase: JellyfinConfig? = null
 
+    /** Logs section: switch state mirrors [SettingsStore.loggingEnabled]. */
+    var loggingEnabled by mutableStateOf(AppLog.isEnabled())
+        private set
+    var logsBusy by mutableStateOf(false)
+        private set
+    val logsLocation: String get() = AppLog.locationLabel()
+
     init {
         refresh()
         loadJellyfin()
+        viewModelScope.launch {
+            container.settings.loggingEnabled.collect { loggingEnabled = it }
+        }
+    }
+
+    fun setLogging(on: Boolean) {
+        loggingEnabled = on
+        viewModelScope.launch { container.settings.setLoggingEnabled(on) }
+    }
+
+    /** Zips the logs into the cache off the main thread, then hands the file to [onReady]. */
+    fun shareLogs(onReady: (File) -> Unit) {
+        if (logsBusy) return
+        logsBusy = true
+        viewModelScope.launch {
+            val zip = File(container.appContext.cacheDir, "logs-share/sysmon-logs.zip")
+            val ok = withContext(Dispatchers.IO) { runCatching { AppLog.exportZip(zip) }.getOrDefault(false) }
+            logsBusy = false
+            if (ok) onReady(zip) else message = "No logs to share"
+        }
+    }
+
+    fun clearLogs() {
+        if (logsBusy) return
+        logsBusy = true
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { AppLog.clear() }
+            logsBusy = false
+            message = "Logs cleared"
+        }
     }
 
     private fun applyJellyfin(c: JellyfinConfig) {

@@ -169,6 +169,28 @@ through to the login screen.
 Against a server too old to have `/auth/refresh`, renewal quietly no-ops and the
 app behaves exactly as it did before.
 
+## Logs
+
+The app keeps an on-device log so you can send it when something breaks.
+
+- **Where:** `Download/sys-mon/logs/` (Android 10+, visible in any file manager, no
+  permission needed). On Android 8-9 it is the app's external files `logs` folder.
+  One file per hour, `sysmon-YYYYMMDD-HH.log`, capped at about 2 MB each.
+- **Retention:** files older than 24 hours are deleted on app start and whenever a
+  new hourly file opens. Nothing is kept longer.
+- **Logged:** app start (version, device model, Android version), screen route
+  changes, every HTTP call as `METHOD /path?query status ms`, API errors, WebSocket
+  connect/close/failure, tracker lifecycle (service, pair/unpair, command kind and
+  id, upload counts), uncaught crashes with full stack traces, and the previous
+  process exit reason (Android 11+).
+- **Never logged:** headers, request/response bodies, tokens (`token`,
+  `access_token`, `password`, `code` query values show as `***`), file contents,
+  chat messages, WhatsApp text, or location coordinates.
+- **Settings > Logs:** the **Write logs** switch (default on; when off nothing is
+  written, crashes included, but old files are still pruned after 24 hours),
+  **Share logs** (zips the current files and opens the share sheet) and
+  **Clear logs**.
+
 ## Build
 
 Requires JDK 17 and the Android SDK (platform 35). `local.properties` points the

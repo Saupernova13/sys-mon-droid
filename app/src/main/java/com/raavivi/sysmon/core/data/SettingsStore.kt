@@ -2,6 +2,7 @@ package com.raavivi.sysmon.core.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import com.raavivi.sysmon.core.log.AppLog
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -105,7 +106,16 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setTransferDetails(on: Boolean) = store.edit { it[KEY_TRANSFER_DETAILS] = on }
 
+    /** Whether on-device logging is on (default on). AppLog mirrors this synchronously. */
+    val loggingEnabled: Flow<Boolean> = store.data.map { it[KEY_LOGGING] ?: true }
+
+    suspend fun setLoggingEnabled(on: Boolean) {
+        store.edit { it[KEY_LOGGING] = on }
+        AppLog.setEnabled(on)
+    }
+
     private companion object {
+        val KEY_LOGGING = booleanPreferencesKey("logging_enabled")
         val KEY_SERVER = stringPreferencesKey("server_url")
         val KEY_TOKEN = stringPreferencesKey("token")
         val KEY_USERNAME = stringPreferencesKey("username")

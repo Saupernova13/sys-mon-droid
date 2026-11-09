@@ -14,6 +14,7 @@ import com.google.android.gms.location.LocationResult
 import com.raavivi.sysmon.MainActivity
 import com.raavivi.sysmon.R
 import com.raavivi.sysmon.SysMonApp
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.tracker.TrackerContainer
 import com.raavivi.sysmon.core.tracker.TrackerNotifications
 import com.raavivi.sysmon.core.tracker.TrackerPermissions
@@ -49,6 +50,7 @@ class TrackerService : Service() {
         super.onCreate()
         app = (application as SysMonApp).container.tracker
         TrackerNotifications.ensureChannels(this)
+        AppLog.i("Tracker", "service start")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -59,6 +61,7 @@ class TrackerService : Service() {
         }
         when (intent?.action) {
             ACTION_PAUSE -> {
+                AppLog.i("Tracker", "paused from notification")
                 scope.launch {
                     container.settings.setTracking(false)
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -152,6 +155,7 @@ class TrackerService : Service() {
     )
 
     override fun onDestroy() {
+        AppLog.i("Tracker", "service stop")
         callback?.let { app.location.stopUpdates(it) }
         scope.cancel()
         super.onDestroy()

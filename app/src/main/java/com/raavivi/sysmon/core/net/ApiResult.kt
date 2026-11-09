@@ -1,6 +1,8 @@
 package com.raavivi.sysmon.core.net
 
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.model.ErrorEnvelope
+import kotlinx.coroutines.CancellationException
 import retrofit2.HttpException
 import java.io.IOException
 
@@ -33,15 +35,25 @@ inline fun <T> ApiResult<T>.onErr(block: (ApiResult.Err) -> Unit): ApiResult<T> 
  * with a human-readable message. The backend's `{ok:false,error}` envelope is
  * preferred over the raw HTTP reason phrase when present.
  */
-suspend fun <T> safeCall(block: suspend () -> T): ApiResult<T> = try {
-    ApiResult.Ok(block())
-} catch (e: HttpException) {
-    val envelope = readErrorEnvelope(e)
-    ApiResult.Err(parseHttpError(e, envelope), e.code(), envelope?.code)
-} catch (e: IOException) {
-    ApiResult.Err("Network error: ${e.message ?: "could not reach server"}")
-} catch (e: Exception) {
-    ApiResult.Err(e.message ?: "Unexpected error")
+suspend fun <T> safeCall(block: suspend () -> T): ApiResult<T> {
+    val result: ApiResult<T> = try {
+        ApiResult.Ok(block())
+    } catch (e: HttpException) {
+        val envelope = readErrorEnvelope(e)
+        ApiResult.Err(parseHttpError(e, envelope), e.code(), envelope?.code)
+    } catch (e: IOException) {
+        ApiResult.Err("Network error: ${e.message ?: "could not reach server"}")
+    } catch (e: CancellationException) {
+        AppLog.w("Api", "cancelled")
+        ApiResult.Err(e.message ?: "Unexpected error")
+    } catch (e: Exception) {
+        AppLog.e("Api", "unexpected ${e.javaClass.simpleName}: ${e.message}", e)
+        ApiResult.Err(e.message ?: "Unexpected error")
+    }
+    if (result is ApiResult.Err) {
+        AppLog.w("Api", "error code=${result.code} apiCode=${result.apiCode} message=${result.message}")
+    }
+    return result
 }
 
 /** Reads the error body once (it can't be re-read) and decodes the backend envelope. */
