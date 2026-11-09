@@ -106,15 +106,6 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
     /** Index into [drives] of the drive the browsed path lives on. */
     val currentDriveIndex: Int? get() = driveIndexForPath(drives, path, isPosix)
 
-    init {
-        loadDrives()
-        loadFavorites()
-        // Start at the host's filesystem root when it names one; "" lets the server pick.
-        open(container.session.host.value?.fsRoot.orEmpty())
-        loadCaps()
-        viewModelScope.launch { transferDetails = container.settings.transferDetailsNow() }
-    }
-
     fun fileUrl(p: String): String = container.api.fileUrl(p)
 
     fun thumbnailUrl(p: String): String = container.api.thumbnailUrl(p)
@@ -544,6 +535,16 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
             }
             openRecycle()
         }
+    }
+
+    // Last: every property above must exist before init reads it (caps was null here).
+    init {
+        loadDrives()
+        loadFavorites()
+        // Start at the host's filesystem root when it names one; "" lets the server pick.
+        open(container.session.host.value?.fsRoot.orEmpty())
+        loadCaps()
+        viewModelScope.launch { transferDetails = container.settings.transferDetailsNow() }
     }
 }
 
