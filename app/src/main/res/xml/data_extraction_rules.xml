@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ backup and device transfer. The tracker's device token is per phone. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/tracker_settings.preferences_pb" />
+        <exclude domain="file" path="tracker_fix_queue.json" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/tracker_settings.preferences_pb" />
+        <exclude domain="file" path="tracker_fix_queue.json" />
+    </device-transfer>
+</data-extraction-rules>

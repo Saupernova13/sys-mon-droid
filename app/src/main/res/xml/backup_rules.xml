@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 6-11 backup. The tracker's device token is per phone; never restore it elsewhere. -->
+<full-backup-content>
+    <exclude domain="file" path="datastore/tracker_settings.preferences_pb" />
+    <exclude domain="file" path="tracker_fix_queue.json" />
+</full-backup-content>

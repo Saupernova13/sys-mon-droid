@@ -112,6 +112,13 @@ edge resizing (desktop window chrome), and `/auth/local` (loopback-only by desig
 - Compose slippy map (`ui/findme/SlippyMap.kt`, pure `MapMath.kt`) over the authed tile
   proxy; no map SDK. Trail for 24 h / 7 d / 30 d from `/api/findme/devices/{id}/history`.
 
+### Stage 14 — Built-in tracker (0.11.0) ✅
+- The standalone find-me-droid tracker now lives in `core/tracker/*` (own DataStore,
+  OkHttp/Retrofit client and device token; fix queue, backoff, command processor, ring
+  and location services, boot receiver). Pairing needs no QR: the logged-in admin mints a
+  code and redeems it as this phone. UI is the "This phone" card (`ui/findme/ThisPhoneCard.kt`).
+- FCM `type=findme` commands route from `SysMonMessagingService` to the tracker when paired.
+
 ## Not included / future
 
 - **Godot editor** — intentionally skipped in this client.

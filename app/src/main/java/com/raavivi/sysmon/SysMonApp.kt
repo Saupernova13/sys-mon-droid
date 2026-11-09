@@ -9,6 +9,7 @@ import com.raavivi.sysmon.core.auth.TokenRenewer
 import com.raavivi.sysmon.core.data.SettingsStore
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.push.PushRegistrar
+import com.raavivi.sysmon.core.tracker.TrackerContainer
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -24,6 +25,9 @@ class AppContainer(application: Application) {
     val pushRegistrar: PushRegistrar = PushRegistrar(appContext, settings, api)
     val tokenRenewer: TokenRenewer = TokenRenewer(settings, api)
     val session: SessionManager = SessionManager(settings, api, pushRegistrar, tokenRenewer)
+
+    /** Built-in phone tracker (Find Me). Own prefs, client and device token; lazy so it costs nothing until used. */
+    val tracker: TrackerContainer by lazy { TrackerContainer(appContext) }
 
     /** A route a notification asked to open; the nav host takes it and clears it. */
     val pendingRoute: MutableStateFlow<String?> = MutableStateFlow(null)

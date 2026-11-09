@@ -9,4 +9,12 @@
     <string name="widget_plugs_list_description">Switch every smart plug from one tile.</string>
     <string name="widget_all_plugs_title">Plugs</string>
     <string name="widget_configure_title">Pick a plug</string>
+
+    <!-- Built-in phone tracker -->
+    <string name="tracker_title">Find Me</string>
+    <string name="tracker_notif_sharing">Sharing location with %1$s</string>
+    <string name="tracker_notif_ringing">Find Me is ringing this phone</string>
+    <string name="tracker_action_report_now">Report now</string>
+    <string name="tracker_action_pause">Pause</string>
+    <string name="tracker_action_stop">Stop</string>
 </resources>

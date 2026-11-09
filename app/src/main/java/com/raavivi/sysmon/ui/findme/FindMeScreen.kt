@@ -1,5 +1,8 @@
 package com.raavivi.sysmon.ui.findme
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -60,13 +64,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.model.FindMeDevice
+import com.raavivi.sysmon.core.tracker.TrackerPermissions
 import com.raavivi.sysmon.ui.common.ErrorBox
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.common.ScreenHeader
@@ -96,6 +103,53 @@ fun FindMeScreen(onBack: () -> Unit) {
                 vm.awaitNextPoll()
             }
         }
+    }
+
+    // This phone: the permission walk after pairing, and the fix buttons.
+    val phoneState by vm.phone.collectAsStateWithLifecycle()
+    var walking by remember { mutableStateOf(false) }
+    var walkTick by remember { mutableIntStateOf(0) }
+    val tried = remember { mutableSetOf<PermissionStep>() }
+    val context = LocalContext.current
+    val permsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        vm.refreshPermissions()
+        walkTick++
+    }
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        vm.refreshPermissions()
+        walkTick++
+    }
+    val settingsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        vm.refreshPermissions()
+        walkTick++
+    }
+    fun fix(step: PermissionStep) {
+        when (step) {
+            PermissionStep.Location -> permsLauncher.launch(TrackerPermissions.foregroundRequest())
+            PermissionStep.Background -> settingsLauncher.launch(TrackerPermissions.appDetailsIntent(context))
+            PermissionStep.Notifications -> notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            PermissionStep.Battery -> settingsLauncher.launch(TrackerPermissions.batteryIntent(context))
+            PermissionStep.FullScreen -> settingsLauncher.launch(TrackerPermissions.fullScreenIntent(context))
+        }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshPermissions() }
+    // Just paired from this card: walk the checklist once, offering each missing item in turn.
+    LaunchedEffect(vm.walkRequested) {
+        if (vm.walkRequested) {
+            vm.walkRequested = false
+            tried.clear()
+            walking = true
+            walkTick++
+        }
+    }
+    LaunchedEffect(walking, walkTick) {
+        if (!walking) return@LaunchedEffect
+        val next = PermissionStep.entries.firstOrNull { !stepOk(vm, it) && it !in tried }
+        if (next == null) walking = false else { tried += next; fix(next) }
+    }
+    val shouldTrack = phoneState?.let { it.paired && it.tracking } == true
+    LaunchedEffect(shouldTrack, vm.perms.fineLocation) {
+        if (shouldTrack && vm.perms.fineLocation) vm.ensureTracking()
     }
 
     var now by remember { mutableDoubleStateOf(System.currentTimeMillis() / 1000.0) }
@@ -142,6 +196,12 @@ fun FindMeScreen(onBack: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
             )
         }
+
+        ThisPhoneCard(
+            vm = vm,
+            onFix = ::fix,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        )
 
         when {
             !vm.loaded -> LoadingBox()
@@ -203,6 +263,7 @@ fun FindMeScreen(onBack: () -> Unit) {
                                     device = d,
                                     hue = hue(i),
                                     selected = d.id == vm.selectedId,
+                                    thisPhone = d.id == phoneState?.deviceId,
                                     nowS = now,
                                     sending = vm.sending,
                                     onSelect = { pick(d) },
@@ -330,6 +391,7 @@ private fun DeviceRow(
     device: FindMeDevice,
     hue: Color,
     selected: Boolean,
+    thisPhone: Boolean,
     nowS: Double,
     sending: Set<String>,
     onSelect: () -> Unit,
@@ -370,7 +432,7 @@ private fun DeviceRow(
             )
             Spacer(Modifier.size(8.dp))
             Text(
-                device.name,
+                device.name + if (thisPhone) " (this phone)" else "",
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 modifier = Modifier.weight(1f),

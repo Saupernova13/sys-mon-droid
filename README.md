@@ -108,6 +108,35 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   7 d / 30 d trail. Add device shows the pairing code, its expiry, the link and a QR,
   and closes when the phone pairs. Polls every 5 s while a command is pending or the
   pair dialog is open, otherwise every 30 s, only while the screen is visible.
+- **This phone (built-in tracker)** — the Find Me tracker is part of this app, so there is
+  nothing else to install. A "This phone" card at the top of the Find Me screen has a
+  **Track this phone** switch (admin only). Turning it on mints a pairing code with the
+  admin API, redeems it as this phone through the device API, starts tracking and walks
+  the permission checklist (precise location, "Allow all the time", notifications, battery
+  exemption, full-screen alerts), each with a fix button. Once paired the card shows
+  tracking on/paused, last fix and accuracy, last upload result, queued fixes, report
+  interval, push on/off, **Report now** and **Unpair**, and the phone's own row in the
+  device list is marked "(this phone)". The tracker keeps its own device token and
+  storage, so signing out of sys-mon does not unpair it. Locate and ring commands arrive
+  instantly over FCM (`type=findme`) and otherwise with the next report.
+  - Always visible: while sharing, a persistent "Sharing location with <server>"
+    notification (Report now, Pause) stays up. Nothing is hidden.
+  - Fixes are queued on the phone (file, capped at 1000) and uploaded in chunks of at
+    most 200; a failed upload retries after 30 s, 1, 2, 5, then 10 minutes and fixes are
+    never dropped. If the server drops the phone the app stops and asks to pair again.
+
+  | Permission | Why |
+  |---|---|
+  | Fine and coarse location | the fixes sent to sys-mon |
+  | Background location ("Allow all the time") | keep reporting and answer locate while the app is closed |
+  | Foreground service (location, media playback) | the persistent tracking notification and the ring alarm |
+  | Notifications | show that tracking is on |
+  | Boot completed | resume tracking after a reboot |
+  | Battery optimisation exemption | stop the system from pausing the tracker |
+  | Full-screen intent | show the Stop screen over the lock screen when ringing |
+  | Vibrate, wake lock | ring alert |
+  | Internet, network state | talk to sys-mon, report wifi / cellular / none |
+
 - **Model Log** — the LLM audit trail, live over `WS /ws/models`, with COLD START
   badges, proxy status, row detail, and clear.
 - **Terminal** — a PTY shell over `WS /ws/terminal` with a built-in compact ANSI

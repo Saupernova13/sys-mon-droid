@@ -14,8 +14,8 @@ android {
         applicationId = "com.raavivi.sysmon"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.10.0"
+        versionCode = 13
+        versionName = "0.11.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -75,6 +75,9 @@ dependencies {
     // Firebase Cloud Messaging for heater push notifications (BoM pins versions).
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+
+    // Built-in phone tracker: fused location.
+    implementation(libs.play.services.location)
 
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
