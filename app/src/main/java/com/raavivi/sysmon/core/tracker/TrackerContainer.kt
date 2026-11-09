@@ -7,6 +7,7 @@ import com.raavivi.sysmon.core.tracker.cmd.CommandProcessor
 import com.raavivi.sysmon.core.tracker.data.FixQueue
 import com.raavivi.sysmon.core.tracker.data.TrackerSettings
 import com.raavivi.sysmon.core.tracker.model.Fix
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.tracker.model.PairResponse
 import com.raavivi.sysmon.core.tracker.net.DeviceApiProvider
 import com.raavivi.sysmon.core.tracker.net.DeviceClient
@@ -98,6 +99,7 @@ class TrackerContainer(context: Context) {
             )
             queue.clear()
             uploader.reset()
+            AppLog.i("Tracker", "paired")
             appScope.launch { push.register() }
         }
         return r
@@ -125,11 +127,13 @@ class TrackerContainer(context: Context) {
 
     /** User-initiated unpair: tell the server, then clear local state even if it is unreachable. */
     suspend fun unpair() {
+        AppLog.i("Tracker", "unpair requested")
         client.unpair()
         clearLocalState(null)
     }
 
     private suspend fun clearLocalState(notice: String?) {
+        AppLog.i("Tracker", "pairing cleared")
         TrackerService.stop(appContext)
         RingService.stop(appContext)
         settings.clearPairing(notice)

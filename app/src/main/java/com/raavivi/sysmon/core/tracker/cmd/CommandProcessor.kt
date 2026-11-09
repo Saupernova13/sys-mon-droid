@@ -1,6 +1,7 @@
 package com.raavivi.sysmon.core.tracker.cmd
 
 import android.content.Context
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.tracker.data.TrackerSettings
 import com.raavivi.sysmon.core.tracker.model.Command
 import com.raavivi.sysmon.core.tracker.net.DeviceClient
@@ -42,6 +43,7 @@ class CommandProcessor(
 
     private suspend fun handle(cmd: Command) {
         if (!settings.stateNow().paired || !isNew(cmd.id)) return
+        AppLog.i("Tracker", "command received kind=${cmd.kind} id=${cmd.id}")
         // Start the foreground service before any network call: a push only allows a
         // background service start for a few seconds.
         when (cmd.kind) {

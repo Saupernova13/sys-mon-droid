@@ -1,5 +1,6 @@
 package com.raavivi.sysmon.core.net
 
+import com.raavivi.sysmon.core.log.AppLog
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -22,6 +23,10 @@ fun <T> ApiProvider.jsonWebSocketFlow(
     extraQuery: Map<String, String> = emptyMap(),
 ): Flow<T> = callbackFlow {
     val listener = object : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            AppLog.i("Ws", "open $path")
+        }
+
         override fun onMessage(webSocket: WebSocket, text: String) {
             val decoded = runCatching { SysMonJson.decodeFromString(deserializer, text) }.getOrNull()
             if (decoded != null) trySend(decoded)
@@ -32,10 +37,12 @@ fun <T> ApiProvider.jsonWebSocketFlow(
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            AppLog.w("Ws", "failure $path ${t.javaClass.simpleName}: ${t.message}")
             close(t)
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            AppLog.i("Ws", "closing $path code=$code")
             webSocket.close(code, null)
             close()
         }

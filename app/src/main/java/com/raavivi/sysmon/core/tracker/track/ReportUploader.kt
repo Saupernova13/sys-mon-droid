@@ -1,5 +1,6 @@
 package com.raavivi.sysmon.core.tracker.track
 
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.tracker.data.FixQueue
 import com.raavivi.sysmon.core.tracker.data.TrackerSettings
 import com.raavivi.sysmon.core.tracker.model.Command
@@ -70,6 +71,7 @@ class ReportUploader(
                     nextAttemptAt = 0
                     r.value.intervalS?.takeIf { it > 0 }?.let { settings.setInterval(it) }
                     r.value.sampleS?.takeIf { it > 0 }?.let { settings.setSample(it) }
+                    AppLog.i("Tracker", "upload ok fixes=${chunk.size} commands=${r.value.commands.size}")
                     settings.setUploadResult(clock(), "OK, ${chunk.size} fixes sent")
                     if (r.value.commands.isNotEmpty()) onCommands(r.value.commands)
                 }
@@ -88,6 +90,7 @@ class ReportUploader(
     }
 
     private suspend fun handleFailure(err: DeviceResult.Err) {
+        AppLog.w("Tracker", "upload failed code=${err.code} message=${err.message}")
         val now = clock()
         when {
             err.isDeviceUnknown -> Unit // DeviceClient already dropped the pairing

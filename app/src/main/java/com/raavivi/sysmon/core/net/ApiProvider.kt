@@ -1,5 +1,6 @@
 package com.raavivi.sysmon.core.net
 
+import com.raavivi.sysmon.core.log.HttpLogInterceptor
 import kotlinx.serialization.ExperimentalSerializationApi
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -26,6 +27,7 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
     private var baseUrl: String = normalizeBaseUrl(initialBaseUrl)
 
     val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(HttpLogInterceptor("Http"))
         .addInterceptor { chain ->
             val req = chain.request()
             val t = token

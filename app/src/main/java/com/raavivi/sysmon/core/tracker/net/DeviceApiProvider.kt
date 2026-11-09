@@ -1,6 +1,7 @@
 package com.raavivi.sysmon.core.tracker.net
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import com.raavivi.sysmon.core.log.HttpLogInterceptor
 import kotlinx.serialization.ExperimentalSerializationApi
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -12,6 +13,7 @@ import java.util.concurrent.TimeUnit
 class DeviceApiProvider {
 
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(HttpLogInterceptor("DeviceHttp"))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
