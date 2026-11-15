@@ -153,7 +153,14 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   contact search, and pairing-status guidance including why the sync daemon
   stopped. Reading a chat leaves it unread; *Mark as read* clears it on WhatsApp too.
 
-Found in `More`: Plug alerts, Terminal, Screen share, WhatsApp (when enabled),
+- **Site monitoring** — More → Sites lists every site the server watches: a status
+  dot, "Up 3 d" / "Down 12 min - timeout", last latency and a sparkline of recent
+  probes, refreshed every 30 s while open (`GET /api/sites`). When a site goes
+  down, or comes back, the server pushes an FCM `site_status` message and the app
+  posts one notification per site ("<name> is down", replaced by "<name> is back
+  up"); tapping it opens the Sites screen. Per-phone switch: More → Site alerts.
+
+Found in `More`: Plug alerts, Sites, Terminal, Screen share, WhatsApp (when enabled),
 Server settings, Appearance, and the app + server version line. The Godot editor launcher was
 intentionally left out of this client.
 
