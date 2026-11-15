@@ -33,6 +33,7 @@ import com.raavivi.sysmon.ui.files.TextEditorScreen
 import com.raavivi.sysmon.ui.modellog.ModelLogScreen
 import com.raavivi.sysmon.ui.more.MoreScreen
 import com.raavivi.sysmon.ui.power.PowerScreen
+import com.raavivi.sysmon.ui.sites.SitesScreen
 import com.raavivi.sysmon.ui.processes.ProcessesScreen
 import com.raavivi.sysmon.ui.screen.ScreenShareScreen
 import com.raavivi.sysmon.ui.settings.SettingsScreen
@@ -106,6 +107,13 @@ private fun MainScaffold() {
                 restoreState = true
             }
             nav.navigate(Routes.FIND_ME) { launchSingleTop = true }
+        } else if (route == Routes.SITES) {
+            nav.navigate(TopDest.More.route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            nav.navigate(Routes.SITES) { launchSingleTop = true }
         }
     }
 
@@ -153,6 +161,7 @@ private fun MainScaffold() {
                     onOpenFindMe = { nav.navigate(Routes.FIND_ME) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
+                    onOpenSites = { nav.navigate(Routes.SITES) },
                     onOpenSchedules = { nav.navigate(Routes.POWER_SCHEDULES) },
                 )
             }
@@ -191,6 +200,7 @@ private fun MainScaffold() {
             }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.SITES) { SitesScreen(onBack = { nav.popBackStack() }) }
         }
     }
 }

@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
     private fun handleOpen(intent: Intent?) {
         val route = when (intent?.getStringExtra(EXTRA_OPEN)) {
             OPEN_FIND_ME -> Routes.FIND_ME
+            OPEN_SITES -> Routes.SITES
             else -> return
         }
         (application as SysMonApp).container.pendingRoute.value = route
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN = "com.raavivi.sysmon.OPEN"
         const val OPEN_FIND_ME = "findme"
+        const val OPEN_SITES = "sites"
 
         /** Brings the app forward (reusing the running activity) and opens [screen]. */
         fun openIntent(context: Context, screen: String): Intent =

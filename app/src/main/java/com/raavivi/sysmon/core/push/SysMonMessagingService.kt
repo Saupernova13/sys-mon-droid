@@ -40,6 +40,10 @@ class SysMonMessagingService : FirebaseMessagingService() {
             handleFindMe(data)
             return
         }
+        if (data["type"] == SiteAlert.TYPE) {
+            handleSite(data)
+            return
+        }
         if (data["type"] != "plug_alert" && data["type"] != "heater") return
         val app = applicationContext as? SysMonApp ?: return
         val settings = app.container.settings
@@ -73,6 +77,16 @@ class SysMonMessagingService : FirebaseMessagingService() {
         val app = applicationContext as? SysMonApp ?: return
         val on = runBlocking { app.container.settings.findmeAlertsNow() }
         if (on) FindMeAlertNotifier.handle(this, data) else FindMeAlertNotifier.cancelAll(this)
+    }
+
+    /**
+     * `type=site_status`: a monitored site went down or came back. Rendered by
+     * [SiteAlertNotifier] unless this phone turned site alerts off.
+     */
+    private fun handleSite(data: Map<String, String>) {
+        val app = applicationContext as? SysMonApp ?: return
+        val on = runBlocking { app.container.settings.siteAlertsNow() }
+        if (on) SiteAlertNotifier.handle(this, data) else SiteAlertNotifier.cancelAll(this)
     }
 
     /**
