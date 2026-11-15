@@ -33,4 +33,5 @@ object Routes {
     const val POWER_SCHEDULES = "power?tab=schedules"
     const val SETTINGS = "settings"
     const val PLUG_ALERTS = "plug-alerts"
+    const val SITES = "sites"
 }

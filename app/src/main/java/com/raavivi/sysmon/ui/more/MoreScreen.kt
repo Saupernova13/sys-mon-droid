@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.foundation.layout.Row
@@ -61,6 +62,7 @@ import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.push.FindMeAlertNotifier
 import com.raavivi.sysmon.core.push.JellyfinAlertNotifier
+import com.raavivi.sysmon.core.push.SiteAlertNotifier
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
@@ -78,6 +80,7 @@ fun MoreScreen(
     onOpenFindMe: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAlerts: () -> Unit = {},
+    onOpenSites: () -> Unit = {},
     onOpenSchedules: () -> Unit = {},
 ) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
@@ -120,6 +123,7 @@ fun MoreScreen(
                 pushAvailable = features?.push == true,
                 findMeAvailable = isAdmin && features?.findme == true,
                 onOpenAlerts = onOpenAlerts,
+                onOpenSites = onOpenSites,
                 onOpenSchedules = onOpenSchedules,
             )
 
@@ -243,6 +247,7 @@ private fun NotificationsCard(
     pushAvailable: Boolean,
     findMeAvailable: Boolean,
     onOpenAlerts: () -> Unit,
+    onOpenSites: () -> Unit,
     onOpenSchedules: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -280,6 +285,20 @@ private fun NotificationsCard(
         load = { container.settings.jellyfinAlertsNow() },
         save = { container.settings.setJellyfinAlerts(it) },
         clear = { JellyfinAlertNotifier.cancelAll(it) },
+    )
+    SectionCard(title = "Sites") {
+        ActionButton("Sites", Icons.Filled.Language, onOpenSites)
+    }
+    PushSwitchCard(
+        title = "Site alerts",
+        label = "Site alerts",
+        onText = "Notify me when a monitored site goes down, and when it is back up.",
+        offText = "Site alerts are off for this phone.",
+        pushAvailable = pushAvailable,
+        pushEnabled = enabled,
+        load = { container.settings.siteAlertsNow() },
+        save = { container.settings.setSiteAlerts(it) },
+        clear = { SiteAlertNotifier.cancelAll(it) },
     )
     if (findMeAvailable) {
         PushSwitchCard(

@@ -94,6 +94,13 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setFindmeAlerts(on: Boolean) = store.edit { it[KEY_FINDME_ALERTS] = on }
 
+    /** Whether this phone shows site-monitoring "down" / "back up" alerts (default on). */
+    val siteAlerts: Flow<Boolean> = store.data.map { it[KEY_SITE_ALERTS] ?: true }
+
+    suspend fun siteAlertsNow(): Boolean = siteAlerts.first()
+
+    suspend fun setSiteAlerts(on: Boolean) = store.edit { it[KEY_SITE_ALERTS] = on }
+
     /** UI look for this phone: "classic" (default) or "instrument". */
     val themeStyle: Flow<String> = store.data.map { it[KEY_THEME_STYLE] ?: "classic" }
 
@@ -126,6 +133,7 @@ class SettingsStore(private val context: Context) {
         val KEY_MUTED_PLUGS = stringSetPreferencesKey("muted_plugs")
         val KEY_JELLYFIN_ALERTS = booleanPreferencesKey("jellyfin_alerts")
         val KEY_FINDME_ALERTS = booleanPreferencesKey("findme_alerts")
+        val KEY_SITE_ALERTS = booleanPreferencesKey("site_alerts")
         val KEY_THEME_STYLE = stringPreferencesKey("theme_style")
         val KEY_TRANSFER_DETAILS = booleanPreferencesKey("transfer_details")
     }

@@ -6,6 +6,7 @@ import com.raavivi.sysmon.core.model.JellyfinConfigPatch
 import com.raavivi.sysmon.core.model.JellyfinStreamsResponse
 import com.raavivi.sysmon.core.model.JellyfinTestBody
 import com.raavivi.sysmon.core.model.JellyfinTestResponse
+import com.raavivi.sysmon.core.model.SitesResponse
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaMarkRead
@@ -429,4 +430,7 @@ interface ApiService {
 
     @GET("api/jellyfin/streams")
     suspend fun jellyfinStreams(): JellyfinStreamsResponse
+
+    @GET("api/sites")
+    suspend fun sites(): SitesResponse
 }
