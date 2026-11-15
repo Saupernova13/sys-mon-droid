@@ -34,4 +34,5 @@ object Routes {
     const val SETTINGS = "settings"
     const val PLUG_ALERTS = "plug-alerts"
     const val SITES = "sites"
+    const val UPDATE = "app-update"
 }

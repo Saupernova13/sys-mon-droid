@@ -5,6 +5,7 @@ import com.google.firebase.messaging.RemoteMessage
 import com.raavivi.sysmon.SysMonApp
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.tracker.model.Command
+import com.raavivi.sysmon.core.update.DroidUpdatePush
 import com.raavivi.sysmon.widget.PlugWidgets
 import kotlinx.coroutines.runBlocking
 
@@ -38,6 +39,10 @@ class SysMonMessagingService : FirebaseMessagingService() {
         }
         if (data["type"] == FindMeAlert.TYPE) {
             handleFindMe(data)
+            return
+        }
+        if (data["type"] == DroidUpdatePush.TYPE) {
+            handleUpdate(data)
             return
         }
         if (data["type"] == SiteAlert.TYPE) {
@@ -77,6 +82,16 @@ class SysMonMessagingService : FirebaseMessagingService() {
         val app = applicationContext as? SysMonApp ?: return
         val on = runBlocking { app.container.settings.findmeAlertsNow() }
         if (on) FindMeAlertNotifier.handle(this, data) else FindMeAlertNotifier.cancelAll(this)
+    }
+
+    /**
+     * `type=droid_update`: a newer app build is staged on the server. Shown by
+     * [UpdateNotifier] (only when newer than this build) unless update notifications are off.
+     */
+    private fun handleUpdate(data: Map<String, String>) {
+        val app = applicationContext as? SysMonApp ?: return
+        val on = runBlocking { app.container.settings.updateNotificationsNow() }
+        if (on) UpdateNotifier.handle(this, data) else UpdateNotifier.cancel(this)
     }
 
     /**

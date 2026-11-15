@@ -10,6 +10,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -39,6 +42,7 @@ import com.raavivi.sysmon.ui.screen.ScreenShareScreen
 import com.raavivi.sysmon.ui.settings.SettingsScreen
 import com.raavivi.sysmon.ui.setup.LoginScreen
 import com.raavivi.sysmon.ui.terminal.TerminalScreen
+import com.raavivi.sysmon.ui.update.UpdateScreen
 import com.raavivi.sysmon.ui.whatsapp.WhatsAppScreen
 
 @Composable
@@ -75,6 +79,12 @@ private fun MainScaffold() {
         }
     }
 
+    // Silent update check whenever the app comes to the foreground (throttled to 12 h inside).
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { container.updates.silentCheck() }
+    }
+
     // If the tab or tool we're on disappears (role/flag change), fall back home.
     LaunchedEffect(visibleDests, currentRoute, isAdmin, features) {
         val onHiddenTab = TopDest.entries.any { it.route == currentRoute } &&
@@ -107,13 +117,13 @@ private fun MainScaffold() {
                 restoreState = true
             }
             nav.navigate(Routes.FIND_ME) { launchSingleTop = true }
-        } else if (route == Routes.SITES) {
+        } else if (route == Routes.SITES || route == Routes.UPDATE) {
             nav.navigate(TopDest.More.route) {
                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                 launchSingleTop = true
                 restoreState = true
             }
-            nav.navigate(Routes.SITES) { launchSingleTop = true }
+            nav.navigate(route) { launchSingleTop = true }
         }
     }
 
@@ -162,6 +172,7 @@ private fun MainScaffold() {
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
                     onOpenSites = { nav.navigate(Routes.SITES) },
+                    onOpenUpdate = { nav.navigate(Routes.UPDATE) },
                     onOpenSchedules = { nav.navigate(Routes.POWER_SCHEDULES) },
                 )
             }
@@ -201,6 +212,7 @@ private fun MainScaffold() {
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SITES) { SitesScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.UPDATE) { UpdateScreen(onBack = { nav.popBackStack() }) }
         }
     }
 }

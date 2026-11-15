@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import com.raavivi.sysmon.core.log.AppLog
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -101,6 +102,18 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setSiteAlerts(on: Boolean) = store.edit { it[KEY_SITE_ALERTS] = on }
 
+    /** Whether this phone shows an "update available" notification (default on). */
+    val updateNotifications: Flow<Boolean> = store.data.map { it[KEY_UPDATE_NOTIFS] ?: true }
+
+    suspend fun updateNotificationsNow(): Boolean = updateNotifications.first()
+
+    suspend fun setUpdateNotifications(on: Boolean) = store.edit { it[KEY_UPDATE_NOTIFS] = on }
+
+    /** Epoch millis of the last successful silent update check (0 = never). */
+    suspend fun lastUpdateCheckNow(): Long = store.data.map { it[KEY_UPDATE_CHECK] ?: 0L }.first()
+
+    suspend fun setLastUpdateCheck(ms: Long) = store.edit { it[KEY_UPDATE_CHECK] = ms }
+
     /** UI look for this phone: "classic" (default) or "instrument". */
     val themeStyle: Flow<String> = store.data.map { it[KEY_THEME_STYLE] ?: "classic" }
 
@@ -134,6 +147,8 @@ class SettingsStore(private val context: Context) {
         val KEY_JELLYFIN_ALERTS = booleanPreferencesKey("jellyfin_alerts")
         val KEY_FINDME_ALERTS = booleanPreferencesKey("findme_alerts")
         val KEY_SITE_ALERTS = booleanPreferencesKey("site_alerts")
+        val KEY_UPDATE_NOTIFS = booleanPreferencesKey("update_notifications")
+        val KEY_UPDATE_CHECK = longPreferencesKey("update_last_check")
         val KEY_THEME_STYLE = stringPreferencesKey("theme_style")
         val KEY_TRANSFER_DETAILS = booleanPreferencesKey("transfer_details")
     }

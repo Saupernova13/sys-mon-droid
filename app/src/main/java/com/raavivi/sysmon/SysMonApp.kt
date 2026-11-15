@@ -11,6 +11,7 @@ import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.push.PushRegistrar
 import com.raavivi.sysmon.core.tracker.TrackerContainer
+import com.raavivi.sysmon.core.update.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -26,6 +27,9 @@ class AppContainer(application: Application) {
     val pushRegistrar: PushRegistrar = PushRegistrar(appContext, settings, api)
     val tokenRenewer: TokenRenewer = TokenRenewer(settings, api)
     val session: SessionManager = SessionManager(settings, api, pushRegistrar, tokenRenewer)
+
+    /** In-app updates downloaded from sys-mon. */
+    val updates: UpdateManager = UpdateManager(appContext, settings, api)
 
     /** Built-in phone tracker (Find Me). Own prefs, client and device token; lazy so it costs nothing until used. */
     val tracker: TrackerContainer by lazy { TrackerContainer(appContext) }

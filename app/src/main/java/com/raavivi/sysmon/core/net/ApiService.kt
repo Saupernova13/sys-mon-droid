@@ -6,6 +6,7 @@ import com.raavivi.sysmon.core.model.JellyfinConfigPatch
 import com.raavivi.sysmon.core.model.JellyfinStreamsResponse
 import com.raavivi.sysmon.core.model.JellyfinTestBody
 import com.raavivi.sysmon.core.model.JellyfinTestResponse
+import com.raavivi.sysmon.core.model.DroidUpdateResponse
 import com.raavivi.sysmon.core.model.SitesResponse
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
@@ -91,6 +92,7 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Streaming
+import retrofit2.http.Url
 
 /**
  * The full sys-mon REST surface (per `docs/API.md`). WebSocket streams are handled
@@ -433,4 +435,12 @@ interface ApiService {
 
     @GET("api/sites")
     suspend fun sites(): SitesResponse
+
+    @GET("api/droid/update")
+    suspend fun droidUpdate(): DroidUpdateResponse
+
+    /** [url] is the server's relative `apkPath`; Retrofit resolves it against the base URL. */
+    @Streaming
+    @GET
+    suspend fun downloadDroidApk(@Url url: String): retrofit2.Response<okhttp3.ResponseBody>
 }
