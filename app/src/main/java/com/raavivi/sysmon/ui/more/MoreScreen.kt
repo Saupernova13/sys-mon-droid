@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
@@ -63,6 +64,8 @@ import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.push.FindMeAlertNotifier
 import com.raavivi.sysmon.core.push.JellyfinAlertNotifier
 import com.raavivi.sysmon.core.push.SiteAlertNotifier
+import com.raavivi.sysmon.core.push.UpdateNotifier
+import com.raavivi.sysmon.core.update.UpdateCheck
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.StatRow
@@ -81,6 +84,7 @@ fun MoreScreen(
     onOpenSettings: () -> Unit = {},
     onOpenAlerts: () -> Unit = {},
     onOpenSites: () -> Unit = {},
+    onOpenUpdate: () -> Unit = {},
     onOpenSchedules: () -> Unit = {},
 ) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
@@ -126,6 +130,8 @@ fun MoreScreen(
                 onOpenSites = onOpenSites,
                 onOpenSchedules = onOpenSchedules,
             )
+
+            UpdatesCard(onOpenUpdate)
 
             // Everything below the connection card mutates the host, so the
             // read-only viewer role only ever sees Connection + Account.
@@ -300,6 +306,17 @@ private fun NotificationsCard(
         save = { container.settings.setSiteAlerts(it) },
         clear = { SiteAlertNotifier.cancelAll(it) },
     )
+    PushSwitchCard(
+        title = "Update notifications",
+        label = "Update notifications",
+        onText = "Notify me when a new sys-mon-droid build is available.",
+        offText = "Update notifications are off for this phone.",
+        pushAvailable = pushAvailable,
+        pushEnabled = enabled,
+        load = { container.settings.updateNotificationsNow() },
+        save = { container.settings.setUpdateNotifications(it) },
+        clear = { UpdateNotifier.cancel(it) },
+    )
     if (findMeAvailable) {
         PushSwitchCard(
             title = "Find Me",
@@ -312,6 +329,25 @@ private fun NotificationsCard(
             save = { container.settings.setFindmeAlerts(it) },
             clear = { FindMeAlertNotifier.cancelAll(it) },
         )
+    }
+}
+
+/** Entry to the in-app updater; shows a marker when the last check found a newer build. */
+@Composable
+private fun UpdatesCard(onOpenUpdate: () -> Unit) {
+    val container = LocalAppContainer.current
+    val ui by container.updates.ui.collectAsStateWithLifecycle()
+    val available = ui.check as? UpdateCheck.Available
+    SectionCard(title = "App updates") {
+        if (available != null) {
+            Text(
+                "Update available: ${available.release.versionName}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        ActionButton(if (available != null) "App updates (update available)" else "App updates", Icons.Filled.SystemUpdate, onOpenUpdate)
     }
 }
 

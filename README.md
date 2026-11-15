@@ -210,6 +210,26 @@ build at the SDK; adjust `sdk.dir` if yours differs.
 
 The APK lands in `app/build/outputs/apk/debug/`.
 
+### Publishing an update (in-app updates)
+
+The app can update itself from sys-mon (More -> App updates). `scripts/stage-update.ps1`
+builds the debug APK (unless `-SkipBuild`), reads the version from
+`output-metadata.json`, and copies `sys-mon-droid-<versionName>-<versionCode>.apk` plus a
+`.json` sidecar (version, SHA-256, notes, build time) into the folder sys-mon serves
+updates from:
+
+```powershell
+powershell -File scripts\stage-update.ps1 -Dest C:\prod\sys-mon\droid-updates -Notes "What changed"
+# -DryRun prints the plan and writes nothing; -SkipBuild reuses the existing APK;
+# -Force stages a versionCode that is not higher than the highest already there.
+```
+
+`-Dest` defaults to `$env:SYS_MON_DROID_UPDATES_DIR`. The sys-mon prod folder is
+`C:\prod\sys-mon\droid-updates` by default, and staging there is what publishes an
+update: phones see it on their next check (at most every 12 h in the foreground, or
+sooner via the push sys-mon sends). The update must be signed with the same key as the
+installed app, or Android refuses it; in that case uninstall once and install by hand.
+
 ## Connecting
 
 `sys-mon` binds `0.0.0.0:11037`, so reach it as:
