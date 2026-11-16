@@ -3,6 +3,7 @@ package com.raavivi.sysmon.core.tracker.net
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.raavivi.sysmon.core.log.HttpLogInterceptor
 import kotlinx.serialization.ExperimentalSerializationApi
+import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -14,6 +15,10 @@ class DeviceApiProvider {
 
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(HttpLogInterceptor("DeviceHttp"))
+        .addInterceptor(GzipRequestInterceptor())
+        // Reports go every ~5 min; OkHttp's default 5 min keep-alive evicts the connection just
+        // before each one, so every report paid a new TCP+TLS handshake.
+        .connectionPool(ConnectionPool(maxIdleConnections = 2, keepAliveDuration = 7, timeUnit = TimeUnit.MINUTES))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)

@@ -3,7 +3,6 @@ package com.raavivi.sysmon.core.tracker.net
 import android.os.Build
 import com.raavivi.sysmon.core.tracker.data.TrackerSettings
 import com.raavivi.sysmon.core.tracker.model.AckBody
-import com.raavivi.sysmon.core.tracker.model.CommandsResponse
 import com.raavivi.sysmon.core.tracker.model.OkResponse
 import com.raavivi.sysmon.core.tracker.model.PairBody
 import com.raavivi.sysmon.core.tracker.model.PairResponse
@@ -36,9 +35,6 @@ class DeviceClient(
 
     suspend fun report(body: ReportBody): DeviceResult<ReportResponse> =
         authed { api, token -> api.report(token, body) }
-
-    suspend fun commands(): DeviceResult<CommandsResponse> =
-        authed { api, token -> api.commands(token) }
 
     suspend fun ack(id: String, state: String, error: String? = null): DeviceResult<OkResponse> =
         authed { api, token -> api.ack(token, id, AckBody(state, error)) }

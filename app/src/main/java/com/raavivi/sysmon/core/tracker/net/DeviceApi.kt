@@ -1,7 +1,6 @@
 package com.raavivi.sysmon.core.tracker.net
 
 import com.raavivi.sysmon.core.tracker.model.AckBody
-import com.raavivi.sysmon.core.tracker.model.CommandsResponse
 import com.raavivi.sysmon.core.tracker.model.OkResponse
 import com.raavivi.sysmon.core.tracker.model.PairBody
 import com.raavivi.sysmon.core.tracker.model.PairResponse
@@ -10,7 +9,6 @@ import com.raavivi.sysmon.core.tracker.model.ReportBody
 import com.raavivi.sysmon.core.tracker.model.ReportResponse
 import retrofit2.http.Body
 import retrofit2.http.DELETE
-import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -27,9 +25,6 @@ interface DeviceApi {
 
     @POST("api/findme/device/push")
     suspend fun push(@Header(TOKEN_HEADER) token: String, @Body body: PushBody): OkResponse
-
-    @GET("api/findme/device/commands")
-    suspend fun commands(@Header(TOKEN_HEADER) token: String): CommandsResponse
 
     @POST("api/findme/device/commands/{id}")
     suspend fun ack(
