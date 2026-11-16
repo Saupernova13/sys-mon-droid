@@ -15,25 +15,32 @@ import okio.ByteString
  *
  * The flow completes (closes) on socket failure or remote close so the collector
  * can decide whether to reconnect (typically with `retryWhen`). Frames that fail
- * to decode are dropped rather than killing the stream.
+ * to decode are dropped rather than killing the stream. Binary frames are inflated
+ * by a per-socket [FrameDecoder] (the server sends them when asked with `z=1`);
+ * text frames decode as before, so an older server still works.
  */
 fun <T> ApiProvider.jsonWebSocketFlow(
     path: String,
     deserializer: DeserializationStrategy<T>,
     extraQuery: Map<String, String> = emptyMap(),
 ): Flow<T> = callbackFlow {
+    val frames = FrameDecoder()
     val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             AppLog.i("Ws", "open $path")
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            val decoded = runCatching { SysMonJson.decodeFromString(deserializer, text) }.getOrNull()
-            if (decoded != null) trySend(decoded)
+            emit(frames.text(text))
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-            // JSON streams only send text frames; ignore any binary.
+            frames.binary(bytes.toByteArray())?.let { emit(it) }
+        }
+
+        private fun emit(json: String) {
+            val decoded = runCatching { SysMonJson.decodeFromString(deserializer, json) }.getOrNull()
+            if (decoded != null) trySend(decoded)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -49,5 +56,8 @@ fun <T> ApiProvider.jsonWebSocketFlow(
     }
 
     val socket = openWebSocket(path, extraQuery, listener)
-    awaitClose { socket.cancel() }
+    awaitClose {
+        socket.cancel()
+        frames.close()
+    }
 }
