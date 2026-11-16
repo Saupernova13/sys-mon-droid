@@ -31,12 +31,12 @@ import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.dashboard.DashboardScreen
 import com.raavivi.sysmon.ui.files.FilesScreen
 import com.raavivi.sysmon.ui.findme.FindMeScreen
+import com.raavivi.sysmon.ui.health.HealthScreen
 import com.raavivi.sysmon.ui.files.PdfViewerScreen
 import com.raavivi.sysmon.ui.files.TextEditorScreen
 import com.raavivi.sysmon.ui.modellog.ModelLogScreen
 import com.raavivi.sysmon.ui.more.MoreScreen
 import com.raavivi.sysmon.ui.power.PowerScreen
-import com.raavivi.sysmon.ui.sites.SitesScreen
 import com.raavivi.sysmon.ui.processes.ProcessesScreen
 import com.raavivi.sysmon.ui.screen.ScreenShareScreen
 import com.raavivi.sysmon.ui.settings.SettingsScreen
@@ -117,7 +117,7 @@ private fun MainScaffold() {
                 restoreState = true
             }
             nav.navigate(Routes.FIND_ME) { launchSingleTop = true }
-        } else if (route == Routes.SITES || route == Routes.UPDATE) {
+        } else if (route == Routes.HEALTH || route == Routes.UPDATE) {
             nav.navigate(TopDest.More.route) {
                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                 launchSingleTop = true
@@ -171,7 +171,7 @@ private fun MainScaffold() {
                     onOpenFindMe = { nav.navigate(Routes.FIND_ME) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
-                    onOpenSites = { nav.navigate(Routes.SITES) },
+                    onOpenHealth = { nav.navigate(Routes.HEALTH) },
                     onOpenUpdate = { nav.navigate(Routes.UPDATE) },
                     onOpenSchedules = { nav.navigate(Routes.POWER_SCHEDULES) },
                 )
@@ -211,7 +211,7 @@ private fun MainScaffold() {
             }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.SITES) { SitesScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.HEALTH) { HealthScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.UPDATE) { UpdateScreen(onBack = { nav.popBackStack() }) }
         }
     }

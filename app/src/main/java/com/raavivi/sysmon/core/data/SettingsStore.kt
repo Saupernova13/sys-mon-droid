@@ -95,12 +95,12 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setFindmeAlerts(on: Boolean) = store.edit { it[KEY_FINDME_ALERTS] = on }
 
-    /** Whether this phone shows site-monitoring "down" / "back up" alerts (default on). */
-    val siteAlerts: Flow<Boolean> = store.data.map { it[KEY_SITE_ALERTS] ?: true }
+    /** Whether this phone shows watchdog health notifications (default on). */
+    val healthAlerts: Flow<Boolean> = store.data.map { it[KEY_HEALTH_ALERTS] ?: true }
 
-    suspend fun siteAlertsNow(): Boolean = siteAlerts.first()
+    suspend fun healthAlertsNow(): Boolean = healthAlerts.first()
 
-    suspend fun setSiteAlerts(on: Boolean) = store.edit { it[KEY_SITE_ALERTS] = on }
+    suspend fun setHealthAlerts(on: Boolean) = store.edit { it[KEY_HEALTH_ALERTS] = on }
 
     /** Whether this phone shows an "update available" notification (default on). */
     val updateNotifications: Flow<Boolean> = store.data.map { it[KEY_UPDATE_NOTIFS] ?: true }
@@ -146,7 +146,7 @@ class SettingsStore(private val context: Context) {
         val KEY_MUTED_PLUGS = stringSetPreferencesKey("muted_plugs")
         val KEY_JELLYFIN_ALERTS = booleanPreferencesKey("jellyfin_alerts")
         val KEY_FINDME_ALERTS = booleanPreferencesKey("findme_alerts")
-        val KEY_SITE_ALERTS = booleanPreferencesKey("site_alerts")
+        val KEY_HEALTH_ALERTS = booleanPreferencesKey("health_alerts")
         val KEY_UPDATE_NOTIFS = booleanPreferencesKey("update_notifications")
         val KEY_UPDATE_CHECK = longPreferencesKey("update_last_check")
         val KEY_THEME_STYLE = stringPreferencesKey("theme_style")

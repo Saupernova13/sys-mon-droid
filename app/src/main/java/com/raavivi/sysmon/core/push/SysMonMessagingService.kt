@@ -45,8 +45,8 @@ class SysMonMessagingService : FirebaseMessagingService() {
             handleUpdate(data)
             return
         }
-        if (data["type"] == SiteAlert.TYPE) {
-            handleSite(data)
+        if (data["type"] == WatchdogAlert.TYPE) {
+            handleWatchdog(data)
             return
         }
         if (data["type"] != "plug_alert" && data["type"] != "heater") return
@@ -95,13 +95,13 @@ class SysMonMessagingService : FirebaseMessagingService() {
     }
 
     /**
-     * `type=site_status`: a monitored site went down or came back. Rendered by
-     * [SiteAlertNotifier] unless this phone turned site alerts off.
+     * `type=watchdog`: a health event relayed from the central watchdog. Rendered by
+     * [WatchdogNotifier] unless this phone turned health alerts off.
      */
-    private fun handleSite(data: Map<String, String>) {
+    private fun handleWatchdog(data: Map<String, String>) {
         val app = applicationContext as? SysMonApp ?: return
-        val on = runBlocking { app.container.settings.siteAlertsNow() }
-        if (on) SiteAlertNotifier.handle(this, data) else SiteAlertNotifier.cancelAll(this)
+        val on = runBlocking { app.container.settings.healthAlertsNow() }
+        if (on) WatchdogNotifier.handle(this, data) else WatchdogNotifier.cancelAll(this)
     }
 
     /**
