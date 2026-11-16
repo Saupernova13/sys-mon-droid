@@ -71,6 +71,23 @@ fun relativeTime(epochSeconds: Double?): String {
     }
 }
 
+/**
+ * Coarse human span for [seconds]: "45 s", "12 min", "3 h 20 min", "2 d 4 h".
+ * Shows at most two units and drops a zero second unit.
+ */
+fun humanSpan(seconds: Long): String {
+    val s = seconds.coerceAtLeast(0)
+    val d = s / 86_400
+    val h = (s % 86_400) / 3600
+    val m = (s % 3600) / 60
+    return when {
+        d > 0 -> if (h > 0) "$d d $h h" else "$d d"
+        h > 0 -> if (m > 0) "$h h $m min" else "$h h"
+        m > 0 -> "$m min"
+        else -> "$s s"
+    }
+}
+
 /** A span longer than this labels chart axes with dates instead of clock times. */
 const val AXIS_DATE_SPAN_S = 2 * 86_400.0
 

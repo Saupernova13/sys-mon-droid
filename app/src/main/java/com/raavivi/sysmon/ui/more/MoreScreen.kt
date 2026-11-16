@@ -29,7 +29,7 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.foundation.layout.Row
@@ -63,7 +63,7 @@ import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.push.FindMeAlertNotifier
 import com.raavivi.sysmon.core.push.JellyfinAlertNotifier
-import com.raavivi.sysmon.core.push.SiteAlertNotifier
+import com.raavivi.sysmon.core.push.WatchdogNotifier
 import com.raavivi.sysmon.core.push.UpdateNotifier
 import com.raavivi.sysmon.core.update.UpdateCheck
 import com.raavivi.sysmon.ui.common.ScreenHeader
@@ -83,7 +83,7 @@ fun MoreScreen(
     onOpenFindMe: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAlerts: () -> Unit = {},
-    onOpenSites: () -> Unit = {},
+    onOpenHealth: () -> Unit = {},
     onOpenUpdate: () -> Unit = {},
     onOpenSchedules: () -> Unit = {},
 ) {
@@ -127,7 +127,7 @@ fun MoreScreen(
                 pushAvailable = features?.push == true,
                 findMeAvailable = isAdmin && features?.findme == true,
                 onOpenAlerts = onOpenAlerts,
-                onOpenSites = onOpenSites,
+                onOpenHealth = onOpenHealth,
                 onOpenSchedules = onOpenSchedules,
             )
 
@@ -253,7 +253,7 @@ private fun NotificationsCard(
     pushAvailable: Boolean,
     findMeAvailable: Boolean,
     onOpenAlerts: () -> Unit,
-    onOpenSites: () -> Unit,
+    onOpenHealth: () -> Unit,
     onOpenSchedules: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -292,19 +292,19 @@ private fun NotificationsCard(
         save = { container.settings.setJellyfinAlerts(it) },
         clear = { JellyfinAlertNotifier.cancelAll(it) },
     )
-    SectionCard(title = "Sites") {
-        ActionButton("Sites", Icons.Filled.Language, onOpenSites)
+    SectionCard(title = "Health") {
+        ActionButton("Health", Icons.Filled.MonitorHeart, onOpenHealth)
     }
     PushSwitchCard(
-        title = "Site alerts",
-        label = "Site alerts",
-        onText = "Notify me when a monitored site goes down, and when it is back up.",
-        offText = "Site alerts are off for this phone.",
+        title = "Health alerts",
+        label = "Health alerts",
+        onText = "Notify me when the watchdog sees a service go down, restarts it, or it is back.",
+        offText = "Health alerts are off for this phone.",
         pushAvailable = pushAvailable,
         pushEnabled = enabled,
-        load = { container.settings.siteAlertsNow() },
-        save = { container.settings.setSiteAlerts(it) },
-        clear = { SiteAlertNotifier.cancelAll(it) },
+        load = { container.settings.healthAlertsNow() },
+        save = { container.settings.setHealthAlerts(it) },
+        clear = { WatchdogNotifier.cancelAll(it) },
     )
     PushSwitchCard(
         title = "Update notifications",

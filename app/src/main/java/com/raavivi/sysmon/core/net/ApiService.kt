@@ -7,7 +7,10 @@ import com.raavivi.sysmon.core.model.JellyfinStreamsResponse
 import com.raavivi.sysmon.core.model.JellyfinTestBody
 import com.raavivi.sysmon.core.model.JellyfinTestResponse
 import com.raavivi.sysmon.core.model.DroidUpdateResponse
-import com.raavivi.sysmon.core.model.SitesResponse
+import com.raavivi.sysmon.core.model.WatchdogEventsResponse
+import com.raavivi.sysmon.core.model.WatchdogPauseBody
+import com.raavivi.sysmon.core.model.WatchdogStatus
+import com.raavivi.sysmon.core.model.WatchdogTarget
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaMarkRead
@@ -433,8 +436,17 @@ interface ApiService {
     @GET("api/jellyfin/streams")
     suspend fun jellyfinStreams(): JellyfinStreamsResponse
 
-    @GET("api/sites")
-    suspend fun sites(): SitesResponse
+    @GET("api/watchdog/status")
+    suspend fun watchdogStatus(): WatchdogStatus
+
+    @GET("api/watchdog/events")
+    suspend fun watchdogEvents(@Query("limit") limit: Int): WatchdogEventsResponse
+
+    @POST("api/watchdog/targets/{id}/pause")
+    suspend fun watchdogPause(@Path("id") id: String, @Body body: WatchdogPauseBody): WatchdogTarget
+
+    @POST("api/watchdog/targets/{id}/resume")
+    suspend fun watchdogResume(@Path("id") id: String): WatchdogTarget
 
     @GET("api/droid/update")
     suspend fun droidUpdate(): DroidUpdateResponse

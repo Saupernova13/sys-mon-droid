@@ -153,14 +153,16 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   contact search, and pairing-status guidance including why the sync daemon
   stopped. Reading a chat leaves it unread; *Mark as read* clears it on WhatsApp too.
 
-- **Site monitoring** — More → Sites lists every site the server watches: a status
-  dot, "Up 3 d" / "Down 12 min - timeout", last latency and a sparkline of recent
-  probes, refreshed every 30 s while open (`GET /api/sites`). When a site goes
-  down, or comes back, the server pushes an FCM `site_status` message and the app
-  posts one notification per site ("<name> is down", replaced by "<name> is back
-  up"); tapping it opens the Sites screen. Per-phone switch: More → Site alerts.
+- **Health (watchdog)** — More → Health shows every target of the central watchdog
+  (`GET /api/watchdog/status`): a state dot, "Healthy" / "Down - <error>" / "Paused
+  until 18:30" / "Gave up after 3 restarts", restarts in the window, and the recent
+  events (`GET /api/watchdog/events`). Refreshes every 30 s while open; admins can pause
+  a target for 30 minutes or resume it. sys-mon relays watchdog events as FCM
+  `type=watchdog` pushes; the app posts one notification per target (a later event
+  replaces the earlier one, so "back" replaces "down") and tapping it opens Health.
+  Per-phone switch: More → Health alerts.
 
-Found in `More`: Plug alerts, Sites, Terminal, Screen share, WhatsApp (when enabled),
+Found in `More`: Plug alerts, Health, Terminal, Screen share, WhatsApp (when enabled),
 Server settings, Appearance, and the app + server version line. The Godot editor launcher was
 intentionally left out of this client.
 
