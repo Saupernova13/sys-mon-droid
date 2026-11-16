@@ -9,6 +9,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import java.io.IOException
 
 /**
  * Bridges an OkHttp text WebSocket into a cold [Flow] of decoded JSON frames.
@@ -35,7 +36,16 @@ fun <T> ApiProvider.jsonWebSocketFlow(
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-            frames.binary(bytes.toByteArray())?.let { emit(it) }
+            val json = frames.binary(bytes.toByteArray())
+            if (json != null) {
+                emit(json)
+            } else {
+                // The shared inflate context is now broken, so every later frame would be junk:
+                // drop the socket and let the caller's retry reconnect with a fresh decoder.
+                AppLog.w("Ws", "undecodable frame $path, reconnecting")
+                webSocket.cancel()
+                close(IOException("undecodable stream frame"))
+            }
         }
 
         private fun emit(json: String) {
