@@ -40,9 +40,24 @@ class PowerHistoryMergeTest {
     }
 
     @Test
-    fun mismatchedBucketOrSourceNeedsFullFetch() {
-        val held = resp(60, "hourly", item(0.0, 1.0))
-        assertNull(mergePowerHistory(held, resp(300, "hourly", item(0.0, 1.0)), 0.0, null))
-        assertNull(mergePowerHistory(held, resp(60, "raw", item(0.0, 1.0)), 0.0, null))
+    fun mismatchedBucketNeedsFullFetch() {
+        val held = resp(60, "raw", item(0.0, 1.0))
+        assertNull(mergePowerHistory(held, resp(5, "raw", item(0.0, 1.0)), 0.0, null))
+    }
+
+    @Test
+    fun sourceChangeWithSameBucketMerges() {
+        val held = resp(3600, "hourly", item(0.0, 1.0), item(3600.0, 2.0))
+        val reply = resp(3600, "raw", item(3600.0, 2.5), item(7200.0, 3.0))
+        val merged = mergePowerHistory(held, reply, start = 3600.0, cutoff = null)!!
+        assertEquals(listOf(1.0, 2.5, 3.0), merged.items.map { it.watts })
+    }
+
+    @Test
+    fun unbucketedRawMerges() {
+        val held = resp(0, "raw", item(1.0, 1.0), item(2.0, 2.0))
+        val reply = resp(0, "raw", item(2.0, 2.5), item(3.0, 3.0))
+        val merged = mergePowerHistory(held, reply, start = 2.0, cutoff = null)!!
+        assertEquals(listOf(1.0, 2.5, 3.0), merged.items.map { it.watts })
     }
 }

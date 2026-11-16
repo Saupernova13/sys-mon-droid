@@ -177,7 +177,7 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
 
     /**
      * Full fetch, or (the 5 s tick) only the newest buckets merged into what is held. A reply whose
-     * bucket width or source differs means an older server ignoring `bucket_s`: incremental is then
+     * bucket width differs means an older server ignoring `bucket_s`: incremental is then
      * off for this view model and every load is a full fetch.
      */
     private suspend fun loadHistory(incremental: Boolean = false) {
@@ -193,7 +193,7 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
                     start = start,
                     targetPoints = TARGET_POINTS,
                     plug = plug.takeIf { it != ALL },
-                    bucketS = held.bucketSeconds.takeIf { held.source != "raw" && it > 0 },
+                    bucketS = held.bucketSeconds.takeIf { it > 0 },
                 )
             }
             if (r !is ApiResult.Ok) return
