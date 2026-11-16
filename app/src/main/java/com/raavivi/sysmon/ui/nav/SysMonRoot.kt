@@ -34,11 +34,14 @@ import com.raavivi.sysmon.ui.findme.FindMeScreen
 import com.raavivi.sysmon.ui.health.HealthScreen
 import com.raavivi.sysmon.ui.files.PdfViewerScreen
 import com.raavivi.sysmon.ui.files.TextEditorScreen
+import com.raavivi.sysmon.ui.logs.LogsScreen
 import com.raavivi.sysmon.ui.modellog.ModelLogScreen
 import com.raavivi.sysmon.ui.more.MoreScreen
+import com.raavivi.sysmon.ui.notifications.NotificationsScreen
 import com.raavivi.sysmon.ui.power.PowerScreen
 import com.raavivi.sysmon.ui.processes.ProcessesScreen
 import com.raavivi.sysmon.ui.screen.ScreenShareScreen
+import com.raavivi.sysmon.ui.settings.JellyfinScreen
 import com.raavivi.sysmon.ui.settings.SettingsScreen
 import com.raavivi.sysmon.ui.setup.LoginScreen
 import com.raavivi.sysmon.ui.terminal.TerminalScreen
@@ -90,7 +93,7 @@ private fun MainScaffold() {
         val onHiddenTab = TopDest.entries.any { it.route == currentRoute } &&
             visibleDests.none { it.route == currentRoute }
         val onHiddenTool = when (currentRoute) {
-            Routes.TERMINAL, Routes.SCREEN, Routes.SETTINGS -> !isAdmin
+            Routes.TERMINAL, Routes.SCREEN, Routes.SETTINGS, Routes.JELLYFIN -> !isAdmin
             Routes.MODEL_LOG -> !isAdmin || features?.modelLog != true
             Routes.FIND_ME -> !isAdmin || features?.findme != true
             else -> false
@@ -170,7 +173,9 @@ private fun MainScaffold() {
                     onOpenModelLog = { nav.navigate(Routes.MODEL_LOG) },
                     onOpenFindMe = { nav.navigate(Routes.FIND_ME) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
-                    onOpenAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
+                    onOpenJellyfin = { nav.navigate(Routes.JELLYFIN) },
+                    onOpenNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
+                    onOpenLogs = { nav.navigate(Routes.LOGS) },
                     onOpenHealth = { nav.navigate(Routes.HEALTH) },
                     onOpenUpdate = { nav.navigate(Routes.UPDATE) },
                     onOpenSchedules = { nav.navigate(Routes.POWER_SCHEDULES) },
@@ -210,6 +215,14 @@ private fun MainScaffold() {
                 )
             }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.NOTIFICATIONS) {
+                NotificationsScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenPlugAlerts = { nav.navigate(Routes.PLUG_ALERTS) },
+                )
+            }
+            composable(Routes.LOGS) { LogsScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.JELLYFIN) { JellyfinScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.HEALTH) { HealthScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.UPDATE) { UpdateScreen(onBack = { nav.popBackStack() }) }

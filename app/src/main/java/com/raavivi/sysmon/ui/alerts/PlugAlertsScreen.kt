@@ -1,10 +1,5 @@
 package com.raavivi.sysmon.ui.alerts
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,15 +23,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.SessionManager
@@ -46,7 +35,6 @@ import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import com.raavivi.sysmon.ui.theme.SysMon
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * Which plugs raise a notification, in two layers.
@@ -64,6 +52,8 @@ fun PlugAlertsScreen(onBack: () -> Unit) {
     val features by container.session.features.collectAsStateWithLifecycle()
     val isAdmin = role == SessionManager.ROLE_ADMIN
     val pushAvailable = features?.push == true
+    // Starts true so the warning never flashes before the stored value loads.
+    val pushOn by container.settings.pushEnabled.collectAsStateWithLifecycle(initialValue = true)
 
     vm.message?.let { LaunchedEffect(it) { delay(3000); vm.message = null } }
 
@@ -88,7 +78,18 @@ fun PlugAlertsScreen(onBack: () -> Unit) {
         }
 
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            DeviceOptInCard(pushAvailable)
+            if (!pushAvailable || !pushOn) {
+                SectionCard(title = "Push is off") {
+                    Muted(
+                        if (!pushAvailable) {
+                            "Unavailable - the server has no Firebase push key configured."
+                        } else {
+                            "Push notifications are off for this phone, so plug alerts cannot reach it. " +
+                                "Turn them on in Notifications."
+                        },
+                    )
+                }
+            }
 
             SectionCard(title = "Plugs", accent = pwr) {
                 when {
@@ -176,58 +177,6 @@ private fun statusLine(vm: PlugAlertsViewModel, device: PowerDeviceRow, isMuted:
     else -> {
         val label = device.alertLabel.ifBlank { device.display }
         "Alerts as \"Your $label is on\""
-    }
-}
-
-/** The device-wide opt-in: without it this phone has no FCM registration at all
- *  and none of the per-plug switches below can reach it. */
-@Composable
-private fun DeviceOptInCard(pushAvailable: Boolean) {
-    val container = LocalAppContainer.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var enabled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { enabled = container.settings.pushEnabledNow() }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { /* registration proceeds regardless; alerts show once granted */ }
-
-    SectionCard(title = "This device") {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Receive plug alerts", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    if (pushAvailable) {
-                        "Registers this phone for push. Off means no alerts reach it at all."
-                    } else {
-                        "Unavailable — the server has no Firebase push key configured."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = enabled && pushAvailable,
-                enabled = pushAvailable,
-                onCheckedChange = { on ->
-                    enabled = on
-                    if (on) {
-                        if (Build.VERSION.SDK_INT >= 33 &&
-                            ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.POST_NOTIFICATIONS,
-                            ) != PackageManager.PERMISSION_GRANTED
-                        ) {
-                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        scope.launch { container.pushRegistrar.enable() }
-                    } else {
-                        scope.launch { container.pushRegistrar.disable() }
-                    }
-                },
-            )
-        }
     }
 }
 

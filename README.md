@@ -12,7 +12,7 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
 
 - **Connect & auth** — point at any `host:port`, log in (JWT), token persisted and
   verified on launch, log out / log out everywhere.
-- **Two themes** (More → Appearance, per phone) — *Classic* (the original slate +
+- **Two themes** (More → This phone → Theme, per phone) — *Classic* (the original slate +
   mint look, the default) and *Instrument*, which mirrors the sys-mon web panel:
   warm graphite ramp, one identity hue per subsystem, 2px corners, band headers,
   ticked meters and unsmoothed traces.
@@ -63,27 +63,28 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   updates at 30 minutes, so the tiles also refresh on tap, after a toggle, on an
   FCM plug alert, and whenever the app polls power — and each one shows the time
   its reading was taken.
-- **Plug alerts** (More → Plug alerts) — two layers. *Watched* is the server's
-  per-plug flag, shared with the web dashboard and every signed-in device (admin
-  only). *Mute on this phone* is local: the alert is still sent, this device just
-  doesn't show it.
-- **Jellyfin alerts** (More → Jellyfin) — a heads-up popup when someone starts
-  streaming on the host's Jellyfin server: one dismissible card per stream (user,
-  title, position, paused state), grouped when several are playing and cleared
-  when playback ends. Rides the same push registration as plug alerts; a switch
-  silences it on this phone. Shutting down or restarting the host while someone
-  is streaming asks for a second confirmation first.
+- **Plug alerts** (More → This phone → Notifications → Smart plugs) — two layers.
+  *Watched* is the server's per-plug flag, shared with the web dashboard and every
+  signed-in device (admin only). *Mute on this phone* is local: the alert is still
+  sent, this device just doesn't show it.
+- **Jellyfin alerts** (More → This phone → Notifications) — a heads-up popup when
+  someone starts streaming on the host's Jellyfin server: one dismissible card per
+  stream (user, title, position, paused state), grouped when several are playing and
+  cleared when playback ends. Rides the same push registration as plug alerts; a
+  switch silences it on this phone. Shutting down or restarting the host while
+  someone is streaming asks for a second confirmation first.
 - **Roles & feature flags** — the client reads the session role from login
   (`admin` vs the read-only `viewer` account) and `GET /api/features`, so
   viewer sessions hide every mutating control (kill, power, file writes,
   terminal, screen share) and disabled server widgets (Model Log, WhatsApp)
   drop out of the navigation instead of erroring.
-- **Server settings** — admins can flip the server's widget feature flags
-  (WhatsApp / Model Log / ollama proxy / Godot / S.M.A.R.T. / Power) from the
-  phone, with availability hints, restart-required notices, and a warning when the
-  server's `settings.json` was unreadable. A Jellyfin section links the host's
-  Jellyfin (URL, write-only API key, poll interval, what notifications include,
-  the shutdown gate) and tests the connection.
+- **Server features** (More → Server → Features) — admins can flip the server's
+  widget feature flags (WhatsApp / Model Log / ollama proxy / Godot / S.M.A.R.T. /
+  Power) from the phone, with availability hints, restart-required notices, and a
+  warning when the server's `settings.json` was unreadable. A separate Jellyfin
+  screen (More → Server → Jellyfin) links the host's Jellyfin (URL, write-only API
+  key, poll interval, what notifications include, the shutdown gate) and tests the
+  connection.
 - **File explorer** — a Places strip with every drive (named, capacity meter
   graded by severity, a hue per drive) and your favourites; icons coloured by
   file kind and real host thumbnails; open text files in an editor
@@ -101,7 +102,7 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
     … (folders included), preview images, PDFs and text, save anything else;
     extract here / to a stem folder / to a picked folder; compress to any format
     the host offers. Passwords are asked for, re-asked when wrong, and never stored.
-- **Find Me** (More -> Find Me, admin, when the server's Find Me flag is on) — your paired
+- **Find Me** (More -> Tools -> Find Me, admin, when the server's Find Me flag is on) — your paired
   Android devices on a map. Per device: fix age and accuracy, battery and network,
   Locate, Ring / Stop ring (with a "Locating..." / "Ring sent..." state read from the
   server's command list), rename, report interval and remove. The map is a built-in
@@ -155,17 +156,19 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   contact search, and pairing-status guidance including why the sync daemon
   stopped. Reading a chat leaves it unread; *Mark as read* clears it on WhatsApp too.
 
-- **Health (watchdog)** — More → Health shows every target of the central watchdog
+- **Health (watchdog)** — More → Tools → Health shows every target of the central watchdog
   (`GET /api/watchdog/status`): a state dot, "Healthy" / "Down - <error>" / "Paused
   until 18:30" / "Gave up after 3 restarts", restarts in the window, and the recent
   events (`GET /api/watchdog/events`). Refreshes every 30 s while open; admins can pause
   a target for 30 minutes or resume it. sys-mon relays watchdog events as FCM
   `type=watchdog` pushes; the app posts one notification per target (a later event
   replaces the earlier one, so "back" replaces "down") and tapping it opens Health.
-  Per-phone switch: More → Health alerts.
+  Per-phone switch: More → This phone → Notifications.
 
-Found in `More`: Plug alerts, Health, Terminal, Screen share, WhatsApp (when enabled),
-Server settings, Appearance, and the app + server version line. The Godot editor launcher was
+Found in `More`, grouped as: **Tools** (Terminal, Screen share, Find Me, Model log, Health,
+Schedules), **Host** (remote control, history backup, restart, shut down; admin), **This phone**
+(Notifications, Theme, Logs, App updates), **Server** (Features, Jellyfin; admin) and **Account**
+(log out, log out everywhere), plus the app + server version line. The Godot editor launcher was
 intentionally left out of this client.
 
 ### Staying signed in
@@ -197,7 +200,7 @@ The app keeps an on-device log so you can send it when something breaks.
 - **Never logged:** headers, request/response bodies, tokens (`token`,
   `access_token`, `password`, `code` query values show as `***`), file contents,
   chat messages, WhatsApp text, or location coordinates.
-- **Settings > Logs:** the **Write logs** switch (default on; when off nothing is
+- **More → This phone → Logs:** the **Write logs** switch (default on; when off nothing is
   written, crashes included, but old files are still pruned after 24 hours),
   **Share logs** (zips the current files and opens the share sheet) and
   **Clear logs**.

@@ -1,45 +1,48 @@
 package com.raavivi.sysmon.ui.more
 
-import android.Manifest
-import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,28 +54,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.BuildConfig
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.SessionManager
-import com.raavivi.sysmon.core.push.FindMeAlertNotifier
-import com.raavivi.sysmon.core.push.JellyfinAlertNotifier
-import com.raavivi.sysmon.core.push.WatchdogNotifier
-import com.raavivi.sysmon.core.push.UpdateNotifier
+import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.update.UpdateCheck
+import com.raavivi.sysmon.ui.common.ActionTileGrid
+import com.raavivi.sysmon.ui.common.Chevron
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
-import com.raavivi.sysmon.ui.common.StatRow
+import com.raavivi.sysmon.ui.common.SettingsRow
+import com.raavivi.sysmon.ui.common.Tile
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import com.raavivi.sysmon.ui.theme.SysMon
 import com.raavivi.sysmon.ui.theme.ThemeStyle
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -82,124 +84,198 @@ fun MoreScreen(
     onOpenModelLog: () -> Unit = {},
     onOpenFindMe: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
-    onOpenAlerts: () -> Unit = {},
+    onOpenJellyfin: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
+    onOpenLogs: () -> Unit = {},
     onOpenHealth: () -> Unit = {},
     onOpenUpdate: () -> Unit = {},
     onOpenSchedules: () -> Unit = {},
 ) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
     val container = LocalAppContainer.current
+    val palette = SysMon.palette
     val role by container.session.role.collectAsStateWithLifecycle()
     val features by container.session.features.collectAsStateWithLifecycle()
     val host by container.session.host.collectAsStateWithLifecycle()
+    val updateUi by container.updates.ui.collectAsStateWithLifecycle()
+    val pushOn by container.settings.pushEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val loggingOn by container.settings.loggingEnabled.collectAsStateWithLifecycle(initialValue = AppLog.isEnabled())
     val isAdmin = role == SessionManager.ROLE_ADMIN
+    val available = updateUi.check as? UpdateCheck.Available
     var confirm by remember { mutableStateOf<Confirm?>(null) }
+    val snackbar = remember { SnackbarHostState() }
 
-    vm.message?.let { msg -> LaunchedEffect(msg) { delay(3000); vm.message = null } }
-
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-    ) {
-        ScreenHeader(title = "More")
-
-        vm.message?.let {
-            Text(
-                it,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
+    vm.message?.let { msg ->
+        LaunchedEffect(msg) {
+            snackbar.showSnackbar(msg)
+            vm.message = null
         }
+    }
 
-        Column(
-            Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SectionCard(title = "Connection") {
-                StatRow("Server", vm.serverUrl)
-                StatRow("User", vm.username)
-                StatRow("Role", role)
-            }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            ScreenHeader(title = "More")
 
-            NotificationsCard(
-                pushAvailable = features?.push == true,
-                findMeAvailable = isAdmin && features?.findme == true,
-                onOpenAlerts = onOpenAlerts,
-                onOpenHealth = onOpenHealth,
-                onOpenSchedules = onOpenSchedules,
-            )
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                AccountHeader(username = vm.username, role = role, serverUrl = vm.serverUrl)
 
-            UpdatesCard(onOpenUpdate)
-
-            // Everything below the connection card mutates the host, so the
-            // read-only viewer role only ever sees Connection + Account.
-            if (isAdmin) {
-                SectionCard(title = "Host actions") {
-                    if (features?.remoteControl == true) {
-                        ActionButton("Launch remote control", Icons.Filled.SmartToy) { vm.remoteControl() }
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    ActionButton("Back up history", Icons.Filled.Backup) { vm.backup() }
-                }
-
-                SectionCard(title = "Power", accent = MaterialTheme.colorScheme.error) {
-                    // Caution for restart, warning for shutdown (the web grid's warn/danger tiles).
-                    ToneButton("Restart host", Icons.Filled.RestartAlt, SysMon.palette.sigWarn) {
-                        confirm = Confirm("Restart host?", powerPrompt("Restart", host)) { vm.restart() }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    ToneButton("Shut down host", Icons.Filled.PowerSettingsNew, SysMon.palette.sigCrit) {
-                        confirm = Confirm("Shut down host?", powerPrompt("Shut down", host)) { vm.shutdown() }
+                if (available != null) {
+                    SectionCard(title = "Update available", flush = true) {
+                        SettingsRow(
+                            icon = Icons.Filled.SystemUpdate,
+                            title = "Version ${available.release.versionName} is ready",
+                            subtitle = "Tap to download and install",
+                            onClick = onOpenUpdate,
+                            trailing = { Chevron() },
+                        )
                     }
                 }
 
                 SectionCard(title = "Tools") {
-                    ActionButton("Terminal", Icons.Filled.Terminal, onOpenTerminal)
-                    Spacer(Modifier.height(8.dp))
-                    ActionButton("Screen share", Icons.AutoMirrored.Filled.ScreenShare, onOpenScreen)
-                    if (features?.modelLog == true) {
-                        Spacer(Modifier.height(8.dp))
-                        ActionButton("Model log", Icons.Filled.Psychology, onOpenModelLog)
+                    val tiles = buildList {
+                        if (isAdmin) {
+                            add(Tile("Terminal", Icons.Filled.Terminal, palette.idCpu, onOpenTerminal))
+                            add(Tile("Screen share", Icons.AutoMirrored.Filled.ScreenShare, palette.idGpu, onOpenScreen))
+                            if (features?.findme == true) {
+                                add(Tile("Find Me", Icons.Filled.MyLocation, palette.idMem, onOpenFindMe))
+                            }
+                            if (features?.modelLog == true) {
+                                add(Tile("Model log", Icons.Filled.Psychology, palette.idDisk, onOpenModelLog))
+                            }
+                        }
+                        add(Tile("Health", Icons.Filled.MonitorHeart, palette.sigOk, onOpenHealth))
+                        add(Tile("Schedules", Icons.Filled.Schedule, palette.idPwr, onOpenSchedules))
                     }
-                    if (features?.findme == true) {
-                        Spacer(Modifier.height(8.dp))
-                        ActionButton("Find Me", Icons.Filled.MyLocation, onOpenFindMe)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    ActionButton("Server settings", Icons.Filled.Settings, onOpenSettings)
+                    ActionTileGrid(tiles)
                 }
-            }
 
-            AppearanceCard()
+                // Host actions mutate the host, so the read-only viewer role never sees them.
+                if (isAdmin) {
+                    SectionCard(title = "Host", flush = true) {
+                        if (features?.remoteControl == true) {
+                            SettingsRow(
+                                icon = Icons.Filled.SmartToy,
+                                title = "Launch remote control",
+                                subtitle = "Start remote control on the host",
+                                onClick = vm::remoteControl,
+                            )
+                        }
+                        SettingsRow(
+                            icon = Icons.Filled.Backup,
+                            title = "Back up history",
+                            subtitle = "Write a history backup on the host",
+                            onClick = vm::backup,
+                        )
+                        SettingsRow(
+                            icon = Icons.Filled.RestartAlt,
+                            title = "Restart host",
+                            tint = palette.sigWarn,
+                            tintTitle = true,
+                            onClick = {
+                                confirm = Confirm("Restart host?", powerPrompt("Restart", host)) { vm.restart() }
+                            },
+                        )
+                        SettingsRow(
+                            icon = Icons.Filled.PowerSettingsNew,
+                            title = "Shut down host",
+                            tint = palette.sigCrit,
+                            tintTitle = true,
+                            onClick = {
+                                confirm = Confirm("Shut down host?", powerPrompt("Shut down", host)) { vm.shutdown() }
+                            },
+                        )
+                    }
+                }
 
-            SectionCard(title = "Account") {
-                ActionButton("Log out", Icons.AutoMirrored.Filled.Logout) { vm.logout() }
-                Spacer(Modifier.height(8.dp))
-                ActionButton("Log out everywhere", Icons.AutoMirrored.Filled.Logout) {
-                    confirm = Confirm(
-                        "Log out everywhere?",
-                        "Every token issued before now will be revoked.",
-                        vm::logoutAll,
+                SectionCard(title = "This phone", flush = true) {
+                    SettingsRow(
+                        icon = Icons.Filled.Notifications,
+                        title = "Notifications",
+                        subtitle = when {
+                            features?.push != true -> "Unavailable - server has no push key"
+                            pushOn -> "On for this phone"
+                            else -> "Off for this phone"
+                        },
+                        onClick = onOpenNotifications,
+                        trailing = { Chevron() },
+                    )
+                    ThemeRow()
+                    SettingsRow(
+                        icon = Icons.Filled.Description,
+                        title = "Logs",
+                        subtitle = if (loggingOn) "On · kept for 24 hours" else "Off",
+                        onClick = onOpenLogs,
+                        trailing = { Chevron() },
+                    )
+                    SettingsRow(
+                        icon = Icons.Filled.SystemUpdate,
+                        title = "App updates",
+                        subtitle = if (available != null) {
+                            "${available.release.versionName} available"
+                        } else {
+                            "Version ${BuildConfig.VERSION_NAME}"
+                        },
+                        subtitleColor = if (available != null) MaterialTheme.colorScheme.primary
+                        else Color.Unspecified,
+                        onClick = onOpenUpdate,
+                        trailing = { Chevron() },
                     )
                 }
-            }
 
-            val versionLine = buildString {
-                append("sys-mon-droid ${BuildConfig.VERSION_NAME}")
-                vm.serverVersion?.let { v ->
-                    append(" · server ${v.version} (${v.commit})")
+                if (isAdmin) {
+                    SectionCard(title = "Server", flush = true) {
+                        SettingsRow(
+                            icon = Icons.Filled.Tune,
+                            title = "Features",
+                            subtitle = "Turn server modules on or off",
+                            onClick = onOpenSettings,
+                            trailing = { Chevron() },
+                        )
+                        SettingsRow(
+                            icon = Icons.Filled.LiveTv,
+                            title = "Jellyfin",
+                            subtitle = "Stream detection and alerts",
+                            onClick = onOpenJellyfin,
+                            trailing = { Chevron() },
+                        )
+                    }
                 }
+
+                SectionCard(title = "Account", flush = true) {
+                    SettingsRow(
+                        icon = Icons.AutoMirrored.Filled.Logout,
+                        title = "Log out",
+                        onClick = vm::logout,
+                    )
+                    SettingsRow(
+                        icon = Icons.Filled.Devices,
+                        title = "Log out everywhere",
+                        subtitle = "Revoke every token issued before now",
+                        onClick = {
+                            confirm = Confirm(
+                                "Log out everywhere?",
+                                "Every token issued before now will be revoked.",
+                                vm::logoutAll,
+                            )
+                        },
+                    )
+                }
+
+                val versionLine = buildString {
+                    append("sys-mon-droid ${BuildConfig.VERSION_NAME}")
+                    vm.serverVersion?.let { v -> append(" · server ${v.version} (${v.commit})") }
+                }
+                Text(
+                    versionLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-            Text(
-                versionLine,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.padding(top = 4.dp),
-            )
         }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
 
     vm.goingDown?.let { PowerGoingDownOverlay(it, onDismiss = { vm.goingDown = null }) }
@@ -242,229 +318,76 @@ fun MoreScreen(
     }
 }
 
-/**
- * Entry point to the plug-alert controls. The device opt-in and the per-plug
- * switches moved to their own screen once "which plugs" became editable here
- * rather than only in the web dashboard — there are two layers to explain now
- * (server-side watching vs. muting this phone) and they don't fit a single row.
- */
+private data class Confirm(val title: String, val body: String, val action: () -> Unit)
+
+/** Who is signed in and where; replaces the old Connection card. */
 @Composable
-private fun NotificationsCard(
-    pushAvailable: Boolean,
-    findMeAvailable: Boolean,
-    onOpenAlerts: () -> Unit,
-    onOpenHealth: () -> Unit,
-    onOpenSchedules: () -> Unit,
-) {
-    val container = LocalAppContainer.current
-    var enabled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { enabled = container.settings.pushEnabledNow() }
-
-    SectionCard(title = "Smart plugs") {
-        Text(
-            when {
-                !pushAvailable -> "Unavailable — the server has no Firebase push key configured."
-                enabled -> "This phone is registered for plug alerts."
-                else -> "Plug alerts are off for this phone."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
-        ActionButton("Plug alerts", Icons.Filled.NotificationsActive, onOpenAlerts)
-        Spacer(Modifier.height(8.dp))
-        // Viewers get the read-only schedule list; we can't tell here whether the
-        // server has plugs, so the entry is always shown.
-        ActionButton("Plug schedules", Icons.Filled.Schedule, onOpenSchedules)
-    }
-
-    // Jellyfin stream popups and Find Me reachability alerts ride the same FCM
-    // registration as plug alerts, so they follow that opt-in; these switches
-    // only decide whether this phone shows (or silently drops) what it receives.
-    PushSwitchCard(
-        title = "Jellyfin",
-        label = "Jellyfin alerts",
-        onText = "Show a popup when someone streams on Jellyfin.",
-        offText = "Jellyfin popups are off for this phone.",
-        pushAvailable = pushAvailable,
-        pushEnabled = enabled,
-        load = { container.settings.jellyfinAlertsNow() },
-        save = { container.settings.setJellyfinAlerts(it) },
-        clear = { JellyfinAlertNotifier.cancelAll(it) },
-    )
-    SectionCard(title = "Health") {
-        ActionButton("Health", Icons.Filled.MonitorHeart, onOpenHealth)
-    }
-    PushSwitchCard(
-        title = "Health alerts",
-        label = "Health alerts",
-        onText = "Notify me when the watchdog sees a service go down, restarts it, or it is back.",
-        offText = "Health alerts are off for this phone.",
-        pushAvailable = pushAvailable,
-        pushEnabled = enabled,
-        load = { container.settings.healthAlertsNow() },
-        save = { container.settings.setHealthAlerts(it) },
-        clear = { WatchdogNotifier.cancelAll(it) },
-    )
-    PushSwitchCard(
-        title = "Update notifications",
-        label = "Update notifications",
-        onText = "Notify me when a new sys-mon-droid build is available.",
-        offText = "Update notifications are off for this phone.",
-        pushAvailable = pushAvailable,
-        pushEnabled = enabled,
-        load = { container.settings.updateNotificationsNow() },
-        save = { container.settings.setUpdateNotifications(it) },
-        clear = { UpdateNotifier.cancel(it) },
-    )
-    if (findMeAvailable) {
-        PushSwitchCard(
-            title = "Find Me",
-            label = "Find Me alerts",
-            onText = "Notify me when a tracked device stops reporting, and when it is back.",
-            offText = "Find Me alerts are off for this phone.",
-            pushAvailable = pushAvailable,
-            pushEnabled = enabled,
-            load = { container.settings.findmeAlertsNow() },
-            save = { container.settings.setFindmeAlerts(it) },
-            clear = { FindMeAlertNotifier.cancelAll(it) },
-        )
-    }
-}
-
-/** Entry to the in-app updater; shows a marker when the last check found a newer build. */
-@Composable
-private fun UpdatesCard(onOpenUpdate: () -> Unit) {
-    val container = LocalAppContainer.current
-    val ui by container.updates.ui.collectAsStateWithLifecycle()
-    val available = ui.check as? UpdateCheck.Available
-    SectionCard(title = "App updates") {
-        if (available != null) {
-            Text(
-                "Update available: ${available.release.versionName}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-        ActionButton(if (available != null) "App updates (update available)" else "App updates", Icons.Filled.SystemUpdate, onOpenUpdate)
-    }
-}
-
-/** A per-phone switch for one kind of push popup (default on). */
-@Composable
-private fun PushSwitchCard(
-    title: String,
-    label: String,
-    onText: String,
-    offText: String,
-    pushAvailable: Boolean,
-    pushEnabled: Boolean,
-    load: suspend () -> Boolean,
-    save: suspend (Boolean) -> Unit,
-    clear: (Context) -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var on by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) { on = load() }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { /* the switch stays on; popups show once the permission is granted */ }
-
-    SectionCard(title = title) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(label, style = MaterialTheme.typography.bodyLarge)
+private fun AccountHeader(username: String, role: String, serverUrl: String) {
+    val palette = SysMon.palette
+    val shape = RoundedCornerShape(palette.cardRadius)
+    val hostName = serverUrl.removePrefix("https://").removePrefix("http://").trimEnd('/')
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (palette.isInstrument) Modifier.border(1.dp, palette.hairline, shape) else Modifier),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(if (palette.isInstrument) shape else CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
-                    when {
-                        !pushAvailable -> "Unavailable — the server has no Firebase push key configured."
-                        !pushEnabled ->
-                            "Turn on phone alerts in Plug alerts first — $label use the same push registration."
-                        on -> onText
-                        else -> offText
-                    },
+                    username.take(1).uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(username, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${role.replaceFirstChar { it.uppercase() }} · $hostName",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(
-                checked = on,
-                onCheckedChange = { value ->
-                    on = value
-                    if (value &&
-                        Build.VERSION.SDK_INT >= 33 &&
-                        ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.POST_NOTIFICATIONS,
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    scope.launch {
-                        save(value)
-                        if (!value) clear(context)
-                    }
-                },
-            )
         }
-    }
-}
-
-private data class Confirm(val title: String, val body: String, val action: () -> Unit)
-
-@Composable
-private fun ActionButton(label: String, icon: ImageVector, onClick: () -> Unit) =
-    ToneButton(label, icon, Color.Unspecified, onClick)
-
-/** An [ActionButton] whose label and icon use [tint] (Unspecified keeps the default). */
-@Composable
-private fun ToneButton(label: String, icon: ImageVector, tint: Color, onClick: () -> Unit) {
-    val colors = if (tint == Color.Unspecified) {
-        ButtonDefaults.outlinedButtonColors()
-    } else {
-        ButtonDefaults.outlinedButtonColors(contentColor = tint)
-    }
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth(), colors = colors) {
-        Icon(icon, contentDescription = null)
-        Spacer(Modifier.width(8.dp))
-        Text(label)
     }
 }
 
 /** Local, per-phone look: Classic or Instrument (the sys-mon web panel's style). */
 @Composable
-private fun AppearanceCard() {
+private fun ThemeRow() {
     val container = LocalAppContainer.current
     val scope = rememberCoroutineScope()
     val key by container.settings.themeStyle.collectAsStateWithLifecycle(initialValue = ThemeStyle.Classic.key)
     val current = ThemeStyle.fromKey(key)
+    val side = if (SysMon.palette.isInstrument) 12.dp else 16.dp
 
-    SectionCard(title = "Appearance") {
-        ThemeStyle.entries.forEach { style ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .selectable(
-                        selected = style == current,
-                        role = Role.RadioButton,
-                        onClick = { scope.launch { container.settings.setThemeStyle(style.key) } },
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = style == current, onClick = null)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.padding(vertical = 8.dp)) {
-                    Text(style.label, style = MaterialTheme.typography.bodyLarge)
-                    if (style == ThemeStyle.Instrument) {
-                        Text(
-                            "Matches the sys-mon web panel",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+    Column {
+        SettingsRow(
+            icon = Icons.Filled.Palette,
+            title = "Theme",
+            subtitle = "Instrument matches the sys-mon web panel",
+        )
+        SingleChoiceSegmentedButtonRow(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = side + 36.dp + 16.dp, end = side, bottom = 8.dp),
+        ) {
+            ThemeStyle.entries.forEachIndexed { index, style ->
+                SegmentedButton(
+                    selected = style == current,
+                    onClick = { scope.launch { container.settings.setThemeStyle(style.key) } },
+                    shape = SegmentedButtonDefaults.itemShape(index, ThemeStyle.entries.size),
+                ) { Text(style.label) }
             }
         }
     }
