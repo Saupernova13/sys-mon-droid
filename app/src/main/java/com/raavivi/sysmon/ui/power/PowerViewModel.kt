@@ -13,7 +13,6 @@ import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.safeCall
 import com.raavivi.sysmon.widget.PlugWidgets
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** History window presets (mirrors the web power card); [seconds] null means all recorded data. */
@@ -63,13 +62,17 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         refresh()
-        // Keep readings live while the screen is open (matches the web card).
-        viewModelScope.launch {
-            while (isActive) {
-                delay(POLL_MS)
-                poll()
-                if (tab == PowerTab.Live) loadHistory()
-            }
+    }
+
+    /**
+     * Keep readings live (matches the web card) until cancelled. The screen scopes it to the
+     * STARTED lifecycle state, so nothing is polled while it is hidden or the app is backgrounded.
+     */
+    suspend fun pollWhileVisible() {
+        while (true) {
+            delay(POLL_MS)
+            poll()
+            if (tab == PowerTab.Live) loadHistory()
         }
     }
 
