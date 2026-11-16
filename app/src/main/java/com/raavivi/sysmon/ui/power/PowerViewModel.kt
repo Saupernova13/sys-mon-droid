@@ -60,6 +60,9 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
         private set
     var relayError by mutableStateOf<String?>(null)
 
+    /** False once an incremental history reply came back with a different bucket/source (older server). */
+    private var incrementalOk = true
+
     init {
         refresh()
     }
@@ -72,7 +75,7 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
         while (true) {
             delay(POLL_MS)
             poll()
-            if (tab == PowerTab.Live) loadHistory()
+            if (tab == PowerTab.Live) loadHistory(incremental = true)
         }
     }
 
@@ -172,15 +175,44 @@ class PowerViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private suspend fun loadHistory() {
+    /**
+     * Full fetch, or (the 5 s tick) only the newest buckets merged into what is held. A reply whose
+     * bucket width or source differs means an older server ignoring `bucket_s`: incremental is then
+     * off for this view model and every load is a full fetch.
+     */
+    private suspend fun loadHistory(incremental: Boolean = false) {
+        val held = history
+        val plug = selected
+        val range = range
         val now = System.currentTimeMillis() / 1000.0
+        val cutoff = range.seconds?.let { now - it }
+        if (incremental && incrementalOk && held != null && held.items.isNotEmpty()) {
+            val start = held.items.last().ts
+            val r = safeCall {
+                container.api.api.powerHistory(
+                    start = start,
+                    targetPoints = TARGET_POINTS,
+                    plug = plug.takeIf { it != ALL },
+                    bucketS = held.bucketSeconds.takeIf { held.source != "raw" && it > 0 },
+                )
+            }
+            if (r !is ApiResult.Ok) return
+            if (plug != selected || range != this.range) return
+            val merged = mergePowerHistory(held, r.value, start, cutoff)
+            if (merged != null) {
+                history = merged
+                return
+            }
+            incrementalOk = false
+        }
         val r = safeCall {
             container.api.api.powerHistory(
-                start = range.seconds?.let { now - it },
+                start = cutoff,
                 targetPoints = TARGET_POINTS,
-                plug = selected.takeIf { it != ALL },
+                plug = plug.takeIf { it != ALL },
             )
         }
+        if (plug != selected || range != this.range) return
         (r as? ApiResult.Ok)?.let { history = it.value }
     }
 

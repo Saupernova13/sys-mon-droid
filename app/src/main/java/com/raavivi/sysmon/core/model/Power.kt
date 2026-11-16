@@ -125,6 +125,8 @@ data class PowerHistoryItem(
 data class PowerHistoryResponse(
     val items: List<PowerHistoryItem> = emptyList(),
     val bucketSeconds: Long = 0,
+    /** `raw`, `hourly`, ...; empty on a server that does not say. */
+    val source: String = "",
     val tariff: Double = 0.0,
     val currency: String = "",
     val gaugeMaxW: Double = 0.0,
