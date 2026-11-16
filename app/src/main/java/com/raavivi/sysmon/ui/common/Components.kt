@@ -41,6 +41,7 @@ import com.raavivi.sysmon.ui.theme.SysMon
  * A titled section used for every dashboard / list screen. Classic renders a
  * rounded tonal card; Instrument renders a full-width band with a tinted header.
  * [state], when Caution or Warning, shows its label at the end of the Instrument band.
+ * [flush] drops the content's side padding so list rows ([SettingsRow]) span the card.
  */
 @Composable
 fun SectionCard(
@@ -49,6 +50,7 @@ fun SectionCard(
     accent: Color = MaterialTheme.colorScheme.primary,
     trailing: @Composable (() -> Unit)? = null,
     state: Severity? = null,
+    flush: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val palette = SysMon.palette
@@ -89,7 +91,10 @@ fun SectionCard(
                 shape = RoundedCornerShape(bottomStart = palette.cardRadius, bottomEnd = palette.cardRadius),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Column(
+                    if (flush) Modifier.padding(vertical = 4.dp)
+                    else Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
                     content()
                 }
             }
@@ -102,9 +107,9 @@ fun SectionCard(
         shape = RoundedCornerShape(palette.cardRadius),
         tonalElevation = 2.dp,
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(if (flush) Modifier.padding(top = 16.dp, bottom = 8.dp) else Modifier.padding(16.dp)) {
             Row(
-                Modifier.fillMaxWidth(),
+                if (flush) Modifier.fillMaxWidth().padding(horizontal = 16.dp) else Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -125,7 +130,7 @@ fun SectionCard(
                 }
                 trailing?.invoke()
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(if (flush) 4.dp else 12.dp))
             content()
         }
     }
