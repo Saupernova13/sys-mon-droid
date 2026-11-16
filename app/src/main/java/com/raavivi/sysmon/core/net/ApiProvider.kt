@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okhttp3.brotli.BrotliInterceptor
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
@@ -45,6 +46,9 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
             }
             c.proceed(out)
         }
+        // Asks for br,gzip and decodes both. Body-less responses (a WebSocket 101) pass untouched,
+        // and requests that already set Accept-Encoding are left alone.
+        .addInterceptor(BrotliInterceptor)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
