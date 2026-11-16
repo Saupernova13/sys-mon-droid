@@ -25,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
@@ -34,6 +37,12 @@ import kotlinx.coroutines.delay
 fun ProcessesScreen() {
     val vm = rememberContainerViewModel { ProcessesViewModel(it) }
     val isAdmin = LocalAppContainer.current.session.isAdmin
+
+    // Stream only while the screen is on top and the app is in the foreground.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { vm.streamWhileVisible() }
+    }
     val rows = vm.rows()
 
     vm.toast?.let { msg ->

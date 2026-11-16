@@ -76,4 +76,4 @@ fun Location.toFix(source: String, status: DeviceStatus): Fix = Fix(
     batteryPct = status.batteryPct,
     charging = status.charging,
     network = status.network,
-)
+).rounded()

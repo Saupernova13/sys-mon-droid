@@ -88,6 +88,10 @@ fun DashboardScreen(onOpenPower: () -> Unit = {}) {
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { vm.pollJellyfin() }
     }
+    // Same for the stats stream: nothing flows while the screen is hidden or the app is backgrounded.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { vm.streamWhileVisible() }
+    }
 
     Column(Modifier.fillMaxWidth()) {
         ScreenHeader(title = "Stats", actions = {

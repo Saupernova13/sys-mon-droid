@@ -15,7 +15,6 @@ import com.raavivi.sysmon.core.net.safeCall
 import com.raavivi.sysmon.ui.common.formatBytes
 import com.raavivi.sysmon.ui.common.formatPct1
 import com.raavivi.sysmon.ui.common.formatRate
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
@@ -38,17 +37,15 @@ class ProcessesViewModel(private val container: AppContainer) : ViewModel() {
         private set
     var toast by mutableStateOf<String?>(null)
 
-    private var streamJob: Job? = null
-
-    init { connect() }
-
-    private fun connect() {
-        streamJob?.cancel()
-        streamJob = viewModelScope.launch {
-            container.api.jsonWebSocketFlow("/ws/stream", SystemSnapshot.serializer())
-                .retryWhen { cause, _ -> error = cause.message; delay(2000); true }
-                .collect { snapshot = it; error = null }
-        }
+    /** Run the process stream until cancelled; the screen scopes it to the STARTED lifecycle state. */
+    suspend fun streamWhileVisible() {
+        container.api.jsonWebSocketFlow(
+            "/ws/stream",
+            SystemSnapshot.serializer(),
+            mapOf("view" to "procs", "z" to "1"),
+        )
+            .retryWhen { cause, _ -> error = cause.message; delay(2000); true }
+            .collect { snapshot = it; error = null }
     }
 
     fun select(c: ProcCategory) { category = c }
@@ -96,9 +93,4 @@ class ProcessesViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun cancelKill() { pendingKill = null }
-
-    override fun onCleared() {
-        streamJob?.cancel()
-        super.onCleared()
-    }
 }

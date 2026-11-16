@@ -12,8 +12,9 @@ import com.raavivi.sysmon.core.model.SystemSnapshot
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.jsonWebSocketFlow
 import com.raavivi.sysmon.core.net.safeCall
-import kotlinx.coroutines.Job
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 
@@ -46,40 +47,44 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
     val gpuHistory = mutableStateListOf<Float>()
     val diskHistory = mutableStateListOf<Float>()
 
-    private var streamJob: Job? = null
-
-    init {
-        hydrateHistory()
-        connect()
-    }
-
-    private fun hydrateHistory() {
-        viewModelScope.launch {
-            when (val r = safeCall { container.api.api.historyRecent(seconds = 600) }) {
-                is ApiResult.Ok -> {
-                    cpuHistory.clear(); ramHistory.clear(); gpuHistory.clear(); diskHistory.clear()
-                    r.value.items.takeLast(MAX_POINTS).forEach { item ->
-                        cpuHistory.add((item.cpu ?: 0.0).toFloat())
-                        ramHistory.add((item.ram ?: 0.0).toFloat())
-                        gpuHistory.add((item.gpu ?: 0.0).toFloat())
-                        diskHistory.add((item.disk ?: 0.0).toFloat())
-                    }
+    private suspend fun hydrateHistory() {
+        when (val r = safeCall { container.api.api.historyRecent(seconds = 600) }) {
+            is ApiResult.Ok -> {
+                cpuHistory.clear(); ramHistory.clear(); gpuHistory.clear(); diskHistory.clear()
+                r.value.items.takeLast(MAX_POINTS).forEach { item ->
+                    cpuHistory.add((item.cpu ?: 0.0).toFloat())
+                    ramHistory.add((item.ram ?: 0.0).toFloat())
+                    gpuHistory.add((item.gpu ?: 0.0).toFloat())
+                    diskHistory.add((item.disk ?: 0.0).toFloat())
                 }
-                is ApiResult.Err -> { /* charts will fill from the live stream */ }
             }
+            is ApiResult.Err -> { /* charts will fill from the live stream */ }
         }
     }
 
-    private fun connect() {
-        streamJob?.cancel()
-        connection = ConnState.Connecting
-        streamJob = viewModelScope.launch {
-            container.api.jsonWebSocketFlow("/ws/stream", SystemSnapshot.serializer())
+    /**
+     * Run the snapshot stream until cancelled. Run it only while the screen is visible (the
+     * caller scopes it to the STARTED lifecycle state) and it also stops while [paused]. Each
+     * (re)start re-hydrates the charts first so they have no hole for the time it was off.
+     */
+    suspend fun streamWhileVisible() {
+        snapshotFlow { paused }.collectLatest { p ->
+            if (p) {
+                connection = ConnState.Paused
+                return@collectLatest
+            }
+            connection = ConnState.Connecting
+            hydrateHistory()
+            container.api.jsonWebSocketFlow(
+                "/ws/stream",
+                SystemSnapshot.serializer(),
+                mapOf("view" to "dash", "z" to "1"),
+            )
                 .retryWhen { cause, _ ->
                     connection = ConnState.Error
                     error = cause.message
                     delay(2000)
-                    !paused
+                    true
                 }
                 .collect { onSnapshot(it) }
         }
@@ -136,12 +141,6 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
 
     fun togglePause() {
         paused = !paused
-        if (paused) {
-            streamJob?.cancel()
-            connection = ConnState.Paused
-        } else {
-            connect()
-        }
     }
 
     fun refreshOnce() {
@@ -161,11 +160,6 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                 is ApiResult.Err -> "Backup failed: ${r.message}"
             }
         }
-    }
-
-    override fun onCleared() {
-        streamJob?.cancel()
-        super.onCleared()
     }
 
     private companion object {

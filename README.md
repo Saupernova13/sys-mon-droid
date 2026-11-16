@@ -18,7 +18,8 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   ticked meters and unsmoothed traces.
 - **Live dashboard** — CPU (overall + per-core bars + freq/temp), memory (+ swap),
   GPU/iGPU (usage + VRAM + temp), disks (usage + I/O), streamed over
-  `WS /ws/stream` (~400 ms). Pause/resume, one-shot refresh. Readings are graded
+  `WS /ws/stream` (~400 ms, slim and deflate-compressed; only while the screen is
+  visible, charts re-hydrate on return). Pause/resume, one-shot refresh. Readings are graded
   with sys-mon's severity bands in both themes: load (CPU/GPU) tops out at
   caution, health (temperatures, capacity, swap) runs to warning. A reading the
   host could not take shows as a dash, not zero.
@@ -42,7 +43,8 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   a detail screen with a device list (live draw + relay switch per plug) and
   three tabs:
   - **Live** — usage chart (1h / 6h / 24h / 7d / 30d / 90d / 6m / 12m / All,
-    long ranges served from the host's hourly rollup), cost breakdown and projections,
+    long ranges served from the host's hourly rollup; polled every 5 s only while the
+    screen is visible, fetching just the newest buckets), cost breakdown and projections,
     electrical quality (voltage / power factor / reactive), and device info.
   - **Calendar** — a month grid of recorded use, each day showing its cost and a
     24-hour sparkline. Every cell shares one vertical scale so days are
@@ -105,7 +107,7 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   server's command list), rename, report interval and remove. The map is a built-in
   slippy map over the server's tile proxy (drag, pinch, +/-, Fit all), darkened to
   match the theme, with an accuracy circle per device and the selected device's 24 h /
-  7 d / 30 d trail. Add device shows the pairing code, its expiry, the link and a QR,
+  7 d / 30 d trail (after the first load only new points are fetched). Add device shows the pairing code, its expiry, the link and a QR,
   and closes when the phone pairs. Polls every 5 s while a command is pending or the
   pair dialog is open, otherwise every 30 s, only while the screen is visible.
 - **This phone (built-in tracker)** — the Find Me tracker is part of this app, so there is
@@ -122,7 +124,7 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   - Always visible: while sharing, a persistent "Sharing location with <server>"
     notification (Report now, Pause) stays up. Nothing is hidden.
   - Fixes are queued on the phone (file, capped at 1000) and uploaded in chunks of at
-    most 200; a failed upload retries after 30 s, 1, 2, 5, then 10 minutes and fixes are
+    most 200 (rounded, and gzipped once the server advertises it); a failed upload retries after 30 s, 1, 2, 5, then 10 minutes and fixes are
     never dropped. If the server drops the phone the app stops and asks to pair again.
 
   | Permission | Why |
@@ -143,7 +145,7 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   emulator (colours, scrollback), a command input + control-key bar (Esc/Tab/^C/
   arrows), auto-resize, and session resume across reconnects. Titled with the
   host's shell; UTF-8 split across frames decodes correctly.
-- **Screen share** — live JPEG frames over `WS /ws/screen` with absolute
+- **Screen share** — live JPEG frames over `WS /ws/screen` (open only while the screen is visible) with absolute
   touch→cursor mapping (tap = click, hold = right-click, drag = move/drag), a
   scroll mode, and a keyboard bar that types to the PC. The Windows/Super key is
   named for the host; Win+V and Win+D appear on Windows hosts only.

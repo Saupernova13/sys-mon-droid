@@ -160,6 +160,8 @@ interface ApiService {
         @Query("target_points") targetPoints: Int = 600,
         /** Plug id to filter to; null/"all" means the aggregate. */
         @Query("plug") plug: String? = null,
+        /** Forces the bucket width (epoch-aligned); an older server ignores it. */
+        @Query("bucket_s") bucketS: Long? = null,
     ): PowerHistoryResponse
 
     /** Month rollup for the calendar view; `month` is `YYYY-MM` (blank = now),
@@ -362,6 +364,8 @@ interface ApiService {
         @Query("start") start: Double? = null,
         @Query("end") end: Double? = null,
         @Query("limit") limit: Int = 2000,
+        /** 1 asks for rounded coordinates and whole-number accuracy/altitude/bearing (smaller). */
+        @Query("lean") lean: Int? = null,
     ): FindMeHistoryResponse
 
     @POST("api/findme/devices/{id}/locate")

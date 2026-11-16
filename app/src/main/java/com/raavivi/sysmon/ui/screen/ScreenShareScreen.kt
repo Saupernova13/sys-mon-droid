@@ -45,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.ui.theme.SysMon
@@ -55,6 +56,12 @@ import kotlin.math.min
 @Composable
 fun ScreenShareScreen(onBack: () -> Unit) {
     val vm = rememberContainerViewModel { ScreenShareViewModel(it) }
+
+    // Stream only while the screen is on top and the app is in the foreground.
+    LifecycleStartEffect(vm) {
+        vm.connect()
+        onStopOrDispose { vm.disconnect() }
+    }
     var scrollMode by remember { mutableStateOf(false) }
     var keyboardOpen by remember { mutableStateOf(false) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }

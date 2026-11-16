@@ -31,7 +31,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.model.PowerReading
@@ -54,6 +57,12 @@ import kotlinx.coroutines.delay
 @Composable
 fun PowerScreen(onBack: () -> Unit, initialTab: String? = null) {
     val vm = rememberContainerViewModel { PowerViewModel(it) }
+
+    // Poll only while the screen is on top and the app is in the foreground.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { vm.pollWhileVisible() }
+    }
 
     // Deep links (e.g. More -> Plug schedules) land on a specific tab. Applied
     // once so it never fights the user's own tab changes on recomposition.

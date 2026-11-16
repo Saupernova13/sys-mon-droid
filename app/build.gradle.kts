@@ -14,8 +14,8 @@ android {
         applicationId = "com.raavivi.sysmon"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.12.1"
+        versionCode = 16
+        versionName = "0.13.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.brotli)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)

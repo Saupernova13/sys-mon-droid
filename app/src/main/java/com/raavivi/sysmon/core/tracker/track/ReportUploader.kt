@@ -53,7 +53,6 @@ class ReportUploader(
     suspend fun flush(force: Boolean) = mutex.withLock {
         if (!force && clock() < nextAttemptAt) return@withLock
         val chunks = queue.chunks().ifEmpty { listOf(emptyList()) }
-        val heartbeat = queue.size.value == 0
         for (chunk in chunks) {
             val status = device.read()
             val body = ReportBody(
@@ -79,12 +78,6 @@ class ReportUploader(
                     handleFailure(r)
                     return@withLock
                 }
-            }
-        }
-        if (heartbeat) {
-            val polled = client.commands()
-            if (polled is DeviceResult.Ok && polled.value.commands.isNotEmpty()) {
-                onCommands(polled.value.commands)
             }
         }
     }
