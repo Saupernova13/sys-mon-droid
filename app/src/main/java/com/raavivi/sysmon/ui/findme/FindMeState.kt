@@ -2,6 +2,7 @@ package com.raavivi.sysmon.ui.findme
 
 import com.raavivi.sysmon.core.model.FindMeCommand
 import com.raavivi.sysmon.core.model.FindMeDevice
+import com.raavivi.sysmon.core.model.FindMeFix
 import com.raavivi.sysmon.ui.common.Severity
 import com.raavivi.sysmon.ui.common.worst
 import java.time.Instant
@@ -211,4 +212,13 @@ fun streetViewLinks(lat: Double, lon: Double): StreetViewLinks {
         google = "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=$la,$lo",
         mapillary = "https://www.mapillary.com/app/?lat=$la&lng=$lo&z=17",
     )
+}
+
+/**
+ * Appends the fixes of an incremental trail fetch (`start` = newest ts held) that are newer than
+ * what is held, then drops fixes older than [cutoff] (now minus the range). Oldest first.
+ */
+fun mergeTrail(held: List<FindMeFix>, fetched: List<FindMeFix>, cutoff: Double): List<FindMeFix> {
+    val newest = held.maxOfOrNull { it.ts } ?: Double.NEGATIVE_INFINITY
+    return (held + fetched.filter { it.ts > newest }).filter { it.ts >= cutoff }
 }

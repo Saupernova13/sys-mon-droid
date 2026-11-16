@@ -362,6 +362,8 @@ interface ApiService {
         @Query("start") start: Double? = null,
         @Query("end") end: Double? = null,
         @Query("limit") limit: Int = 2000,
+        /** 1 asks for rounded coordinates and whole-number accuracy/altitude/bearing (smaller). */
+        @Query("lean") lean: Int? = null,
     ): FindMeHistoryResponse
 
     @POST("api/findme/devices/{id}/locate")

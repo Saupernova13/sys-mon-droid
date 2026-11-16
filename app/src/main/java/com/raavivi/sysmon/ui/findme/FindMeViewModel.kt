@@ -82,6 +82,9 @@ class FindMeViewModel(private val container: AppContainer) : ViewModel() {
     private val geocodeCache = HashMap<String, String?>()
     private var pairKnownIds: Set<String> = emptySet()
     private var trailKey: Triple<String?, TrailRange, Double?>? = null
+
+    /** Which device and range [trail] holds; it only grows incrementally while this matches. */
+    private var trailHeld: Pair<String, TrailRange>? = null
     private var addressKey: String? = null
 
     // This phone (built-in tracker) --------------------------------------------
@@ -244,8 +247,10 @@ class FindMeViewModel(private val container: AppContainer) : ViewModel() {
             trailKey = key
             if (dev == null) {
                 trail = emptyList()
+                trailHeld = null
             } else {
-                loadTrail(dev.id, range)
+                // Same device and range with a trail in hand: only the newest fix changed.
+                loadTrail(dev.id, range, incremental = trail.isNotEmpty() && trailHeld == dev.id to range)
             }
         }
         val fix = dev?.lastFix
@@ -271,12 +276,20 @@ class FindMeViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun loadTrail(id: String, range: TrailRange) {
+    private fun loadTrail(id: String, range: TrailRange, incremental: Boolean) {
         viewModelScope.launch {
             val now = System.currentTimeMillis() / 1000.0
-            val r = safeCall { container.api.api.findMeHistory(id, start = now - range.secs, end = now) }
+            val newest = if (incremental) trail.maxOfOrNull { it.ts } else null
+            val r = safeCall {
+                container.api.api.findMeHistory(id, start = newest ?: (now - range.secs), end = now, lean = 1)
+            }
             if (r is ApiResult.Ok && selectedId == id && this@FindMeViewModel.range == range) {
-                trail = r.value.fixes
+                trail = if (newest != null && trailHeld == id to range) {
+                    mergeTrail(trail, r.value.fixes, now - range.secs)
+                } else {
+                    r.value.fixes
+                }
+                trailHeld = id to range
             }
         }
     }
