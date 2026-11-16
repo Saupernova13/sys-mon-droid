@@ -33,6 +33,9 @@ object Routes {
     const val POWER_SCHEDULES = "power?tab=schedules"
     const val SETTINGS = "settings"
     const val PLUG_ALERTS = "plug-alerts"
+    const val NOTIFICATIONS = "notifications"
+    const val LOGS = "logs"
+    const val JELLYFIN = "jellyfin-settings"
     const val HEALTH = "health"
     const val UPDATE = "app-update"
 }
