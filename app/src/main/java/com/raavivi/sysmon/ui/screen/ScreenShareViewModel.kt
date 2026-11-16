@@ -33,20 +33,20 @@ class ScreenShareViewModel(private val container: AppContainer) : ViewModel() {
 
     private var ws: WebSocket? = null
 
-    init { connect() }
-
+    /** Open the socket (the screen calls this when it becomes visible, and from the reconnect button). */
     fun connect() {
         ws?.cancel()
         state = ScreenState.Connecting
         ws = container.api.openWebSocket("/ws/screen", emptyMap(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                post { state = ScreenState.Connected }
+                post { if (webSocket === ws) state = ScreenState.Connected }
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 val arr = bytes.toByteArray()
                 val bmp = runCatching { BitmapFactory.decodeByteArray(arr, 0, arr.size) }.getOrNull() ?: return
                 post {
+                    if (webSocket !== ws) return@post
                     frameWidth = bmp.width
                     frameHeight = bmp.height
                     frame = bmp.asImageBitmap()
@@ -55,14 +55,21 @@ class ScreenShareViewModel(private val container: AppContainer) : ViewModel() {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                post { state = ScreenState.Disconnected }
+                post { if (webSocket === ws) state = ScreenState.Disconnected }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 webSocket.close(code, null)
-                post { state = ScreenState.Disconnected }
+                post { if (webSocket === ws) state = ScreenState.Disconnected }
             }
         })
+    }
+
+    /** Close the socket normally (the screen calls this when it is no longer visible). */
+    fun disconnect() {
+        ws?.close(1000, null)
+        ws = null
+        state = ScreenState.Disconnected
     }
 
     private fun send(event: ScreenEvent) {
