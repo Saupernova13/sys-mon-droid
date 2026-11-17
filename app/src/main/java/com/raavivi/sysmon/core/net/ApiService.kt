@@ -86,6 +86,7 @@ import com.raavivi.sysmon.core.model.WaMessagesResponse
 import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
+import com.raavivi.sysmon.core.model.WaTimelineResponse
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.http.Body
@@ -391,11 +392,16 @@ interface ApiService {
     @GET("api/whatsapp/chats")
     suspend fun waChats(@Query("limit") limit: Int = 100): WaChatsResponse
 
+    @GET("api/whatsapp/timeline")
+    suspend fun waTimeline(@Query("chat") chat: String): WaTimelineResponse
+
     @GET("api/whatsapp/messages")
     suspend fun waMessages(
         @Query("chat") chat: String,
         @Query("limit") limit: Int = 50,
         @Query("before") before: String? = null,
+        @Query("after") after: String? = null,
+        @Query("asc") asc: Boolean? = null,
     ): WaMessagesResponse
 
     @GET("api/whatsapp/contacts")

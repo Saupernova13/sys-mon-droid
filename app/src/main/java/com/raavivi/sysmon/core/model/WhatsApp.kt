@@ -35,6 +35,13 @@ data class WaChatsResponse(val chats: List<JsonObject> = emptyList())
 @Serializable
 data class WaMessagesResponse(val messages: List<JsonObject> = emptyList())
 
+/** One calendar day (server local time) that has messages; `firstTs` is its first message in unix seconds. */
+@Serializable
+data class WaTimelineDay(val day: String, val count: Int, val firstTs: Long)
+
+@Serializable
+data class WaTimelineResponse(val days: List<WaTimelineDay> = emptyList())
+
 @Serializable
 data class WaContactsResponse(val contacts: List<JsonObject> = emptyList())
 
