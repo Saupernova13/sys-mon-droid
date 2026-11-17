@@ -198,9 +198,9 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun loadOlder() {
         val jid = currentJid ?: return
-        val oldest = messages.firstOrNull()?.id ?: return
+        val oldest = messages.firstOrNull()?.takeIf { it.ts > 0 }?.ts ?: return
         viewModelScope.launch {
-            val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50, before = oldest) }
+            val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50, before = waBeforeCursor(oldest)) }
             if (r is ApiResult.Ok) {
                 val older = r.value.messages.map { it.toWaMessage() }
                 val merged = (older + messages).distinctBy { it.id }.sortedBy { it.ts }
