@@ -37,9 +37,12 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
             } else {
                 req
             }
-            // send-media answers only after wacli has sent the file, which can
-            // outlast the normal read timeout for a large upload.
-            val c = if (req.url.encodedPath.endsWith("/whatsapp/send-media")) {
+            // send-media / send-voice answer only after wacli has sent the file, and
+            // latest after it has backfilled media; each can outlast the normal read timeout.
+            val path = req.url.encodedPath
+            val c = if (path.endsWith("/whatsapp/send-media") || path.endsWith("/whatsapp/send-voice") ||
+                path.endsWith("/whatsapp/latest")
+            ) {
                 chain.withReadTimeout(5, TimeUnit.MINUTES).withWriteTimeout(5, TimeUnit.MINUTES)
             } else {
                 chain

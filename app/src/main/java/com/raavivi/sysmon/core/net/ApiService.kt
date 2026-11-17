@@ -13,6 +13,7 @@ import com.raavivi.sysmon.core.model.WatchdogStatus
 import com.raavivi.sysmon.core.model.WatchdogTarget
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
+import com.raavivi.sysmon.core.model.WaLatestReq
 import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.DrivesResponse
 import com.raavivi.sysmon.core.model.Favorite
@@ -414,6 +415,10 @@ interface ApiService {
         @Query("caption") caption: String,
         @Body body: RequestBody,
     ): OkResponse
+
+    /** Downloads missing media for the chat's newest messages; can take tens of seconds. */
+    @POST("api/whatsapp/latest")
+    suspend fun waLatest(@Body body: WaLatestReq): OkResponse
 
     @POST("api/whatsapp/pin")
     suspend fun waPin(@Body body: WaPinReq): OkResponse

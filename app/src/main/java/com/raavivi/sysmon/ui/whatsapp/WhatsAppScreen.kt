@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -39,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -162,6 +165,29 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
 @Composable
 private fun ConversationView(vm: WhatsAppViewModel) {
     var viewing by remember { mutableStateOf<WaMessage?>(null) }
+    val listState = rememberLazyListState()
+
+    // Open (and send / jump) at the newest message.
+    LaunchedEffect(vm.scrollTick) {
+        val last = vm.messages.lastIndex
+        if (last >= 0) listState.scrollToItem(last)
+    }
+    // A live message follows the bottom only if the user was already there (or sent it).
+    var seenCount by remember { mutableIntStateOf(vm.messages.size) }
+    var seenNewest by remember { mutableStateOf(vm.messages.lastOrNull()?.id) }
+    val newestId = vm.messages.lastOrNull()?.id
+    LaunchedEffect(newestId, vm.messages.size) {
+        val count = vm.messages.size
+        if (newestId != seenNewest) {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val nearBottom = lastVisible >= seenCount - 2
+            if (count > seenCount && (nearBottom || vm.messages.lastOrNull()?.fromMe == true)) {
+                listState.animateScrollToItem(count - 1)
+            }
+        }
+        seenCount = count
+        seenNewest = newestId
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -190,13 +216,25 @@ private fun ConversationView(vm: WhatsAppViewModel) {
             if (vm.loadingMessages && vm.messages.isEmpty()) {
                 LoadingBox()
             } else {
+                // Stable keys make the list keep its position when older messages are prepended.
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(vm.messages, key = { it.id.ifBlank { "${it.ts}-${it.text.hashCode()}" } }) { msg ->
                         MessageBubble(msg, vm, onOpenImage = { viewing = it })
                     }
+                }
+            }
+            SmallFloatingActionButton(
+                onClick = { vm.jumpToLatest() },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            ) {
+                if (vm.jumping) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
                 }
             }
         }

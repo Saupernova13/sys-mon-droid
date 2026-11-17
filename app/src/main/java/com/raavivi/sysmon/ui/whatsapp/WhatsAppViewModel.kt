@@ -3,6 +3,7 @@ package com.raavivi.sysmon.ui.whatsapp
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -10,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaLatestReq
 import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
@@ -60,6 +62,14 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     var loadingMessages by mutableStateOf(false)
         private set
     var sending by mutableStateOf(false)
+        private set
+
+    /** True while "Jump to latest" is refreshing the chat and fetching its media. */
+    var jumping by mutableStateOf(false)
+        private set
+
+    /** Bumped whenever the conversation should scroll to its newest message (open, send, jump). */
+    var scrollTick by mutableIntStateOf(0)
         private set
 
     /** Display name of the file currently being uploaded, or null when idle. */
@@ -188,11 +198,39 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     private fun loadMessages(jid: String) {
         loadingMessages = true
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50) }) {
-                is ApiResult.Ok -> messages = r.value.messages.map { it.toWaMessage() }.sortedBy { it.ts }
-                is ApiResult.Err -> { error = r.message }
-            }
+            if (fetchNewest(jid)) scrollTick++
             loadingMessages = false
+        }
+    }
+
+    /** Replace the open list with the chat's newest page; false on failure or if the chat changed meanwhile. */
+    private suspend fun fetchNewest(jid: String): Boolean {
+        val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50) }
+        if (currentJid != jid) return false
+        return when (r) {
+            is ApiResult.Ok -> {
+                messages = r.value.messages.map { it.toWaMessage() }.sortedBy { it.ts }
+                true
+            }
+            is ApiResult.Err -> { error = r.message; false }
+        }
+    }
+
+    /** Reload the newest page, have the server fetch missing media, reload again, and scroll down. */
+    fun jumpToLatest() {
+        val jid = currentJid ?: return
+        if (jumping) return
+        jumping = true
+        viewModelScope.launch {
+            try {
+                if (fetchNewest(jid)) scrollTick++
+                if (currentJid != jid) return@launch
+                val r = safeCall { container.api.api.waLatest(WaLatestReq(chat = jid)) }
+                if (r is ApiResult.Err && currentJid == jid) message = "Latest failed: ${r.message}"
+                if (fetchNewest(jid)) scrollTick++
+            } finally {
+                jumping = false
+            }
         }
     }
 
