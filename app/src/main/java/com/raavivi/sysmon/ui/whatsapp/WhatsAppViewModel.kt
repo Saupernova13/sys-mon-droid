@@ -79,7 +79,15 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     var jumpingFirst by mutableStateOf(false)
         private set
 
-    /** Bumped when the conversation should scroll to its first item (jump to first). */
+    /** True while a scrubber / go-to-date jump is fetching its page. */
+    var jumpingDate by mutableStateOf(false)
+        private set
+
+    /** The open chat's per-day layout for the scrubber; null while loading, on failure, or with under two days. */
+    var timeline by mutableStateOf<WaTimeline?>(null)
+        private set
+
+    /** Bumped when the conversation should scroll to its first item (jump to first / date). */
     var topTick by mutableIntStateOf(0)
         private set
 
@@ -192,7 +200,14 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         resetWindow()
         voice.release()
         recorder.cancel()
+        timeline = null
         loadMessages(jid)
+        viewModelScope.launch {
+            val r = safeCall { container.api.api.waTimeline(chat = jid) }
+            if (currentJid != jid) return@launch
+            // A failure leaves the timeline null: the scrubber and date picker just stay hidden.
+            if (r is ApiResult.Ok) timeline = buildTimeline(r.value.days)
+        }
     }
 
     /** Whether the open chat has unread messages (enables "Mark as read"). */
@@ -239,6 +254,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         recorder.cancel()
         currentJid = null
         messages = emptyList()
+        timeline = null
         resetWindow()
     }
 
@@ -250,6 +266,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         loadingOlder = false
         loadingNewer = false
         jumpingFirst = false
+        jumpingDate = false
     }
 
     private fun loadMessages(jid: String) {
@@ -335,14 +352,48 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     /**
+     * Replace the window with the page starting at the day whose first message is [ts] (one request)
+     * and scroll to its top. Used by the timeline scrubber and the go-to-date picker.
+     */
+    fun jumpToTs(ts: Long) {
+        val jid = currentJid ?: return
+        if (jumpingDate) return
+        jumpingDate = true
+        viewModelScope.launch {
+            try {
+                val r = safeCall {
+                    container.api.api.waMessages(
+                        chat = jid, limit = WA_PAGE_LIMIT, after = waInclusiveAfter(ts.toDouble()), asc = true,
+                    )
+                }
+                if (currentJid != jid) return@launch
+                when (r) {
+                    is ApiResult.Ok -> {
+                        val page = r.value.messages.map { it.toWaMessage() }
+                        windowEpoch++
+                        messages = page.sortedBy { it.ts }
+                        atLatest = page.size < WA_PAGE_LIMIT
+                        reachedFirst = timeline?.let { ts <= it.first.firstTs } ?: false
+                        topTick++
+                    }
+                    is ApiResult.Err -> message = "Jump failed: ${r.message}"
+                }
+            } finally {
+                jumpingDate = false
+            }
+        }
+    }
+
+    /**
      * Prepend the page before the oldest loaded message. The cursor is inclusive so rows sharing the
      * boundary second are not skipped; if that adds nothing, one strict retry guards against a page
-     * made entirely of already-loaded rows.
+     * made entirely of already-loaded rows. [silent] (the automatic scroll-to-top path) never toasts
+     * "No older messages".
      */
-    fun loadOlder() {
+    fun loadOlder(silent: Boolean = false) {
         val jid = currentJid ?: return
         if (loadingOlder) return
-        if (reachedFirst) { message = "No older messages"; return }
+        if (reachedFirst) { if (!silent) message = "No older messages"; return }
         val oldest = messages.firstOrNull()?.takeIf { it.ts > 0 }?.ts ?: return
         val epoch = windowEpoch
         loadingOlder = true
@@ -367,7 +418,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                     if (outcome == PageOutcome.STALLED) outcome = PageOutcome.END
                     if (outcome == PageOutcome.END) {
                         reachedFirst = true
-                        if (added == 0) message = "No older messages"
+                        if (added == 0 && !silent) message = "No older messages"
                     }
                     return@launch
                 }

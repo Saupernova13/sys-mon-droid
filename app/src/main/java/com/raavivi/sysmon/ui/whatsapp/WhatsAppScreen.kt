@@ -16,7 +16,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,7 +37,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
@@ -44,6 +48,11 @@ import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,10 +71,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.snapshotFlow
+import kotlin.math.roundToInt
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
@@ -85,6 +111,7 @@ import com.raavivi.sysmon.ui.common.formatTime
 import com.raavivi.sysmon.ui.common.relativeTime
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 @Composable
 fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
@@ -221,6 +248,27 @@ private fun ConversationView(vm: WhatsAppViewModel) {
     LaunchedEffect(nearEnd, vm.atLatest, vm.messages.size) {
         if (nearEnd && !vm.atLatest) vm.loadNewer()
     }
+    // Reading position on the scrubber: the day of the message at the top of the list.
+    val readingPos by remember {
+        derivedStateOf {
+            val tl = vm.timeline
+            val ts = vm.messages.getOrNull(listState.firstVisibleItemIndex)?.ts
+            if (tl == null || ts == null) 0.0 else posOfTs(tl, ts.toLong())
+        }
+    }
+    // Reaching the top pages older messages in on its own, but only after the user has scrolled:
+    // the initial open-at-bottom (and a jump) must not trigger it.
+    var userScrolled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { listState.isScrollInProgress }.first { it }
+        userScrolled = true
+    }
+    LaunchedEffect(userScrolled) {
+        if (!userScrolled) return@LaunchedEffect
+        snapshotFlow { (listState.firstVisibleItemIndex <= 2) to vm.messages.size }
+            .collect { (atTop, size) -> if (atTop && size > 0) vm.loadOlder(silent = true) }
+    }
+    var showDatePicker by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -232,7 +280,9 @@ private fun ConversationView(vm: WhatsAppViewModel) {
             IconButton(onClick = { vm.markRead() }, enabled = vm.currentUnread > 0) {
                 Icon(Icons.Filled.DoneAll, contentDescription = "Mark as read")
             }
-            IconButton(onClick = { vm.loadOlder() }) { Icon(Icons.Filled.ExpandLess, contentDescription = "Load older") }
+            IconButton(onClick = { showDatePicker = true }, enabled = vm.timeline != null) {
+                Icon(Icons.Filled.CalendarMonth, contentDescription = "Go to date")
+            }
             IconButton(onClick = { vm.togglePin() }) {
                 Icon(
                     Icons.Filled.PushPin,
@@ -252,13 +302,26 @@ private fun ConversationView(vm: WhatsAppViewModel) {
                 // Stable keys make the list keep its position when older messages are prepended.
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                    // Leave room on the right for the scrubber track.
+                    contentPadding = PaddingValues(
+                        start = 8.dp, end = if (vm.timeline != null) 36.dp else 8.dp, top = 8.dp, bottom = 8.dp,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(vm.messages, key = { it.id.ifBlank { "${it.ts}-${it.text.hashCode()}" } }) { msg ->
                         MessageBubble(msg, vm, onOpenImage = { viewing = it })
                     }
                 }
+            }
+            vm.timeline?.let { tl ->
+                // Ends above the FAB column below so those stay reachable.
+                TimelineScrubber(
+                    tl = tl,
+                    readingPos = readingPos,
+                    busy = vm.jumpingDate,
+                    onJump = { vm.jumpToTs(it) },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, bottom = 116.dp),
+                )
             }
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(12.dp),
@@ -308,6 +371,177 @@ private fun ConversationView(vm: WhatsAppViewModel) {
     }
 
     viewing?.let { ImageViewer(it, vm, onClose = { viewing = null }) }
+
+    val tl = vm.timeline
+    if (showDatePicker && tl != null) {
+        GoToDateDialog(
+            tl = tl,
+            initialDay = dayAt(tl, readingPos).day,
+            onPick = { vm.jumpToTs(it); showDatePicker = false },
+            onDismiss = { showDatePicker = false },
+        )
+    }
+}
+
+/**
+ * Google-Photos-style scrubber: year labels, a thumb following the reading position, and a date
+ * bubble while dragging. A drag (or tap) jumps to the chosen day on release; the thumb ignores
+ * scroll while the finger is down. The root is wider than the track so the bubble fits to its left;
+ * only the track itself takes touches.
+ */
+@Composable
+private fun TimelineScrubber(
+    tl: WaTimeline,
+    readingPos: Double,
+    busy: Boolean,
+    onJump: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    var heightPx by remember { mutableIntStateOf(0) }
+    var dragFrac by remember { mutableStateOf<Double?>(null) }
+    val frac = dragFrac ?: readingPos
+    val seg = dayAt(tl, frac)
+    val currentOnJump by rememberUpdatedState(onJump)
+
+    // Year labels at their track position, dropping any too close to the previous one.
+    val yearLabels = remember(tl, heightPx) {
+        val minGap = with(density) { 14.dp.toPx() }
+        var lastY = -minGap
+        tl.years.mapNotNull { y ->
+            val py = (y.pos * heightPx).toFloat()
+            if (py - lastY < minGap) null else { lastY = py; y.year to py }
+        }
+    }
+    val thumbH = 6.dp
+    val thumbHPx = with(density) { thumbH.toPx() }
+    val thumbY = (frac * heightPx).toFloat().coerceIn(0f, (heightPx - thumbHPx).coerceAtLeast(0f))
+
+    Box(modifier.width(160.dp).fillMaxHeight().onSizeChanged { heightPx = it.height }) {
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .width(28.dp)
+                .fillMaxHeight()
+                .semantics {
+                    contentDescription = "Timeline"
+                    stateDescription = fmtDay(seg.day)
+                }
+                .pointerInput(tl) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        fun fracOf(y: Float): Double =
+                            if (size.height > 0) (y / size.height).toDouble() else 0.0
+                        dragFrac = fracOf(down.position.y)
+                        down.consume()
+                        val completed = drag(down.id) { change ->
+                            dragFrac = fracOf(change.position.y)
+                            change.consume()
+                        }
+                        val end = dragFrac
+                        dragFrac = null
+                        if (completed && end != null) currentOnJump(dayAt(tl, end).firstTs)
+                    }
+                },
+        ) {
+            // Rail and thumb hug the right edge so the year labels to their left stay clear.
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 6.dp)
+                    .width(2.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.outlineVariant),
+            )
+            for ((year, py) in yearLabels) {
+                Text(
+                    year,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.offset { IntOffset(0, py.roundToInt()) },
+                )
+            }
+            if (busy) {
+                CircularProgressIndicator(
+                    Modifier.align(Alignment.TopEnd).offset { IntOffset(0, thumbY.roundToInt()) }.size(14.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset { IntOffset(0, thumbY.roundToInt()) }
+                        .width(14.dp)
+                        .height(thumbH)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+        }
+        if (dragFrac != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                shape = RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 8.dp),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 32.dp)
+                    .offset { IntOffset(0, (thumbY - with(density) { 8.dp.toPx() }).coerceAtLeast(0f).roundToInt()) },
+            ) {
+                Text(
+                    fmtDay(seg.day),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Date picker limited to days that have messages; picking one jumps to that day's first message. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GoToDateDialog(tl: WaTimeline, initialDay: String, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
+    val present = remember(tl) { tl.segments.mapTo(HashSet()) { it.day } }
+    val selectable = remember(tl) {
+        object : SelectableDates {
+            // Picker millis are UTC midnight, so the UTC date is the calendar day the user tapped.
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate().toString() in present
+
+            override fun isSelectableYear(year: Int): Boolean =
+                year in tl.first.day.take(4).toInt()..tl.last.day.take(4).toInt()
+        }
+    }
+    val initialMillis = remember(initialDay) {
+        runCatching { LocalDate.parse(initialDay).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
+    }
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = initialMillis,
+        initialDisplayedMonthMillis = initialMillis,
+        yearRange = tl.first.day.take(4).toInt()..tl.last.day.take(4).toInt(),
+        selectableDates = selectable,
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val ymd = state.selectedDateMillis
+                        ?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }
+                    val target = ymd?.let { firstDayOnOrAfter(tl, it) }
+                    if (target != null) onPick(target.firstTs) else onDismiss()
+                },
+                enabled = state.selectedDateMillis != null,
+            ) { Text("Go") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    ) {
+        DatePicker(state = state)
+    }
 }
 
 @Composable
