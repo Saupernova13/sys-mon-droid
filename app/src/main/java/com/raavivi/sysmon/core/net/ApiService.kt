@@ -420,6 +420,14 @@ interface ApiService {
     @POST("api/whatsapp/latest")
     suspend fun waLatest(@Body body: WaLatestReq): OkResponse
 
+    /** Raw request body = audio bytes in any container; the server transcodes to OGG/Opus. */
+    @POST("api/whatsapp/send-voice")
+    suspend fun waSendVoice(
+        @Query("to") to: String,
+        @Query("reply_to") replyTo: String?,
+        @Body body: RequestBody,
+    ): OkResponse
+
     @POST("api/whatsapp/pin")
     suspend fun waPin(@Body body: WaPinReq): OkResponse
 

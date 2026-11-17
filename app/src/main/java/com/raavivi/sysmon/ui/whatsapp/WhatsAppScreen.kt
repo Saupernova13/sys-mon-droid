@@ -1,5 +1,7 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,9 +31,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
@@ -49,6 +53,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
@@ -81,6 +87,9 @@ import kotlinx.coroutines.delay
 fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
     val vm = rememberContainerViewModel { WhatsAppViewModel(it) }
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(2500); vm.message = null } }
+
+    // Leaving the screen (tab switch) must not leave the microphone open.
+    DisposableEffect(vm) { onDispose { vm.recorder.cancel() } }
 
     // System back from a conversation returns to the chat list, not out of the tab.
     BackHandler(enabled = vm.currentJid != null) { vm.closeChat() }
@@ -251,11 +260,12 @@ private fun ConversationView(vm: WhatsAppViewModel) {
             ) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.size(8.dp))
-                Text("Uploading $name...", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                Text(name, style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
         }
 
         MessageInput(
+            vm = vm,
             onSend = { vm.send(it) },
             onAttach = { uri, caption -> vm.sendMedia(uri, caption) },
             displayName = vm::displayName,
@@ -385,6 +395,7 @@ private fun VoiceNoteRow(msg: WaMessage, vm: WhatsAppViewModel) {
 
 @Composable
 private fun MessageInput(
+    vm: WhatsAppViewModel,
     onSend: (String) -> Unit,
     onAttach: (Uri, String) -> Unit,
     displayName: (Uri) -> String,
@@ -395,7 +406,19 @@ private fun MessageInput(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) picked = uri
     }
-    Row(
+    val context = LocalContext.current
+    val recorder = vm.recorder
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) recorder.start() else vm.message = "Microphone permission denied"
+    }
+    val onMic: () -> Unit = {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) recorder.start() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    if (recorder.recording) {
+        RecordingBar(recorder, onCancel = { recorder.cancel() }, onSend = { vm.sendRecording() })
+    } else Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -410,7 +433,9 @@ private fun MessageInput(
             modifier = Modifier.weight(1f),
             placeholder = { Text("Message…") },
         )
-        Spacer(Modifier.size(6.dp))
+        IconButton(onClick = onMic, enabled = enabled) {
+            Icon(Icons.Filled.Mic, contentDescription = "Record voice note")
+        }
         IconButton(onClick = { if (text.isNotBlank()) { onSend(text); text = "" } }, enabled = enabled) {
             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
         }
@@ -422,6 +447,32 @@ private fun MessageInput(
             onSend = { caption -> onAttach(uri, caption); picked = null },
             onDismiss = { picked = null },
         )
+    }
+}
+
+/** Replaces the input row while recording: red dot, elapsed timer, cancel and send. */
+@Composable
+private fun RecordingBar(recorder: VoiceRecorder, onCancel: () -> Unit, onSend: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Filled.Delete, contentDescription = "Cancel recording")
+        }
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.error),
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(formatClock(recorder.elapsedMs), modifier = Modifier.weight(1f))
+        IconButton(onClick = onSend) {
+            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send voice note")
+        }
     }
 }
 

@@ -31,13 +31,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
 import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.BufferedSink
 import okio.source
+import java.io.File
 
 class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
@@ -91,6 +94,12 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     val voice = VoiceNotePlayer(
         cacheDir = container.appContext.cacheDir,
         client = container.api.okHttpClient,
+        scope = viewModelScope,
+        onMessage = { message = it },
+    )
+
+    val recorder = VoiceRecorder(
+        context = container.appContext,
         scope = viewModelScope,
         onMessage = { message = it },
     )
@@ -156,6 +165,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         currentName = name
         currentPinned = chats.firstOrNull { it.jid == jid }?.pinned ?: false
         voice.release()
+        recorder.cancel()
         loadMessages(jid)
     }
 
@@ -200,6 +210,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun closeChat() {
         voice.release()
+        recorder.cancel()
         currentJid = null
         messages = emptyList()
     }
@@ -290,7 +301,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                 sending = false
                 return@launch
             }
-            uploading = filename
+            uploading = "Uploading $filename..."
             val body = object : RequestBody() {
                 override fun contentType(): MediaType? = resolver.getType(uri)?.toMediaTypeOrNull()
                 override fun contentLength(): Long = size ?: -1L
@@ -306,6 +317,36 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                 is ApiResult.Ok -> loadMessages(jid)
                 is ApiResult.Err -> message = "Send failed: ${r.message}"
             }
+            uploading = null
+            sending = false
+        }
+    }
+
+    /** Stop the recording and send it as a voice note; a too-short recording is discarded. */
+    fun sendRecording() {
+        val file = recorder.finish() ?: return
+        sendVoice(file, null)
+    }
+
+    /** Upload a recorded audio file as a WhatsApp voice note, then delete it. */
+    fun sendVoice(file: File, replyTo: String?) {
+        val jid = currentJid
+        if (jid == null || sending || uploading != null) {
+            file.delete()
+            return
+        }
+        sending = true
+        uploading = "Sending voice note..."
+        viewModelScope.launch {
+            val body = file.asRequestBody("audio/mp4".toMediaType())
+            val r = withContext(Dispatchers.IO) {
+                safeCall { container.api.api.waSendVoice(jid, replyTo, body) }
+            }
+            when (r) {
+                is ApiResult.Ok -> loadMessages(jid)
+                is ApiResult.Err -> message = "Send failed: ${r.message}"
+            }
+            file.delete()
             uploading = null
             sending = false
         }
@@ -391,6 +432,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     override fun onCleared() {
         voice.release()
+        recorder.cancel()
         ws?.cancel()
         frames.close()
         super.onCleared()
