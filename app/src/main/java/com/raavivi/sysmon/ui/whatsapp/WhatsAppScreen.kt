@@ -1,5 +1,7 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,8 +31,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -39,10 +47,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
@@ -75,6 +87,9 @@ import kotlinx.coroutines.delay
 fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
     val vm = rememberContainerViewModel { WhatsAppViewModel(it) }
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(2500); vm.message = null } }
+
+    // Leaving the screen (tab switch) must not leave the microphone open.
+    DisposableEffect(vm) { onDispose { vm.recorder.cancel() } }
 
     // System back from a conversation returns to the chat list, not out of the tab.
     BackHandler(enabled = vm.currentJid != null) { vm.closeChat() }
@@ -162,6 +177,29 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
 @Composable
 private fun ConversationView(vm: WhatsAppViewModel) {
     var viewing by remember { mutableStateOf<WaMessage?>(null) }
+    val listState = rememberLazyListState()
+
+    // Open (and send / jump) at the newest message.
+    LaunchedEffect(vm.scrollTick) {
+        val last = vm.messages.lastIndex
+        if (last >= 0) listState.scrollToItem(last, Int.MAX_VALUE) // offset clamps to the true end, so a tall last message is fully shown
+    }
+    // A live message follows the bottom only if the user was already there (or sent it).
+    var seenCount by remember { mutableIntStateOf(vm.messages.size) }
+    var seenNewest by remember { mutableStateOf(vm.messages.lastOrNull()?.id) }
+    val newestId = vm.messages.lastOrNull()?.id
+    LaunchedEffect(newestId, vm.messages.size) {
+        val count = vm.messages.size
+        if (newestId != seenNewest) {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val nearBottom = lastVisible >= seenCount - 2
+            if (count > seenCount && (nearBottom || vm.messages.lastOrNull()?.fromMe == true)) {
+                listState.animateScrollToItem(count - 1)
+            }
+        }
+        seenCount = count
+        seenNewest = newestId
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -190,13 +228,25 @@ private fun ConversationView(vm: WhatsAppViewModel) {
             if (vm.loadingMessages && vm.messages.isEmpty()) {
                 LoadingBox()
             } else {
+                // Stable keys make the list keep its position when older messages are prepended.
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(vm.messages, key = { it.id.ifBlank { "${it.ts}-${it.text.hashCode()}" } }) { msg ->
                         MessageBubble(msg, vm, onOpenImage = { viewing = it })
                     }
+                }
+            }
+            SmallFloatingActionButton(
+                onClick = { vm.jumpToLatest() },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            ) {
+                if (vm.jumping) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
                 }
             }
         }
@@ -210,11 +260,12 @@ private fun ConversationView(vm: WhatsAppViewModel) {
             ) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.size(8.dp))
-                Text("Uploading $name...", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                Text(name, style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
         }
 
         MessageInput(
+            vm = vm,
             onSend = { vm.send(it) },
             onAttach = { uri, caption -> vm.sendMedia(uri, caption) },
             displayName = vm::displayName,
@@ -273,6 +324,8 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel, onOpenImage: (W
                                     .padding(vertical = 8.dp),
                             )
                         }
+                    } else if (isAudioMedia(msg.mediaType)) {
+                        VoiceNoteRow(msg, vm)
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -294,8 +347,55 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel, onOpenImage: (W
     }
 }
 
+/** Compact voice-note player: play/pause, seek, elapsed/total and a 1x/1.5x/2x speed toggle. */
+@Composable
+private fun VoiceNoteRow(msg: WaMessage, vm: WhatsAppViewModel) {
+    val v = vm.voice
+    val current = v.currentId == msg.id
+    val loading = v.loadingId == msg.id
+    val playing = current && v.isPlaying
+    val duration = if (current) v.durationMs else 0
+    val position = if (current) v.positionMs else 0
+    var dragging by remember(msg.id) { mutableStateOf<Float?>(null) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.widthIn(min = 220.dp)) {
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            if (loading) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                IconButton(onClick = { v.toggle(msg.id, vm.mediaUrl(msg)) }) {
+                    Icon(
+                        if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (playing) "Pause voice note" else "Play voice note",
+                    )
+                }
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Slider(
+                value = dragging ?: if (duration > 0) position.toFloat() / duration else 0f,
+                onValueChange = { dragging = it },
+                onValueChangeFinished = {
+                    dragging?.let { v.seekTo((it * duration).toInt()) }
+                    dragging = null
+                },
+                enabled = current && duration > 0,
+            )
+            Text(
+                "${formatClock(position.toLong())} / ${if (current) formatClock(duration.toLong()) else "--:--"}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp),
+            )
+        }
+        TextButton(onClick = { v.cycleSpeed() }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+            Text(speedLabel(v.speed))
+        }
+    }
+}
+
 @Composable
 private fun MessageInput(
+    vm: WhatsAppViewModel,
     onSend: (String) -> Unit,
     onAttach: (Uri, String) -> Unit,
     displayName: (Uri) -> String,
@@ -306,7 +406,19 @@ private fun MessageInput(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) picked = uri
     }
-    Row(
+    val context = LocalContext.current
+    val recorder = vm.recorder
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) recorder.start() else vm.message = "Microphone permission denied"
+    }
+    val onMic: () -> Unit = {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) recorder.start() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    if (recorder.recording) {
+        RecordingBar(recorder, onCancel = { recorder.cancel() }, onSend = { vm.sendRecording() })
+    } else Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -321,7 +433,9 @@ private fun MessageInput(
             modifier = Modifier.weight(1f),
             placeholder = { Text("Message…") },
         )
-        Spacer(Modifier.size(6.dp))
+        IconButton(onClick = onMic, enabled = enabled) {
+            Icon(Icons.Filled.Mic, contentDescription = "Record voice note")
+        }
         IconButton(onClick = { if (text.isNotBlank()) { onSend(text); text = "" } }, enabled = enabled) {
             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
         }
@@ -333,6 +447,32 @@ private fun MessageInput(
             onSend = { caption -> onAttach(uri, caption); picked = null },
             onDismiss = { picked = null },
         )
+    }
+}
+
+/** Replaces the input row while recording: red dot, elapsed timer, cancel and send. */
+@Composable
+private fun RecordingBar(recorder: VoiceRecorder, onCancel: () -> Unit, onSend: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Filled.Delete, contentDescription = "Cancel recording")
+        }
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.error),
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(formatClock(recorder.elapsedMs), modifier = Modifier.weight(1f))
+        IconButton(onClick = onSend) {
+            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send voice note")
+        }
     }
 }
 

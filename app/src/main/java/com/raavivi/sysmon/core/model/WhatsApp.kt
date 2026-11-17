@@ -45,6 +45,9 @@ data class WaSendText(val to: String, val message: String, val replyTo: String? 
 data class WaPinReq(val chat: String, val pinned: Boolean = true)
 
 @Serializable
+data class WaLatestReq(val chat: String, val mediaLimit: Int = 50)
+
+@Serializable
 data class WaMarkRead(val chat: String)
 
 @Serializable

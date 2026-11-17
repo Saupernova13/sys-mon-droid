@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -197,134 +197,145 @@ fun FindMeScreen(onBack: () -> Unit) {
             )
         }
 
-        ThisPhoneCard(
-            vm = vm,
-            onFix = ::fix,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-        )
-
         when {
-            !vm.loaded -> LoadingBox()
-            vm.disabled || (vm.error != null && vm.devices.isEmpty()) ->
-                ErrorBox(vm.error ?: "Find Me is off on the server")
-            else -> Column(
-                Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                vm.error?.let {
-                    Text(it, color = palette.sigWarn, style = MaterialTheme.typography.bodySmall)
+            !vm.loaded || vm.disabled || (vm.error != null && vm.devices.isEmpty()) -> {
+                Box(Modifier.weight(1f)) {
+                    if (!vm.loaded) LoadingBox() else ErrorBox(vm.error ?: "Find Me is off on the server")
                 }
-                if (!vm.pushConfigured) {
-                    Text(
-                        "No push key on the server: commands arrive at the next report.",
-                        color = palette.quietInk,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-
-                SectionCard(
-                    title = "Devices",
-                    trailing = {
-                        IconButton(onClick = { devicesExpanded = !devicesExpanded }, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                if (devicesExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                contentDescription = if (devicesExpanded) "Collapse devices" else "Expand devices",
-                            )
-                        }
-                    },
+                ThisPhoneCard(
+                    vm = vm,
+                    onFix = ::fix,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
+            else -> {
+                // The page scrolls: the map comes first at a large fixed height, then the
+                // range chips, Street View links, devices and finally this phone.
+                val mapHeight = (LocalConfiguration.current.screenHeightDp * 0.6f).dp.coerceAtLeast(320.dp)
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    val maxList = (LocalConfiguration.current.screenHeightDp * 0.42f).dp
-                    if (vm.devices.isEmpty()) {
+                    vm.error?.let {
+                        Text(it, color = palette.sigWarn, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (!vm.pushConfigured) {
                         Text(
-                            "No devices paired yet. Use + to add one.",
+                            "No push key on the server: commands arrive at the next report.",
                             color = palette.quietInk,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                         )
-                    } else if (!devicesExpanded) {
-                        vm.selected?.let { sel ->
-                            val idx = vm.devices.indexOf(sel)
-                            Text(
-                                "${sel.name}: ${formatAge(fixAge(sel, now))}",
-                                color = hue(idx),
-                                fontWeight = FontWeight.SemiBold,
+                    }
+
+                    SlippyMap(
+                        state = mapState,
+                        pins = vm.devices.mapIndexedNotNull { i, d ->
+                            d.lastFix?.let { MapPin(d.id, LatLon(it.lat, it.lon), it.accuracyM, hue(i)) }
+                        },
+                        selectedId = vm.selectedId,
+                        trail = vm.trail.map { LatLon(it.lat, it.lon) },
+                        imageLoader = container.imageLoader,
+                        tileUrl = { z, x, y -> container.api.findMeTileUrl(z, x, y) },
+                        onSelect = { id -> vm.devices.firstOrNull { it.id == id }?.let(::pick) },
+                        onFitAll = { mapState.fit(fixPoints) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(mapHeight)
+                            .clip(RoundedCornerShape(palette.cardRadius)),
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TrailRange.entries.forEach { r ->
+                            FilterChip(
+                                selected = vm.range == r,
+                                onClick = { vm.selectRange(r) },
+                                label = { Text(r.label) },
                             )
                         }
-                    } else {
-                        Column(
-                            Modifier
-                                .heightIn(max = maxList)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            vm.devices.forEachIndexed { i, d ->
-                                DeviceRow(
-                                    device = d,
-                                    hue = hue(i),
-                                    selected = d.id == vm.selectedId,
-                                    thisPhone = d.id == phoneState?.deviceId,
-                                    nowS = now,
-                                    sending = vm.sending,
-                                    onSelect = { pick(d) },
-                                    onLocate = { vm.locate(d.id) },
-                                    onRing = { vm.ring(d.id) },
-                                    onStopRing = { vm.stopRing(d.id) },
-                                    onRename = { renaming = d },
-                                    onInterval = { interval = d },
-                                    onRemove = { removing = d },
+                        vm.address?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+
+
+                    // Street-level imagery of the selected device's last fix.
+                    vm.devices.firstOrNull { it.id == vm.selectedId }?.lastFix?.let { fix ->
+                        val links = streetViewLinks(fix.lat, fix.lon)
+                        val uri = LocalUriHandler.current
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { uri.openUri(links.google) }) { Text("Street View") }
+                            TextButton(onClick = { uri.openUri(links.mapillary) }) { Text("Mapillary") }
+                        }
+                    }
+
+
+                    SectionCard(
+                        title = "Devices",
+                        trailing = {
+                            IconButton(onClick = { devicesExpanded = !devicesExpanded }, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    if (devicesExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                    contentDescription = if (devicesExpanded) "Collapse devices" else "Expand devices",
                                 )
+                            }
+                        },
+                    ) {
+                        if (vm.devices.isEmpty()) {
+                            Text(
+                                "No devices paired yet. Use + to add one.",
+                                color = palette.quietInk,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        } else if (!devicesExpanded) {
+                            vm.selected?.let { sel ->
+                                val idx = vm.devices.indexOf(sel)
+                                Text(
+                                    "${sel.name}: ${formatAge(fixAge(sel, now))}",
+                                    color = hue(idx),
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        } else {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                vm.devices.forEachIndexed { i, d ->
+                                    DeviceRow(
+                                        device = d,
+                                        hue = hue(i),
+                                        selected = d.id == vm.selectedId,
+                                        thisPhone = d.id == phoneState?.deviceId,
+                                        nowS = now,
+                                        sending = vm.sending,
+                                        onSelect = { pick(d) },
+                                        onLocate = { vm.locate(d.id) },
+                                        onRing = { vm.ring(d.id) },
+                                        onStopRing = { vm.stopRing(d.id) },
+                                        onRename = { renaming = d },
+                                        onInterval = { interval = d },
+                                        onRemove = { removing = d },
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TrailRange.entries.forEach { r ->
-                        FilterChip(
-                            selected = vm.range == r,
-                            onClick = { vm.selectRange(r) },
-                            label = { Text(r.label) },
-                        )
-                    }
-                    vm.address?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
 
-                // Street-level imagery of the selected device's last fix.
-                vm.devices.firstOrNull { it.id == vm.selectedId }?.lastFix?.let { fix ->
-                    val links = streetViewLinks(fix.lat, fix.lon)
-                    val uri = LocalUriHandler.current
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { uri.openUri(links.google) }) { Text("Street View") }
-                        TextButton(onClick = { uri.openUri(links.mapillary) }) { Text("Mapillary") }
-                    }
+                    ThisPhoneCard(
+                        vm = vm,
+                        onFix = ::fix,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                 }
-
-                SlippyMap(
-                    state = mapState,
-                    pins = vm.devices.mapIndexedNotNull { i, d ->
-                        d.lastFix?.let { MapPin(d.id, LatLon(it.lat, it.lon), it.accuracyM, hue(i)) }
-                    },
-                    selectedId = vm.selectedId,
-                    trail = vm.trail.map { LatLon(it.lat, it.lon) },
-                    imageLoader = container.imageLoader,
-                    tileUrl = { z, x, y -> container.api.findMeTileUrl(z, x, y) },
-                    onSelect = { id -> vm.devices.firstOrNull { it.id == id }?.let(::pick) },
-                    onFitAll = { mapState.fit(fixPoints) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clip(RoundedCornerShape(palette.cardRadius)),
-                )
             }
         }
     }

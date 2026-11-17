@@ -3,6 +3,7 @@ package com.raavivi.sysmon.ui.whatsapp
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -10,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaLatestReq
 import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
@@ -29,13 +31,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
 import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.BufferedSink
 import okio.source
+import java.io.File
 
 class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
@@ -62,6 +67,14 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     var sending by mutableStateOf(false)
         private set
 
+    /** True while "Jump to latest" is refreshing the chat and fetching its media. */
+    var jumping by mutableStateOf(false)
+        private set
+
+    /** Bumped whenever the conversation should scroll to its newest message (open, send, jump). */
+    var scrollTick by mutableIntStateOf(0)
+        private set
+
     /** Display name of the file currently being uploaded, or null when idle. */
     var uploading by mutableStateOf<String?>(null)
         private set
@@ -77,6 +90,19 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     /** Jids already offered to the server's avatar refresh this session. */
     private val avatarTried = mutableSetOf<String>()
+
+    val voice = VoiceNotePlayer(
+        cacheDir = container.appContext.cacheDir,
+        client = container.api.okHttpClient,
+        scope = viewModelScope,
+        onMessage = { message = it },
+    )
+
+    val recorder = VoiceRecorder(
+        context = container.appContext,
+        scope = viewModelScope,
+        onMessage = { message = it },
+    )
 
     private val frames = Channel<String>(Channel.UNLIMITED)
     private var ws: WebSocket? = null
@@ -138,6 +164,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         currentJid = jid
         currentName = name
         currentPinned = chats.firstOrNull { it.jid == jid }?.pinned ?: false
+        voice.release()
+        recorder.cancel()
         loadMessages(jid)
     }
 
@@ -181,6 +209,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun closeChat() {
+        voice.release()
+        recorder.cancel()
         currentJid = null
         messages = emptyList()
     }
@@ -188,19 +218,47 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     private fun loadMessages(jid: String) {
         loadingMessages = true
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50) }) {
-                is ApiResult.Ok -> messages = r.value.messages.map { it.toWaMessage() }.sortedBy { it.ts }
-                is ApiResult.Err -> { error = r.message }
-            }
+            if (fetchNewest(jid)) scrollTick++
             loadingMessages = false
+        }
+    }
+
+    /** Replace the open list with the chat's newest page; false on failure or if the chat changed meanwhile. */
+    private suspend fun fetchNewest(jid: String): Boolean {
+        val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50) }
+        if (currentJid != jid) return false
+        return when (r) {
+            is ApiResult.Ok -> {
+                messages = r.value.messages.map { it.toWaMessage() }.sortedBy { it.ts }
+                true
+            }
+            is ApiResult.Err -> { error = r.message; false }
+        }
+    }
+
+    /** Reload the newest page, have the server fetch missing media, reload again, and scroll down. */
+    fun jumpToLatest() {
+        val jid = currentJid ?: return
+        if (jumping) return
+        jumping = true
+        viewModelScope.launch {
+            try {
+                if (fetchNewest(jid)) scrollTick++
+                if (currentJid != jid) return@launch
+                val r = safeCall { container.api.api.waLatest(WaLatestReq(chat = jid)) }
+                if (r is ApiResult.Err && currentJid == jid) message = "Latest failed: ${r.message}"
+                if (fetchNewest(jid)) scrollTick++
+            } finally {
+                jumping = false
+            }
         }
     }
 
     fun loadOlder() {
         val jid = currentJid ?: return
-        val oldest = messages.firstOrNull()?.id ?: return
+        val oldest = messages.firstOrNull()?.takeIf { it.ts > 0 }?.ts ?: return
         viewModelScope.launch {
-            val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50, before = oldest) }
+            val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50, before = waBeforeCursor(oldest)) }
             if (r is ApiResult.Ok) {
                 val older = r.value.messages.map { it.toWaMessage() }
                 val merged = (older + messages).distinctBy { it.id }.sortedBy { it.ts }
@@ -243,7 +301,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                 sending = false
                 return@launch
             }
-            uploading = filename
+            uploading = "Uploading $filename..."
             val body = object : RequestBody() {
                 override fun contentType(): MediaType? = resolver.getType(uri)?.toMediaTypeOrNull()
                 override fun contentLength(): Long = size ?: -1L
@@ -259,6 +317,36 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                 is ApiResult.Ok -> loadMessages(jid)
                 is ApiResult.Err -> message = "Send failed: ${r.message}"
             }
+            uploading = null
+            sending = false
+        }
+    }
+
+    /** Stop the recording and send it as a voice note; a too-short recording is discarded. */
+    fun sendRecording() {
+        val file = recorder.finish() ?: return
+        sendVoice(file, null)
+    }
+
+    /** Upload a recorded audio file as a WhatsApp voice note, then delete it. */
+    fun sendVoice(file: File, replyTo: String?) {
+        val jid = currentJid
+        if (jid == null || sending || uploading != null) {
+            file.delete()
+            return
+        }
+        sending = true
+        uploading = "Sending voice note..."
+        viewModelScope.launch {
+            val body = file.asRequestBody("audio/mp4".toMediaType())
+            val r = withContext(Dispatchers.IO) {
+                safeCall { container.api.api.waSendVoice(jid, replyTo, body) }
+            }
+            when (r) {
+                is ApiResult.Ok -> loadMessages(jid)
+                is ApiResult.Err -> message = "Send failed: ${r.message}"
+            }
+            file.delete()
             uploading = null
             sending = false
         }
@@ -343,6 +431,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     override fun onCleared() {
+        voice.release()
+        recorder.cancel()
         ws?.cancel()
         frames.close()
         super.onCleared()
