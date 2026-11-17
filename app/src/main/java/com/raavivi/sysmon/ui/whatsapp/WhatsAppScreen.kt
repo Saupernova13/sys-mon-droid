@@ -182,7 +182,7 @@ private fun ConversationView(vm: WhatsAppViewModel) {
     // Open (and send / jump) at the newest message.
     LaunchedEffect(vm.scrollTick) {
         val last = vm.messages.lastIndex
-        if (last >= 0) listState.scrollToItem(last)
+        if (last >= 0) listState.scrollToItem(last, Int.MAX_VALUE) // offset clamps to the true end, so a tall last message is fully shown
     }
     // A live message follows the bottom only if the user was already there (or sent it).
     var seenCount by remember { mutableIntStateOf(vm.messages.size) }
