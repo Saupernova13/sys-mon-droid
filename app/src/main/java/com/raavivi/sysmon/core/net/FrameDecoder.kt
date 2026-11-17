@@ -24,7 +24,7 @@ class FrameDecoder {
             if (n == 0) break
             out.write(buf, 0, n)
         }
-        out.toString(Charsets.UTF_8)
+        String(out.toByteArray(), Charsets.UTF_8) // toString(Charset) is API 33; minSdk is 26
     } catch (_: Exception) {
         null
     }
