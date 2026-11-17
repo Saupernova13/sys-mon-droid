@@ -1,5 +1,6 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import com.raavivi.sysmon.core.model.WaMessage
 import java.time.Instant
 import java.util.Locale
 
@@ -8,6 +9,50 @@ import java.util.Locale
 /** Epoch seconds (fractional) as the RFC3339 instant the server's `before=` cursor expects. */
 fun waBeforeCursor(tsSeconds: Double): String =
     Instant.ofEpochSecond(tsSeconds.toLong()).toString()
+
+/** Rows per messages page. A page shorter than this means the server has no more in that direction. */
+const val WA_PAGE_LIMIT = 50
+
+/**
+ * wacli compares cursors on whole seconds, strictly, so [waBeforeCursor] skips the other rows
+ * sharing the boundary second. One second past it makes `before` inclusive; callers dedupe by id.
+ */
+fun waInclusiveBefore(tsSeconds: Double): String =
+    Instant.ofEpochSecond(tsSeconds.toLong() + 1).toString()
+
+/** Mirror of [waInclusiveBefore] for `after=`: one second before the boundary second. */
+fun waInclusiveAfter(tsSeconds: Double): String =
+    Instant.ofEpochSecond(tsSeconds.toLong() - 1).toString()
+
+/** How a page fetch ended: more may follow, the end was reached, or nothing new came back (cursor stuck). */
+enum class PageOutcome { MORE, END, STALLED }
+
+/** [raw] rows returned, [added] of them new to the list. A short page is the end even if it added nothing. */
+fun pageOutcome(raw: Int, added: Int, limit: Int): PageOutcome = when {
+    raw < limit -> PageOutcome.END
+    added == 0 -> PageOutcome.STALLED
+    else -> PageOutcome.MORE
+}
+
+/**
+ * [current] plus the rows of [page] not already in it, sorted by time, and how many were new.
+ * Only non-blank ids count as duplicates; rows without an id are always kept.
+ */
+fun mergeMessages(current: List<WaMessage>, page: List<WaMessage>): Pair<List<WaMessage>, Int> {
+    val seen = current.mapNotNullTo(HashSet()) { it.id.takeIf { id -> id.isNotBlank() } }
+    val fresh = page.filter { it.id.isBlank() || seen.add(it.id) }
+    return (current + fresh).sortedBy { it.ts } to fresh.size
+}
+
+/** WhatsApp keeps media fetchable for roughly this long. */
+private const val WA_MEDIA_FRESH_SECONDS = 30 * 24 * 3600.0
+
+/**
+ * Whether a bubble may load its image on its own. Older media that is not on the PC almost always
+ * fails to download, and each attempt bounces the live sync, so those wait for a tap.
+ */
+fun shouldAutoLoadImage(downloaded: Boolean, tsSeconds: Double, nowSeconds: Double): Boolean =
+    downloaded || nowSeconds - tsSeconds <= WA_MEDIA_FRESH_SECONDS
 
 /** Whether a message's media type is a voice note / audio clip. */
 fun isAudioMedia(mediaType: String?): Boolean {

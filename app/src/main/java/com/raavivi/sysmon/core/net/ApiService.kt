@@ -396,6 +396,8 @@ interface ApiService {
         @Query("chat") chat: String,
         @Query("limit") limit: Int = 50,
         @Query("before") before: String? = null,
+        @Query("after") after: String? = null,
+        @Query("asc") asc: Boolean? = null,
     ): WaMessagesResponse
 
     @GET("api/whatsapp/contacts")

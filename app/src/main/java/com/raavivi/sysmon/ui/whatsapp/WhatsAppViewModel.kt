@@ -75,6 +75,31 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     var scrollTick by mutableIntStateOf(0)
         private set
 
+    /** True while "Jump to first" is fetching the chat's oldest page. */
+    var jumpingFirst by mutableStateOf(false)
+        private set
+
+    /** Bumped when the conversation should scroll to its first item (jump to first). */
+    var topTick by mutableIntStateOf(0)
+        private set
+
+    /** Bumped only when a live message is appended to the open conversation (drives follow-the-bottom). */
+    var liveTick by mutableIntStateOf(0)
+        private set
+
+    /** Whether the loaded window includes the chat's newest message; false after jumping to the first page. */
+    var atLatest by mutableStateOf(true)
+        private set
+
+    private var loadingOlder = false
+    private var loadingNewer = false
+
+    /** The oldest message is loaded, so there is nothing older to request. */
+    private var reachedFirst = false
+
+    /** Bumped whenever the window is replaced, so a page still in flight for the old window is dropped. */
+    private var windowEpoch = 0
+
     /** Display name of the file currently being uploaded, or null when idle. */
     var uploading by mutableStateOf<String?>(null)
         private set
@@ -164,6 +189,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         currentJid = jid
         currentName = name
         currentPinned = chats.firstOrNull { it.jid == jid }?.pinned ?: false
+        resetWindow()
         voice.release()
         recorder.cancel()
         loadMessages(jid)
@@ -213,6 +239,17 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         recorder.cancel()
         currentJid = null
         messages = emptyList()
+        resetWindow()
+    }
+
+    /** Back to "newest page, nothing in flight" when a conversation opens or closes. */
+    private fun resetWindow() {
+        windowEpoch++
+        atLatest = true
+        reachedFirst = false
+        loadingOlder = false
+        loadingNewer = false
+        jumpingFirst = false
     }
 
     private fun loadMessages(jid: String) {
@@ -223,13 +260,28 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    /** Replace the open list with the chat's newest page; false on failure or if the chat changed meanwhile. */
-    private suspend fun fetchNewest(jid: String): Boolean {
-        val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50) }
+    /**
+     * Replace the open list with the chat's newest page, or with [merge] fold it into the current
+     * window (catching up live messages missed while browsing elsewhere). Either way the window now
+     * includes the newest message. False on failure or if the chat (or, when merging, the window)
+     * changed meanwhile.
+     */
+    private suspend fun fetchNewest(jid: String, merge: Boolean = false): Boolean {
+        val epoch = windowEpoch
+        val r = safeCall { container.api.api.waMessages(chat = jid, limit = WA_PAGE_LIMIT) }
         if (currentJid != jid) return false
+        if (merge && windowEpoch != epoch) return false
         return when (r) {
             is ApiResult.Ok -> {
-                messages = r.value.messages.map { it.toWaMessage() }.sortedBy { it.ts }
+                val page = r.value.messages.map { it.toWaMessage() }
+                if (merge) {
+                    messages = mergeMessages(messages, page).first
+                } else {
+                    windowEpoch++
+                    messages = page.sortedBy { it.ts }
+                    reachedFirst = false
+                }
+                atLatest = true
                 true
             }
             is ApiResult.Err -> { error = r.message; false }
@@ -254,16 +306,112 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    /** Replace the window with the chat's oldest page (one request, no media fetch) and scroll to the top. */
+    fun jumpToFirst() {
+        val jid = currentJid ?: return
+        if (jumpingFirst) return
+        jumpingFirst = true
+        viewModelScope.launch {
+            try {
+                val r = safeCall {
+                    container.api.api.waMessages(chat = jid, limit = WA_PAGE_LIMIT, asc = true)
+                }
+                if (currentJid != jid) return@launch
+                when (r) {
+                    is ApiResult.Ok -> {
+                        val page = r.value.messages.map { it.toWaMessage() }
+                        windowEpoch++
+                        messages = page.sortedBy { it.ts }
+                        atLatest = page.size < WA_PAGE_LIMIT
+                        reachedFirst = true
+                        topTick++
+                    }
+                    is ApiResult.Err -> message = "First message failed: ${r.message}"
+                }
+            } finally {
+                jumpingFirst = false
+            }
+        }
+    }
+
+    /**
+     * Prepend the page before the oldest loaded message. The cursor is inclusive so rows sharing the
+     * boundary second are not skipped; if that adds nothing, one strict retry guards against a page
+     * made entirely of already-loaded rows.
+     */
     fun loadOlder() {
         val jid = currentJid ?: return
+        if (loadingOlder) return
+        if (reachedFirst) { message = "No older messages"; return }
         val oldest = messages.firstOrNull()?.takeIf { it.ts > 0 }?.ts ?: return
+        val epoch = windowEpoch
+        loadingOlder = true
         viewModelScope.launch {
-            val r = safeCall { container.api.api.waMessages(chat = jid, limit = 50, before = waBeforeCursor(oldest)) }
-            if (r is ApiResult.Ok) {
-                val older = r.value.messages.map { it.toWaMessage() }
-                val merged = (older + messages).distinctBy { it.id }.sortedBy { it.ts }
-                messages = merged
-                if (older.isEmpty()) message = "No older messages"
+            try {
+                var strict = false
+                while (true) {
+                    val before = if (strict) waBeforeCursor(oldest) else waInclusiveBefore(oldest)
+                    val r = safeCall {
+                        container.api.api.waMessages(chat = jid, limit = WA_PAGE_LIMIT, before = before)
+                    }
+                    if (currentJid != jid || windowEpoch != epoch) return@launch
+                    if (r !is ApiResult.Ok) return@launch
+                    val page = r.value.messages.map { it.toWaMessage() }
+                    val (merged, added) = mergeMessages(messages, page)
+                    messages = merged
+                    var outcome = pageOutcome(page.size, added, WA_PAGE_LIMIT)
+                    if (outcome == PageOutcome.STALLED && !strict) {
+                        strict = true
+                        continue
+                    }
+                    if (outcome == PageOutcome.STALLED) outcome = PageOutcome.END
+                    if (outcome == PageOutcome.END) {
+                        reachedFirst = true
+                        if (added == 0) message = "No older messages"
+                    }
+                    return@launch
+                }
+            } finally {
+                loadingOlder = false
+            }
+        }
+    }
+
+    /**
+     * Append the page after the newest loaded message (only while the window is short of the newest).
+     * Reaching the end merges in the newest page to pick up live messages skipped meanwhile.
+     */
+    fun loadNewer() {
+        val jid = currentJid ?: return
+        if (atLatest || loadingNewer) return
+        val newest = messages.lastOrNull()?.takeIf { it.ts > 0 }?.ts ?: return
+        val epoch = windowEpoch
+        loadingNewer = true
+        viewModelScope.launch {
+            try {
+                var strict = false
+                while (true) {
+                    // Strict `after` is the floor of the second: wacli then returns only later seconds.
+                    val after = if (strict) waBeforeCursor(newest) else waInclusiveAfter(newest)
+                    val r = safeCall {
+                        container.api.api.waMessages(chat = jid, limit = WA_PAGE_LIMIT, after = after, asc = true)
+                    }
+                    if (currentJid != jid || windowEpoch != epoch) return@launch
+                    if (r !is ApiResult.Ok) return@launch
+                    val page = r.value.messages.map { it.toWaMessage() }
+                    val (merged, added) = mergeMessages(messages, page)
+                    messages = merged
+                    var outcome = pageOutcome(page.size, added, WA_PAGE_LIMIT)
+                    if (outcome == PageOutcome.STALLED && !strict) {
+                        strict = true
+                        continue
+                    }
+                    if (outcome == PageOutcome.STALLED) outcome = PageOutcome.END
+                    if (outcome == PageOutcome.END) fetchNewest(jid, merge = true)
+                    return@launch
+                }
+            } finally {
+                loadingNewer = false
             }
         }
     }
@@ -409,9 +557,11 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         val msg = obj.toWaMessage()
         if (msg.chat.isBlank()) return
 
-        // Append to the open conversation.
-        if (msg.chat == currentJid && messages.none { it.id == msg.id && it.id.isNotBlank() }) {
+        // Append to the open conversation, but only while the window reaches the newest message;
+        // otherwise loadNewer / the final merge picks it up in order.
+        if (msg.chat == currentJid && atLatest && messages.none { it.id == msg.id && it.id.isNotBlank() }) {
             messages = (messages + msg).sortedBy { it.ts }
+            liveTick++
         }
 
         // Update the chat list ordering / unread tally.

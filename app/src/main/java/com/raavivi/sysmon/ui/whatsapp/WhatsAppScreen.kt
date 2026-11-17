@@ -40,9 +40,11 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +57,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -184,13 +187,21 @@ private fun ConversationView(vm: WhatsAppViewModel) {
         val last = vm.messages.lastIndex
         if (last >= 0) listState.scrollToItem(last, Int.MAX_VALUE) // offset clamps to the true end, so a tall last message is fully shown
     }
-    // A live message follows the bottom only if the user was already there (or sent it).
+    // Jump to first: the replaced window starts at its first item.
+    LaunchedEffect(vm.topTick) {
+        if (vm.topTick > 0 && vm.messages.isNotEmpty()) listState.scrollToItem(0)
+    }
+    // A live message follows the bottom only if the user was already there (or sent it). Gated on
+    // liveTick so appending a forward page or merging the newest page never yanks the list down.
     var seenCount by remember { mutableIntStateOf(vm.messages.size) }
     var seenNewest by remember { mutableStateOf(vm.messages.lastOrNull()?.id) }
+    var seenLive by remember { mutableIntStateOf(vm.liveTick) }
     val newestId = vm.messages.lastOrNull()?.id
-    LaunchedEffect(newestId, vm.messages.size) {
+    LaunchedEffect(newestId, vm.messages.size, vm.liveTick) {
         val count = vm.messages.size
-        if (newestId != seenNewest) {
+        val live = vm.liveTick != seenLive
+        seenLive = vm.liveTick
+        if (live && newestId != seenNewest) {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
             val nearBottom = lastVisible >= seenCount - 2
             if (count > seenCount && (nearBottom || vm.messages.lastOrNull()?.fromMe == true)) {
@@ -199,6 +210,16 @@ private fun ConversationView(vm: WhatsAppViewModel) {
         }
         seenCount = count
         seenNewest = newestId
+    }
+    // Scrolling near the end of a window that stops short of the newest message pages forward.
+    val nearEnd by remember {
+        derivedStateOf {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            last >= 0 && last >= listState.layoutInfo.totalItemsCount - 3
+        }
+    }
+    LaunchedEffect(nearEnd, vm.atLatest, vm.messages.size) {
+        if (nearEnd && !vm.atLatest) vm.loadNewer()
     }
     Column(
         Modifier
@@ -239,14 +260,27 @@ private fun ConversationView(vm: WhatsAppViewModel) {
                     }
                 }
             }
-            SmallFloatingActionButton(
-                onClick = { vm.jumpToLatest() },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            Column(
+                Modifier.align(Alignment.BottomEnd).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (vm.jumping) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
+                SmallFloatingActionButton(onClick = { vm.jumpToFirst() }) {
+                    if (vm.jumpingFirst) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Filled.VerticalAlignTop, contentDescription = "Jump to first message")
+                    }
+                }
+                SmallFloatingActionButton(
+                    onClick = { vm.jumpToLatest() },
+                    containerColor = if (vm.atLatest) FloatingActionButtonDefaults.containerColor
+                    else MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    if (vm.jumping) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
+                    }
                 }
             }
         }
@@ -299,8 +333,22 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel, onOpenImage: (W
                         // nonce changes the cache keys so the retry really refetches.
                         var failed by remember(msg.id) { mutableStateOf(false) }
                         var nonce by remember(msg.id) { mutableIntStateOf(0) }
+                        // Old media not on the PC waits for a tap: its download almost always fails and
+                        // each attempt bounces the live sync.
+                        var load by remember(msg.id, msg.downloaded) {
+                            mutableStateOf(shouldAutoLoadImage(msg.downloaded, msg.ts, System.currentTimeMillis() / 1000.0))
+                        }
                         val url = vm.mediaUrl(msg)
-                        AsyncImage(
+                        if (!load) {
+                            Text(
+                                "Tap to load image",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clickable { load = true }
+                                    .padding(vertical = 8.dp),
+                            )
+                        } else AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(url)
                                 .memoryCacheKey("$url#$nonce")
@@ -314,7 +362,7 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel, onOpenImage: (W
                                 .clip(RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 8.dp))
                                 .clickable { onOpenImage(msg) },
                         )
-                        if (failed) {
+                        if (load && failed) {
                             Text(
                                 "Tap to load image",
                                 style = MaterialTheme.typography.bodySmall,
