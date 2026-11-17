@@ -88,6 +88,13 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     /** Jids already offered to the server's avatar refresh this session. */
     private val avatarTried = mutableSetOf<String>()
 
+    val voice = VoiceNotePlayer(
+        cacheDir = container.appContext.cacheDir,
+        client = container.api.okHttpClient,
+        scope = viewModelScope,
+        onMessage = { message = it },
+    )
+
     private val frames = Channel<String>(Channel.UNLIMITED)
     private var ws: WebSocket? = null
 
@@ -148,6 +155,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         currentJid = jid
         currentName = name
         currentPinned = chats.firstOrNull { it.jid == jid }?.pinned ?: false
+        voice.release()
         loadMessages(jid)
     }
 
@@ -191,6 +199,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun closeChat() {
+        voice.release()
         currentJid = null
         messages = emptyList()
     }
@@ -381,6 +390,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     override fun onCleared() {
+        voice.release()
         ws?.cancel()
         frames.close()
         super.onCleared()

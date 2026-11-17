@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -41,6 +43,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -311,6 +314,8 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel, onOpenImage: (W
                                     .padding(vertical = 8.dp),
                             )
                         }
+                    } else if (isAudioMedia(msg.mediaType)) {
+                        VoiceNoteRow(msg, vm)
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -328,6 +333,52 @@ private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel, onOpenImage: (W
                     modifier = Modifier.align(Alignment.End),
                 )
             }
+        }
+    }
+}
+
+/** Compact voice-note player: play/pause, seek, elapsed/total and a 1x/1.5x/2x speed toggle. */
+@Composable
+private fun VoiceNoteRow(msg: WaMessage, vm: WhatsAppViewModel) {
+    val v = vm.voice
+    val current = v.currentId == msg.id
+    val loading = v.loadingId == msg.id
+    val playing = current && v.isPlaying
+    val duration = if (current) v.durationMs else 0
+    val position = if (current) v.positionMs else 0
+    var dragging by remember(msg.id) { mutableStateOf<Float?>(null) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.widthIn(min = 220.dp)) {
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            if (loading) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                IconButton(onClick = { v.toggle(msg.id, vm.mediaUrl(msg)) }) {
+                    Icon(
+                        if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (playing) "Pause voice note" else "Play voice note",
+                    )
+                }
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Slider(
+                value = dragging ?: if (duration > 0) position.toFloat() / duration else 0f,
+                onValueChange = { dragging = it },
+                onValueChangeFinished = {
+                    dragging?.let { v.seekTo((it * duration).toInt()) }
+                    dragging = null
+                },
+                enabled = current && duration > 0,
+            )
+            Text(
+                "${formatClock(position.toLong())} / ${if (current) formatClock(duration.toLong()) else "--:--"}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp),
+            )
+        }
+        TextButton(onClick = { v.cycleSpeed() }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+            Text(speedLabel(v.speed))
         }
     }
 }
