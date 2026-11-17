@@ -2,11 +2,13 @@ package com.raavivi.sysmon.ui.findme
 
 import kotlin.math.PI
 import kotlin.math.atan
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sinh
 import kotlin.math.tan
 
@@ -133,6 +135,28 @@ object MapMath {
         val cx = (px * factor - focalDx).coerceIn(0.0, size)
         val cy = (py * factor - focalDy).coerceIn(0.0, size)
         return MapView(LatLon(yToLat(cy, newZoom), xToLon(cx, newZoom)), newZoom)
+    }
+
+    /**
+     * Corners (tip first, then the two base corners) of a filled arrowhead of [size] pixels centred
+     * on ([mx], [my]) and pointing along the segment from ([x0], [y0]) to ([x1], [y1]) in screen
+     * pixels, i.e. from older to newer. Null for a zero-length segment.
+     */
+    fun arrowHead(
+        x0: Double, y0: Double, x1: Double, y1: Double,
+        mx: Double, my: Double, size: Double,
+    ): List<Pair<Double, Double>>? {
+        if (x0 == x1 && y0 == y1) return null
+        val a = atan2(y1 - y0, x1 - x0)
+        val dx = cos(a)
+        val dy = sin(a)
+        val back = size * 0.5
+        val half = size * 0.55
+        return listOf(
+            (mx + dx * size * 0.6) to (my + dy * size * 0.6),
+            (mx - dx * back - dy * half) to (my - dy * back + dx * half),
+            (mx - dx * back + dy * half) to (my - dy * back - dx * half),
+        )
     }
 
     /** Screen offset from the canvas centre of [p] when the map shows [view]. */

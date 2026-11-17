@@ -146,4 +146,24 @@ class MapMathTest {
         assertEquals(a / 2, MapMath.metersPerPixel(60.0, 10.0), 1e-6)
         assertNotNull(MapMath.metersPerPixel(89.0, 5.0))
     }
+
+    @Test
+    fun `arrow head points along the segment from older to newer`() {
+        // Eastward segment: the tip is to the right of the midpoint, the base corners to the left.
+        val tri = MapMath.arrowHead(0.0, 0.0, 100.0, 0.0, 50.0, 0.0, 10.0)!!
+        assertTrue(tri[0].first > 50.0)
+        assertEquals(0.0, tri[0].second, 1e-9)
+        assertTrue(tri[1].first < 50.0 && tri[2].first < 50.0)
+        assertEquals(tri[1].second, -tri[2].second, 1e-9)
+
+        // Southward on screen (y grows down): tip below the midpoint.
+        val south = MapMath.arrowHead(0.0, 0.0, 0.0, 100.0, 0.0, 50.0, 10.0)!!
+        assertTrue(south[0].second > 50.0)
+        assertEquals(0.0, south[0].first, 1e-9)
+    }
+
+    @Test
+    fun `arrow head is null for a zero length segment`() {
+        assertNull(MapMath.arrowHead(5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 10.0))
+    }
 }

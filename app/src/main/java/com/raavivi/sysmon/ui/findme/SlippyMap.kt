@@ -57,6 +57,7 @@ import com.raavivi.sysmon.ui.theme.SysMon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
+import androidx.compose.ui.graphics.Path
 import kotlin.math.ln
 import kotlin.math.roundToInt
 
@@ -98,6 +99,8 @@ private data class TileKey(val z: Int, val x: Int, val y: Int)
 private const val MAX_CACHED_TILES = 180
 private const val MAX_TILES_PER_FRAME = 64
 private const val FAILED_RETRY_MS = 10_000L
+private val ARROW_MIN_SEGMENT = 28.dp
+private val ARROW_SIZE = 9.dp
 
 /** Inverts lightness (keeping hue) and tones it down, as the web map's CSS filter does. */
 private val DarkTiles: ColorFilter = run {
@@ -322,6 +325,25 @@ private fun DrawScope.drawTrail(view: MapView, trail: List<LatLon>, color: Color
         drawLine(color.copy(alpha = 0.7f), pts[i - 1], pts[i], strokeWidth = 2.dp.toPx())
     }
     pts.forEach { drawCircle(color, radius = 2.5.dp.toPx(), center = it) }
+    // Direction arrows (oldest -> newest) on segments long enough to carry one.
+    val minLen = ARROW_MIN_SEGMENT.toPx()
+    val arrowSize = ARROW_SIZE.toPx()
+    for (i in 1 until pts.size) {
+        val a = pts[i - 1]
+        val b = pts[i]
+        if (hypot(b.x - a.x, b.y - a.y) < minLen) continue
+        val tri = MapMath.arrowHead(
+            a.x.toDouble(), a.y.toDouble(), b.x.toDouble(), b.y.toDouble(),
+            (a.x + b.x) / 2.0, (a.y + b.y) / 2.0, arrowSize.toDouble(),
+        ) ?: continue
+        val path = Path().apply {
+            moveTo(tri[0].first.toFloat(), tri[0].second.toFloat())
+            lineTo(tri[1].first.toFloat(), tri[1].second.toFloat())
+            lineTo(tri[2].first.toFloat(), tri[2].second.toFloat())
+            close()
+        }
+        drawPath(path, color)
+    }
 }
 
 private fun DrawScope.drawPin(view: MapView, pin: MapPin, selected: Boolean, ring: Color) {
