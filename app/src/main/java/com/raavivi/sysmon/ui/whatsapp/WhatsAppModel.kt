@@ -388,22 +388,16 @@ val WA_EMOJI_GRID = listOf(
     "🌸", "🌈", "⚡", "⚽", "🏆", "🚀", "🤞", "👀", "🫡", "🫠",
 )
 
-/** One of my sent text messages can be edited while younger than this. */
-const val WA_EDIT_WINDOW_SEC = 15.0 * 60
-
-/** One of my sent messages can be revoked (deleted for everyone) while younger than this. */
-const val WA_REVOKE_WINDOW_SEC = 2.0 * 24 * 3600
-
 enum class WaMenuAction { REPLY, COPY, FORWARD, EDIT, SAVE, INFO, DELETE }
 
 /** My own, not-yet-revoked text message: the only thing "Edit" applies to (web parity). */
 fun waCanEdit(m: WaMessage, nowSec: Double): Boolean =
     m.fromMe && !m.revoked && m.mediaType == null && m.text.isNotBlank() &&
-        m.ts > 0 && nowSec - m.ts <= WA_EDIT_WINDOW_SEC
+        m.ts > 0 && nowSec < m.editUntil
 
-/** My own, not-yet-revoked message can be "deleted for everyone" while younger than two days. */
+/** My own, not-yet-revoked message can be "deleted for everyone" strictly before the server's [WaMessage.revokeUntil]. */
 fun waCanRevoke(m: WaMessage, nowSec: Double): Boolean =
-    m.fromMe && !m.revoked && m.ts > 0 && nowSec - m.ts <= WA_REVOKE_WINDOW_SEC
+    m.fromMe && !m.revoked && m.ts > 0 && nowSec < m.revokeUntil
 
 /**
  * Which actions a message's menu offers. A revoked message keeps only Info and Delete (for me);
