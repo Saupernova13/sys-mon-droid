@@ -2,8 +2,11 @@ package com.raavivi.sysmon
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import androidx.compose.runtime.staticCompositionLocalOf
 import coil.ImageLoader
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.auth.TokenRenewer
 import com.raavivi.sysmon.core.data.SettingsStore
@@ -38,9 +41,15 @@ class AppContainer(application: Application) {
     val pendingRoute: MutableStateFlow<String?> = MutableStateFlow(null)
 
     /** Coil loader that reuses the authed OkHttp client so `/api/fs/file` images
-     *  and WhatsApp media carry the bearer token. */
+     *  and WhatsApp media carry the bearer token. The GIF decoders animate WhatsApp stickers (animated
+     *  webp needs ImageDecoder, API 28+; older devices get GIFs only). The server marks media responses
+     *  `Cache-Control: private, max-age=604800, immutable`; nothing in the client strips it, so Coil's
+     *  disk cache serves repeat loads. */
     val imageLoader: ImageLoader = ImageLoader.Builder(application)
         .okHttpClient(api.okHttpClient)
+        .components {
+            if (Build.VERSION.SDK_INT >= 28) add(ImageDecoderDecoder.Factory()) else add(GifDecoder.Factory())
+        }
         .build()
 }
 

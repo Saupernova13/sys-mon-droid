@@ -94,11 +94,15 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
             .build()
             .toString()
 
-    /** `/api/whatsapp/media` URL for a message's media (Coil with the authed client). */
-    fun whatsappMediaUrl(chat: String, id: String): String =
+    /**
+     * `/api/whatsapp/media` URL for a message's media (Coil with the authed client). [thumb] asks for the
+     * server's <=720px JPEG of a large still (bubble photos); stickers and the viewer want the original.
+     */
+    fun whatsappMediaUrl(chat: String, id: String, thumb: Boolean = false): String =
         "$baseUrl/api/whatsapp/media".toHttpUrl().newBuilder()
             .addQueryParameter("chat", chat)
             .addQueryParameter("id", id)
+            .apply { if (thumb) addQueryParameter("thumb", "1") }
             .build()
             .toString()
 
