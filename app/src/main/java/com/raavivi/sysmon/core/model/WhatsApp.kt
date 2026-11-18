@@ -87,6 +87,12 @@ data class WaChat(
     val lastTs: Double,
     val unread: Int,
     val pinned: Boolean,
+    /** Last-message preview (sys-mon #293); all empty against an older server, and the row then shows none. */
+    val preview: String = "",
+    val previewType: String = "",
+    val previewFromMe: Boolean = false,
+    val previewSender: String = "",
+    val previewRevoked: Boolean = false,
 )
 
 data class WaMessage(
@@ -101,7 +107,25 @@ data class WaMessage(
     val mediaType: String?,
     val filename: String?,
     val downloaded: Boolean,
-)
+    val mime: String = "",
+    /** Pixel size of a downloaded image/sticker (0 until the server reports it). */
+    val width: Int = 0,
+    val height: Int = 0,
+    val replyToId: String = "",
+    val replyToSender: String = "",
+    val replyToText: String = "",
+    val forwarded: Boolean = false,
+    val forwardScore: Int = 0,
+    val edited: Boolean = false,
+    val starred: Boolean = false,
+    val revoked: Boolean = false,
+    val deletedForMe: Boolean = false,
+    /** A reaction is its own row: target message id + emoji (empty = removed). Never a list item. */
+    val reactionToId: String = "",
+    val reactionEmoji: String = "",
+) {
+    val isReaction: Boolean get() = reactionToId.isNotBlank()
+}
 
 data class WaContact(val jid: String, val name: String)
 
@@ -114,22 +138,76 @@ fun JsonObject.toWaChat(): WaChat {
         unread = pickInt("unread_count", "UnreadCount").takeIf { it > 0 }
             ?: if (pickBool("unread", "Unread")) 1 else 0,
         pinned = pickBool("pinned", "Pinned"),
+        preview = pickStr("preview", "Preview") ?: "",
+        previewType = pickStr("preview_type", "PreviewType") ?: "",
+        previewFromMe = pickBool("preview_from_me", "PreviewFromMe"),
+        previewSender = pickStr("preview_sender", "PreviewSender") ?: "",
+        previewRevoked = pickStr("preview_type", "PreviewType") == "revoked" ||
+            pickBool("preview_revoked", "PreviewRevoked"),
     )
 }
 
-fun JsonObject.toWaMessage(): WaMessage = WaMessage(
-    id = pickStr("MsgID", "msg_id", "ID", "id", "message_id") ?: "",
-    chat = pickJid("ChatJID", "chat_jid", "Chat", "chat", "jid"),
-    chatName = pickStr("ChatName", "chat_name") ?: "",
-    sender = pickJid("SenderJID", "sender_jid", "sender"),
-    senderName = pickStr("SenderName", "sender_name", "PushName", "pushName", "notify") ?: "",
-    fromMe = pickBool("FromMe", "from_me", "fromMe"),
-    ts = pickTs("Timestamp", "ts", "timestamp"),
-    text = pickStr("Text", "text", "DisplayText", "display_text", "Body", "body") ?: "",
-    mediaType = pickStr("media_type", "MediaType"),
-    filename = pickStr("Filename", "filename"),
-    downloaded = pickBool("media_ready") || pickStr("LocalPath", "local_path") != null,
-)
+/**
+ * Split a `messages list` row's text. Replies embed the quoted text as "> " lines inside DisplayText
+ * while Text holds the clean reply body. Returns (body, quoted); mirrors the web normMsg.
+ */
+fun splitQuotedDisplay(rawText: String, display: String, caption: String = "", knownQuote: String = ""): Pair<String, String> {
+    var body = rawText
+    var quoted = knownQuote
+    if (quoted.isEmpty() && display.isNotEmpty() && display != rawText && display.contains('>')) {
+        val q = ArrayList<String>()
+        val b = ArrayList<String>()
+        for (ln in display.split('\n')) {
+            when {
+                ln.startsWith("> ") -> q.add(ln.substring(2))
+                ln.startsWith(">") -> q.add(ln.substring(1))
+                else -> b.add(ln)
+            }
+        }
+        if (q.isNotEmpty()) {
+            quoted = q.joinToString("\n")
+            if (body.isEmpty()) body = b.joinToString("\n").trim()
+        }
+    }
+    if (body.isEmpty()) body = display.ifEmpty { caption }
+    return body to quoted
+}
+
+fun JsonObject.toWaMessage(): WaMessage {
+    val (body, quoted) = splitQuotedDisplay(
+        rawText = pickStr("Text", "text") ?: "",
+        display = pickStr("DisplayText", "display_text") ?: "",
+        caption = pickStr("MediaCaption", "caption", "Body", "body") ?: "",
+        knownQuote = pickStr("ReplyToDisplay", "reply_to_display") ?: "",
+    )
+    return WaMessage(
+        id = pickStr("MsgID", "msg_id", "ID", "id", "message_id") ?: "",
+        chat = pickJid("ChatJID", "chat_jid", "Chat", "chat", "jid"),
+        chatName = pickStr("ChatName", "chat_name") ?: "",
+        sender = pickJid("SenderJID", "sender_jid", "sender"),
+        senderName = pickStr("SenderName", "sender_name", "PushName", "pushName", "notify") ?: "",
+        fromMe = pickBool("FromMe", "from_me", "fromMe"),
+        ts = pickTs("Timestamp", "ts", "timestamp"),
+        text = body,
+        mediaType = pickStr("media_type", "MediaType"),
+        filename = pickStr("Filename", "filename"),
+        downloaded = pickBool("media_ready") || pickStr("LocalPath", "local_path") != null,
+        mime = pickStr("mime", "MimeType", "mime_type") ?: "",
+        width = pickInt("width", "Width", "media_width"),
+        height = pickInt("height", "Height", "media_height"),
+        replyToId = pickStr("ReplyToID", "reply_to_id", "quoted_msg_id") ?: "",
+        replyToSender = pickJid("ReplyToSenderJID", "reply_to_sender_jid", "quoted_sender_jid"),
+        replyToText = quoted,
+        forwarded = pickBool("IsForwarded", "is_forwarded", "forwarded"),
+        forwardScore = pickInt("ForwardingScore", "forwarding_score"),
+        edited = pickBool("Edited", "edited"),
+        starred = pickBool("Starred", "starred"),
+        revoked = pickBool("Revoked", "revoked"),
+        deletedForMe = pickBool("DeletedForMe", "deleted_for_me"),
+        reactionToId = pickStr("ReactionToID", "reaction_to_id") ?: "",
+        reactionEmoji = pickStr("ReactionEmoji", "reaction_emoji") ?: "",
+    )
+}
 
 fun JsonObject.toWaContact(): WaContact {
     val jid = pickJid("jid", "JID", "id")
@@ -183,7 +261,7 @@ private fun JsonObject.pickBool(vararg keys: String): Boolean {
 private fun JsonObject.pickInt(vararg keys: String): Int {
     for (k in keys) {
         val c = (this[k] as? JsonPrimitive)?.contentOrNull ?: continue
-        c.toIntOrNull()?.let { return it }
+        (c.toIntOrNull() ?: c.toDoubleOrNull()?.toInt())?.let { return it }
     }
     return 0
 }
