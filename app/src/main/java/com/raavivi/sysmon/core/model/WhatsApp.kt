@@ -93,6 +93,9 @@ data class WaChat(
     val previewFromMe: Boolean = false,
     val previewSender: String = "",
     val previewRevoked: Boolean = false,
+    /** A sys-mon-owned pin (wacli/WhatsApp cannot change it); [pinRank] orders them. */
+    val localPin: Boolean = false,
+    val pinRank: Int = 0,
 )
 
 data class WaMessage(
@@ -144,6 +147,8 @@ fun JsonObject.toWaChat(): WaChat {
         previewSender = pickStr("preview_sender", "PreviewSender") ?: "",
         previewRevoked = pickStr("preview_type", "PreviewType") == "revoked" ||
             pickBool("preview_revoked", "PreviewRevoked"),
+        localPin = pickBool("local_pin", "LocalPin"),
+        pinRank = pickInt("pin_rank", "PinRank"),
     )
 }
 

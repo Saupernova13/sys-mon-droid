@@ -29,6 +29,7 @@ import com.raavivi.sysmon.ui.whatsapp.waQuoteView
 import com.raavivi.sysmon.ui.whatsapp.waReactionSig
 import com.raavivi.sysmon.ui.whatsapp.waRowIndexOf
 import com.raavivi.sysmon.ui.whatsapp.waSameGroup
+import com.raavivi.sysmon.ui.whatsapp.waSortChats
 import com.raavivi.sysmon.ui.whatsapp.waSummarizeReactions
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -410,6 +411,27 @@ class WhatsAppModelTest {
         val p = waPreviewLine(chat(revoked = true), false)!!
         assertEquals("This message was deleted", p.text)
         assertTrue(p.revoked)
+    }
+
+    // -- chat ordering ---------------------------------------------------------
+
+    @Test fun chatsSortWhatsAppPinsThenLocalPinsByRankThenRecent() {
+        fun ch(jid: String, ts: Double, pinned: Boolean = false, local: Boolean = false, rank: Int = 0) =
+            WaChat(jid, jid, ts, 0, pinned, localPin = local, pinRank = rank)
+        val sorted = waSortChats(
+            listOf(
+                ch("old", 1.0), ch("new", 9.0), ch("waOld", 2.0, pinned = true), ch("waNew", 8.0, pinned = true),
+                ch("l2", 100.0, pinned = true, local = true, rank = 2), ch("l1", 1.0, pinned = true, local = true, rank = 1),
+            ),
+        )
+        assertEquals(listOf("waNew", "waOld", "l1", "l2", "new", "old"), sorted.map { it.jid })
+    }
+
+    @Test fun localPinFieldsAreParsed() {
+        val c = parse("""{"jid":"1@s.whatsapp.net","pinned":true,"local_pin":true,"pin_rank":3}""").toWaChat()
+        assertTrue(c.localPin)
+        assertEquals(3, c.pinRank)
+        assertFalse(parse("""{"jid":"1@s.whatsapp.net"}""").toWaChat().localPin)
     }
 
     // -- meta placement --------------------------------------------------------

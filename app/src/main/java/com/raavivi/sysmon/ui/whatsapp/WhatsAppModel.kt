@@ -307,6 +307,14 @@ fun waQuoteView(m: WaMessage, byId: Map<String, WaMessage>, names: Map<String, S
 
 // -- chat list ----------------------------------------------------------------
 
+/** WhatsApp pins (by recency), then sys-mon local pins by rank, then everything else by recency. */
+fun waSortChats(chats: List<WaChat>): List<WaChat> {
+    val wa = chats.filter { it.pinned && !it.localPin }.sortedByDescending { it.lastTs }
+    val local = chats.filter { it.localPin }.sortedBy { it.pinRank }
+    val rest = chats.filter { !it.pinned && !it.localPin }.sortedByDescending { it.lastTs }
+    return wa + local + rest
+}
+
 /** What the second line of a chat row shows: [prefix] ("You: ", "Sam: "), an optional [kind] icon, the [text]. */
 data class PreviewLine(val prefix: String, val kind: WaMediaKind?, val text: String, val revoked: Boolean)
 
