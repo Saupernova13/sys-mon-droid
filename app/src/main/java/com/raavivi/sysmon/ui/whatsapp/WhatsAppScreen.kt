@@ -6,10 +6,13 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,7 +27,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -32,34 +34,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,24 +82,18 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter
-import coil.request.ImageRequest
 import com.raavivi.sysmon.ui.theme.SysMon
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaStatus
-import com.raavivi.sysmon.core.model.waInitials
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.common.ScreenHeader
-import com.raavivi.sysmon.ui.common.formatTime
-import com.raavivi.sysmon.ui.common.relativeTime
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 @Composable
 fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
@@ -135,6 +117,8 @@ fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
 private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
     var filter by remember { mutableStateOf("") }
     var showNew by remember { mutableStateOf(false) }
+    val c = rememberChatColors()
+    val reduced = rememberReducedMotion()
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "WhatsApp", actions = {
@@ -149,15 +133,7 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
         StatusBanner(vm.status, onRetry = { vm.loadStatus(); vm.loadChats() })
         vm.message?.let { Toast(it) }
 
-        OutlinedTextField(
-            value = filter,
-            onValueChange = { filter = it },
-            placeholder = { Text("Filter chats…") },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-        )
+        ChatSearchField(filter, { filter = it }, c, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
 
         Box(Modifier.fillMaxSize()) {
             when {
@@ -165,35 +141,18 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
                 vm.chats.isEmpty() -> Empty(vm.error ?: "No chats")
                 else -> {
                     val shown = vm.chats.filter { filter.isBlank() || it.name.contains(filter, ignoreCase = true) }
+                    val nowSec = remember(vm.chats) { System.currentTimeMillis() / 1000.0 }
                     LazyColumn(contentPadding = PaddingValues(vertical = 4.dp)) {
                         items(shown, key = { it.jid }) { chat ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { vm.openChat(chat.jid, chat.name) }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Avatar(chat.name, chat.jid, vm)
-                                Spacer(Modifier.size(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (chat.pinned) {
-                                            Icon(Icons.Filled.PushPin, contentDescription = "Pinned",
-                                                modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            Spacer(Modifier.size(4.dp))
-                                        }
-                                        Text(chat.name, maxLines = 1, fontWeight = FontWeight.Medium)
-                                    }
-                                    if (chat.lastTs > 0) {
-                                        Text(relativeTime(chat.lastTs), style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                                if (chat.unread > 0) {
-                                    Badge { Text(chat.unread.toString()) }
-                                }
-                            }
+                            ChatListRow(
+                                chat = chat,
+                                nowSec = nowSec,
+                                avatar = { Avatar(chat.name, chat.jid, vm, size = 48.dp) },
+                                c = c,
+                                reduced = reduced,
+                                active = false,
+                                onClick = { vm.openChat(chat.jid, chat.name) },
+                            )
                         }
                     }
                 }
@@ -208,31 +167,52 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
 private fun ConversationView(vm: WhatsAppViewModel) {
     var viewing by remember { mutableStateOf<WaMessage?>(null) }
     val listState = rememberLazyListState()
+    val c = rememberChatColors()
+    val reduced = rememberReducedMotion()
+    val scope = rememberCoroutineScope()
+    val group = waIsGroup(vm.currentJid)
+
+    // The list's rows (day headers + messages); every index below is a row index, not a message index.
+    val rows = remember(vm.messages) { buildRows(vm.messages) }
+    val nowSec = remember(vm.messages) { System.currentTimeMillis() / 1000.0 }
+    val byId = remember(vm.messages) { vm.messages.filter { it.id.isNotBlank() }.associateBy { it.id } }
+    val names = remember(vm.messages) { waNameBySender(vm.messages) }
+    var flashId by remember { mutableStateOf<String?>(null) }
+    // Chips pop when they first appear or change, but not while the conversation is just opening.
+    var popEnabled by remember(vm.currentJid) { mutableStateOf(false) }
+    LaunchedEffect(vm.currentJid, rows.isNotEmpty()) { if (rows.isNotEmpty()) { delay(700); popEnabled = true } }
+    val reactionSeen = remember(vm.currentJid) { HashMap<String, String>() }
+    // The entrance animation is for live / sent messages only; forget them once it has played.
+    LaunchedEffect(vm.freshIds) { if (vm.freshIds.isNotEmpty()) { delay(1500); vm.clearFresh() } }
 
     // Open (and send / jump) at the newest message.
     LaunchedEffect(vm.scrollTick) {
-        val last = vm.messages.lastIndex
+        val last = rows.lastIndex
         if (last >= 0) listState.scrollToItem(last, Int.MAX_VALUE) // offset clamps to the true end, so a tall last message is fully shown
     }
     // Jump to first: the replaced window starts at its first item.
     LaunchedEffect(vm.topTick) {
-        if (vm.topTick > 0 && vm.messages.isNotEmpty()) listState.scrollToItem(0)
+        if (vm.topTick > 0 && rows.isNotEmpty()) listState.scrollToItem(0)
     }
     // A live message follows the bottom only if the user was already there (or sent it). Gated on
     // liveTick so appending a forward page or merging the newest page never yanks the list down.
-    var seenCount by remember { mutableIntStateOf(vm.messages.size) }
+    var seenCount by remember { mutableIntStateOf(rows.size) }
     var seenNewest by remember { mutableStateOf(vm.messages.lastOrNull()?.id) }
     var seenLive by remember { mutableIntStateOf(vm.liveTick) }
+    var unseen by remember(vm.currentJid) { mutableIntStateOf(0) }
     val newestId = vm.messages.lastOrNull()?.id
-    LaunchedEffect(newestId, vm.messages.size, vm.liveTick) {
-        val count = vm.messages.size
+    LaunchedEffect(newestId, rows.size, vm.liveTick) {
+        val count = rows.size
         val live = vm.liveTick != seenLive
         seenLive = vm.liveTick
         if (live && newestId != seenNewest) {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
             val nearBottom = lastVisible >= seenCount - 2
-            if (count > seenCount && (nearBottom || vm.messages.lastOrNull()?.fromMe == true)) {
+            val mine = vm.messages.lastOrNull()?.fromMe == true
+            if (count > seenCount && (nearBottom || mine)) {
                 listState.animateScrollToItem(count - 1)
+            } else if (!mine) {
+                unseen++
             }
         }
         seenCount = count
@@ -248,12 +228,33 @@ private fun ConversationView(vm: WhatsAppViewModel) {
     LaunchedEffect(nearEnd, vm.atLatest, vm.messages.size) {
         if (nearEnd && !vm.atLatest) vm.loadNewer()
     }
-    // Reading position on the scrubber: the day of the message at the top of the list.
-    val readingPos by remember {
+    val atBottom by remember {
+        derivedStateOf {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            last >= listState.layoutInfo.totalItemsCount - 2
+        }
+    }
+    LaunchedEffect(atBottom, vm.atLatest) { if (atBottom && vm.atLatest) unseen = 0 }
+    // Reading position on the scrubber: the day of the row at the top of the list.
+    val readingPos by remember(rows) {
         derivedStateOf {
             val tl = vm.timeline
-            val ts = vm.messages.getOrNull(listState.firstVisibleItemIndex)?.ts
-            if (tl == null || ts == null) 0.0 else posOfTs(tl, ts.toLong())
+            val ts = rows.getOrNull(listState.firstVisibleItemIndex)?.ts
+            if (tl == null || ts == null || ts <= 0.0) 0.0 else posOfTs(tl, ts.toLong())
+        }
+    }
+    // The day of the topmost row, while that day's inline separator is above the viewport.
+    val floatingDay by remember(rows) {
+        derivedStateOf {
+            val idx = listState.firstVisibleItemIndex
+            val off = listState.firstVisibleItemScrollOffset
+            val row = rows.getOrNull(idx)
+            when {
+                row == null || row.ts <= 0.0 -> null
+                idx == 0 && off == 0 -> null
+                row is DayRow && off == 0 -> null
+                else -> row.ts
+            }
         }
     }
     // Reaching the top pages older messages in on its own, but only after the user has scrolled:
@@ -269,105 +270,154 @@ private fun ConversationView(vm: WhatsAppViewModel) {
             .collect { (atTop, size) -> if (atTop && size > 0) vm.loadOlder(silent = true) }
     }
     var showDatePicker by remember { mutableStateOf(false) }
+    val currentRows by rememberUpdatedState(rows)
     Column(
         Modifier
             .fillMaxSize()
             .imePadding(),
     ) {
-        ScreenHeader(title = vm.currentName, actions = {
-            vm.currentJid?.let { Avatar(vm.currentName, it, vm, size = 28.dp) }
-            Spacer(Modifier.size(4.dp))
-            IconButton(onClick = { vm.markRead() }, enabled = vm.currentUnread > 0) {
-                Icon(Icons.Filled.DoneAll, contentDescription = "Mark as read")
-            }
-            IconButton(onClick = { showDatePicker = true }, enabled = vm.timeline != null) {
-                Icon(Icons.Filled.CalendarMonth, contentDescription = "Go to date")
-            }
-            IconButton(onClick = { vm.togglePin() }) {
-                Icon(
-                    Icons.Filled.PushPin,
-                    contentDescription = "Pin",
-                    tint = if (vm.currentPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = { vm.closeChat() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-        })
+        ConversationHeader(
+            name = vm.currentName,
+            subtitle = if (group) "Group" else waPhoneSubtitle(vm.currentJid),
+            avatar = { vm.currentJid?.let { Avatar(vm.currentName, it, vm, size = 40.dp) } },
+            unread = vm.currentUnread,
+            canGoToDate = vm.timeline != null,
+            pinned = vm.currentPinned,
+            localPin = vm.currentLocalPin,
+            jumpingFirst = vm.jumpingFirst,
+            c = c,
+            onBack = { vm.closeChat() },
+            onMarkRead = { vm.markRead() },
+            onGoToDate = { showDatePicker = true },
+            onJumpFirst = { vm.jumpToFirst() },
+            onPin = { vm.togglePin() },
+        )
 
         vm.message?.let { Toast(it) }
 
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (vm.loadingMessages && vm.messages.isEmpty()) {
-                LoadingBox()
-            } else {
-                // Stable keys make the list keep its position when older messages are prepended.
-                LazyColumn(
-                    state = listState,
-                    // Leave room on the right for the scrubber track.
-                    contentPadding = PaddingValues(
-                        start = 8.dp, end = if (vm.timeline != null) 36.dp else 8.dp, top = 8.dp, bottom = 8.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    items(vm.messages, key = { it.id.ifBlank { "${it.ts}-${it.text.hashCode()}" } }) { msg ->
-                        MessageBubble(msg, vm, onOpenImage = { viewing = it })
+        Column(Modifier.weight(1f).fillMaxWidth().chatWallpaper(c)) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val maxBubble = maxWidth * 0.78f
+                val env = remember(c, group, nowSec, reduced, byId, names, vm.reactions, maxBubble, popEnabled, vm.imageLoader) {
+                    ChatEnv(
+                        colors = c,
+                        group = group,
+                        nowSec = nowSec,
+                        reduced = reduced,
+                        imageLoader = vm.imageLoader,
+                        mediaUrl = { m, thumb -> vm.mediaUrl(m, thumb) },
+                        byId = byId,
+                        names = names,
+                        reactions = vm.reactions,
+                        maxBubble = maxBubble,
+                        voice = { m ->
+                            val v = vm.voice
+                            val cur = v.currentId == m.id
+                            VoiceUi(
+                                current = cur,
+                                loading = v.loadingId == m.id,
+                                playing = cur && v.isPlaying,
+                                positionMs = if (cur) v.positionMs else 0,
+                                durationMs = if (cur) v.durationMs else 0,
+                                speed = v.speed,
+                            )
+                        },
+                        onOpenImage = { viewing = it },
+                        onVoiceToggle = { m -> vm.voice.toggle(m.id, vm.mediaUrl(m)) },
+                        onVoiceSeek = { _, f -> vm.voice.seekTo((f * vm.voice.durationMs).toInt()) },
+                        onVoiceSpeed = { vm.voice.cycleSpeed() },
+                        onQuoteTap = { id ->
+                            val i = waRowIndexOf(currentRows, id)
+                            if (i >= 0) scope.launch {
+                                listState.animateScrollToItem(i)
+                                flashId = id
+                                delay(700)
+                                if (flashId == id) flashId = null
+                            }
+                        },
+                        popEnabled = popEnabled,
+                        reactionSeen = reactionSeen,
+                    )
+                }
+                if (vm.loadingMessages && vm.messages.isEmpty()) {
+                    LoadingBox()
+                } else {
+                    // Stable keys make the list keep its position when older messages are prepended.
+                    LazyColumn(
+                        state = listState,
+                        // Leave room on the right for the scrubber track.
+                        contentPadding = PaddingValues(
+                            end = if (vm.timeline != null) 28.dp else 0.dp, top = 8.dp, bottom = 8.dp,
+                        ),
+                    ) {
+                        items(rows, key = { it.key }, contentType = { it::class }) { row ->
+                            val anim = if (reduced) Modifier else Modifier.animateItem(
+                                fadeInSpec = null, fadeOutSpec = null, placementSpec = moveSpring(),
+                            )
+                            when (row) {
+                                is DayRow -> DayRowItem(row, env, waDayLabel(row.ts, nowSec), anim)
+                                is MsgRow -> MessageItem(
+                                    row, env,
+                                    fresh = row.msg.id.isNotBlank() && row.msg.id in vm.freshIds,
+                                    flash = row.msg.id.isNotBlank() && row.msg.id == flashId,
+                                    modifier = anim,
+                                )
+                            }
+                        }
                     }
                 }
-            }
-            vm.timeline?.let { tl ->
-                // Ends above the FAB column below so those stay reachable.
-                TimelineScrubber(
-                    tl = tl,
-                    readingPos = readingPos,
-                    busy = vm.jumpingDate,
-                    onJump = { vm.jumpToTs(it) },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, bottom = 116.dp),
+                // Floating date: the day of the topmost message once its inline separator has scrolled away.
+                Crossfade(
+                    targetState = floatingDay?.let { waDayLabel(it, nowSec) },
+                    animationSpec = tween(140),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
+                    label = "floatingDay",
+                ) { label -> if (label != null) DayPill(label, c) }
+
+                vm.timeline?.let { tl ->
+                    TimelineScrubber(
+                        tl = tl,
+                        readingPos = readingPos,
+                        busy = vm.jumpingDate,
+                        onJump = { vm.jumpToTs(it) },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, bottom = 64.dp),
+                    )
+                }
+                JumpToLatestFab(
+                    visible = !atBottom || !vm.atLatest,
+                    count = unseen,
+                    loading = vm.jumping,
+                    highlight = !vm.atLatest,
+                    c = c,
+                    reduced = reduced,
+                    onClick = { vm.jumpToLatest() },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                 )
             }
-            Column(
-                Modifier.align(Alignment.BottomEnd).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SmallFloatingActionButton(onClick = { vm.jumpToFirst() }) {
-                    if (vm.jumpingFirst) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Filled.VerticalAlignTop, contentDescription = "Jump to first message")
-                    }
-                }
-                SmallFloatingActionButton(
-                    onClick = { vm.jumpToLatest() },
-                    containerColor = if (vm.atLatest) FloatingActionButtonDefaults.containerColor
-                    else MaterialTheme.colorScheme.primaryContainer,
+
+            vm.uploading?.let { name ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (vm.jumping) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
-                    }
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = c.accent)
+                    Spacer(Modifier.size(8.dp))
+                    Text(name, style = chatSecondaryStyle(c.meta), maxLines = 1)
                 }
             }
-        }
 
-        vm.uploading?.let { name ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.size(8.dp))
-                Text(name, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-            }
+            MessageInput(
+                vm = vm,
+                onSend = { vm.send(it) },
+                onAttach = { uri, caption -> vm.sendMedia(uri, caption) },
+                displayName = vm::displayName,
+                enabled = !vm.sending,
+                c = c,
+                reduced = reduced,
+            )
         }
-
-        MessageInput(
-            vm = vm,
-            onSend = { vm.send(it) },
-            onAttach = { uri, caption -> vm.sendMedia(uri, caption) },
-            displayName = vm::displayName,
-            enabled = !vm.sending,
-        )
     }
 
     viewing?.let { ImageViewer(it, vm, onClose = { viewing = null }) }
@@ -545,143 +595,14 @@ private fun GoToDateDialog(tl: WaTimeline, initialDay: String, onPick: (Long) ->
 }
 
 @Composable
-private fun MessageBubble(msg: WaMessage, vm: WhatsAppViewModel, onOpenImage: (WaMessage) -> Unit) {
-    val mine = msg.fromMe
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
-    ) {
-        Surface(
-            color = if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 12.dp),
-            modifier = Modifier.widthIn(max = 300.dp),
-        ) {
-            Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                if (!mine && msg.senderName.isNotBlank()) {
-                    Text(msg.senderName, style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-                }
-                if (msg.mediaType != null) {
-                    if (msg.mediaType.contains("image", true) || msg.mediaType.contains("sticker", true)) {
-                        // A failed load (media not downloaded, 502) shows a retry prompt; the
-                        // nonce changes the cache keys so the retry really refetches.
-                        var failed by remember(msg.id) { mutableStateOf(false) }
-                        var nonce by remember(msg.id) { mutableIntStateOf(0) }
-                        // Old media not on the PC waits for a tap: its download almost always fails and
-                        // each attempt bounces the live sync.
-                        var load by remember(msg.id, msg.downloaded) {
-                            mutableStateOf(shouldAutoLoadImage(msg.downloaded, msg.ts, System.currentTimeMillis() / 1000.0))
-                        }
-                        val url = vm.mediaUrl(msg)
-                        if (!load) {
-                            Text(
-                                "Tap to load image",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .clickable { load = true }
-                                    .padding(vertical = 8.dp),
-                            )
-                        } else AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(url)
-                                .memoryCacheKey("$url#$nonce")
-                                .diskCacheKey("$url#$nonce")
-                                .build(),
-                            imageLoader = vm.imageLoader,
-                            contentDescription = msg.filename ?: "image",
-                            onState = { failed = it is AsyncImagePainter.State.Error },
-                            modifier = Modifier
-                                .heightIn(max = 220.dp)
-                                .clip(RoundedCornerShape(if (SysMon.palette.isInstrument) 2.dp else 8.dp))
-                                .clickable { onOpenImage(msg) },
-                        )
-                        if (load && failed) {
-                            Text(
-                                "Tap to load image",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .clickable { failed = false; nonce++ }
-                                    .padding(vertical = 8.dp),
-                            )
-                        }
-                    } else if (isAudioMedia(msg.mediaType)) {
-                        VoiceNoteRow(msg, vm)
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.size(4.dp))
-                            Text(msg.filename ?: msg.mediaType, style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium)
-                        }
-                    }
-                }
-                if (msg.text.isNotBlank()) Text(msg.text)
-                Text(
-                    formatTime(msg.ts),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.End),
-                )
-            }
-        }
-    }
-}
-
-/** Compact voice-note player: play/pause, seek, elapsed/total and a 1x/1.5x/2x speed toggle. */
-@Composable
-private fun VoiceNoteRow(msg: WaMessage, vm: WhatsAppViewModel) {
-    val v = vm.voice
-    val current = v.currentId == msg.id
-    val loading = v.loadingId == msg.id
-    val playing = current && v.isPlaying
-    val duration = if (current) v.durationMs else 0
-    val position = if (current) v.positionMs else 0
-    var dragging by remember(msg.id) { mutableStateOf<Float?>(null) }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.widthIn(min = 220.dp)) {
-        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            if (loading) {
-                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            } else {
-                IconButton(onClick = { v.toggle(msg.id, vm.mediaUrl(msg)) }) {
-                    Icon(
-                        if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (playing) "Pause voice note" else "Play voice note",
-                    )
-                }
-            }
-        }
-        Column(Modifier.weight(1f)) {
-            Slider(
-                value = dragging ?: if (duration > 0) position.toFloat() / duration else 0f,
-                onValueChange = { dragging = it },
-                onValueChangeFinished = {
-                    dragging?.let { v.seekTo((it * duration).toInt()) }
-                    dragging = null
-                },
-                enabled = current && duration > 0,
-            )
-            Text(
-                "${formatClock(position.toLong())} / ${if (current) formatClock(duration.toLong()) else "--:--"}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp),
-            )
-        }
-        TextButton(onClick = { v.cycleSpeed() }, contentPadding = PaddingValues(horizontal = 8.dp)) {
-            Text(speedLabel(v.speed))
-        }
-    }
-}
-
-@Composable
 private fun MessageInput(
     vm: WhatsAppViewModel,
     onSend: (String) -> Unit,
     onAttach: (Uri, String) -> Unit,
     displayName: (Uri) -> String,
     enabled: Boolean,
+    c: ChatColors,
+    reduced: Boolean,
 ) {
     var text by remember { mutableStateOf("") }
     var picked by remember { mutableStateOf<Uri?>(null) }
@@ -699,28 +620,25 @@ private fun MessageInput(
         if (granted) recorder.start() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
     if (recorder.recording) {
-        RecordingBar(recorder, onCancel = { recorder.cancel() }, onSend = { vm.sendRecording() })
-    } else Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = { picker.launch("*/*") }, enabled = enabled) {
-            Icon(Icons.Filled.AttachFile, contentDescription = "Attach file")
-        }
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            modifier = Modifier.weight(1f),
-            placeholder = { Text("Message…") },
+        ChatRecordingBar(
+            elapsed = formatClock(recorder.elapsedMs),
+            c = c,
+            reduced = reduced,
+            danger = MaterialTheme.colorScheme.error,
+            onCancel = { recorder.cancel() },
+            onSend = { vm.sendRecording() },
         )
-        IconButton(onClick = onMic, enabled = enabled) {
-            Icon(Icons.Filled.Mic, contentDescription = "Record voice note")
-        }
-        IconButton(onClick = { if (text.isNotBlank()) { onSend(text); text = "" } }, enabled = enabled) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
-        }
+    } else {
+        ChatComposer(
+            text = text,
+            onTextChange = { text = it },
+            enabled = enabled,
+            c = c,
+            reduced = reduced,
+            onSend = { if (text.isNotBlank()) { onSend(text); text = "" } },
+            onAttach = { picker.launch("*/*") },
+            onMic = onMic,
+        )
     }
 
     picked?.let { uri ->
@@ -729,32 +647,6 @@ private fun MessageInput(
             onSend = { caption -> onAttach(uri, caption); picked = null },
             onDismiss = { picked = null },
         )
-    }
-}
-
-/** Replaces the input row while recording: red dot, elapsed timer, cancel and send. */
-@Composable
-private fun RecordingBar(recorder: VoiceRecorder, onCancel: () -> Unit, onSend: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onCancel) {
-            Icon(Icons.Filled.Delete, contentDescription = "Cancel recording")
-        }
-        Box(
-            Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.error),
-        )
-        Spacer(Modifier.size(8.dp))
-        Text(formatClock(recorder.elapsedMs), modifier = Modifier.weight(1f))
-        IconButton(onClick = onSend) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send voice note")
-        }
     }
 }
 
@@ -868,31 +760,19 @@ private fun StatusDot(status: WaStatus?) {
     Spacer(Modifier.size(8.dp))
 }
 
-/** Initials on a tinted disc; the cached picture, once it loads, covers them (a 404 leaves the initials). */
+
+/** The chat's picture over tinted initials; see [ChatAvatar]. */
 @Composable
 private fun Avatar(name: String, jid: String, vm: WhatsAppViewModel, size: Dp = 40.dp) {
-    val version = vm.avatarVersions[jid] ?: 0
-    val key = "avatar:$jid:$version"
-    Box(
-        Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.secondaryContainer),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(waInitials(name), color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Medium)
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(vm.avatarUrl(jid))
-                .memoryCacheKey(key)
-                .diskCacheKey(key)
-                .build(),
-            imageLoader = vm.imageLoader,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
+    ChatAvatar(
+        name = name,
+        jid = jid,
+        url = vm.avatarUrl(jid),
+        version = vm.avatarVersions[jid] ?: 0,
+        imageLoader = vm.imageLoader,
+        c = rememberChatColors(),
+        size = size,
+    )
 }
 
 @Composable
