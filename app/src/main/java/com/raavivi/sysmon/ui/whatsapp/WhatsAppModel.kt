@@ -7,6 +7,7 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -374,4 +375,103 @@ fun waPlanMeta(textW: Int, textH: Int, lastLineRight: Float?, metaW: Int, metaH:
     }
     val w = max(textW, metaW)
     return MetaPlan(inline = false, width = w, height = textH + metaH, metaX = w - metaW, metaY = textH)
+}
+
+// -- message menu (hold for more options) --------------------------------------
+
+/** The menu's quick reactions and the expandable grid, mirroring the web widget. */
+val WA_QUICK_EMOJI = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+val WA_EMOJI_GRID = listOf(
+    "😀", "😅", "🤣", "😊", "😍", "🥰", "😘", "😎", "🤩", "🥳",
+    "🤔", "🤗", "🤝", "👎", "👏", "💪", "🔥", "✨", "💜", "🖤",
+    "🧡", "💛", "💚", "💙", "💔", "💯", "🎉", "🎂", "🎁", "☕",
+    "🌸", "🌈", "⚡", "⚽", "🏆", "🚀", "🤞", "👀", "🫡", "🫠",
+)
+
+/** One of my sent text messages can be edited while younger than this. */
+const val WA_EDIT_WINDOW_SEC = 15.0 * 60
+
+/** One of my sent messages can be revoked (deleted for everyone) while younger than this. */
+const val WA_REVOKE_WINDOW_SEC = 2.0 * 24 * 3600
+
+enum class WaMenuAction { REPLY, COPY, FORWARD, EDIT, SAVE, INFO, DELETE }
+
+/** My own, not-yet-revoked text message: the only thing "Edit" applies to (web parity). */
+fun waCanEdit(m: WaMessage, nowSec: Double): Boolean =
+    m.fromMe && !m.revoked && m.mediaType == null && m.text.isNotBlank() &&
+        m.ts > 0 && nowSec - m.ts <= WA_EDIT_WINDOW_SEC
+
+/** My own, not-yet-revoked message can be "deleted for everyone" while younger than two days. */
+fun waCanRevoke(m: WaMessage, nowSec: Double): Boolean =
+    m.fromMe && !m.revoked && m.ts > 0 && nowSec - m.ts <= WA_REVOKE_WINDOW_SEC
+
+/**
+ * Which actions a message's menu offers. A revoked message keeps only Info and Delete (for me);
+ * Copy appears when there is text, Edit only inside its window, Save for any media.
+ */
+fun waMenuActions(m: WaMessage, nowSec: Double): List<WaMenuAction> {
+    if (m.revoked) return listOf(WaMenuAction.INFO, WaMenuAction.DELETE)
+    val out = ArrayList<WaMenuAction>(7)
+    out.add(WaMenuAction.REPLY)
+    if (waCaptionOf(m).isNotBlank()) out.add(WaMenuAction.COPY)
+    out.add(WaMenuAction.FORWARD)
+    if (waCanEdit(m, nowSec)) out.add(WaMenuAction.EDIT)
+    if (m.mediaKind() != null) out.add(WaMenuAction.SAVE)
+    out.add(WaMenuAction.INFO)
+    out.add(WaMenuAction.DELETE)
+    return out
+}
+
+// -- swipe to reply ------------------------------------------------------------
+
+/** The finger drags a bubble freely this far before resistance starts. */
+const val WA_SWIPE_FREE = 40f
+/** The furthest the bubble ever travels, however far the finger goes. */
+const val WA_SWIPE_MAX = 72f
+/** Releasing past this offset replies. */
+const val WA_SWIPE_TRIGGER = 56f
+/** How gently the resistance eases in (mirrors the web's curve exactly). */
+private val WA_SWIPE_SOFT = WA_SWIPE_MAX - WA_SWIPE_FREE
+
+/** The bubble's offset for a finger drag of [raw]: free until [WA_SWIPE_FREE], then an exponential
+ *  ease toward [WA_SWIPE_MAX] - the same curve the web widget uses. */
+fun waSwipeOffset(raw: Float): Float = when {
+    raw <= 0f -> 0f
+    raw <= WA_SWIPE_FREE -> raw
+    else -> WA_SWIPE_FREE + WA_SWIPE_SOFT * (1f - exp(-(raw - WA_SWIPE_FREE) / WA_SWIPE_SOFT))
+}
+
+/** Whether a release at [off] replies. */
+fun waSwipeReached(off: Float): Boolean = off >= WA_SWIPE_TRIGGER
+
+/** 0..1 progress for the reply icon behind the bubble. */
+fun waSwipeProgress(off: Float): Float = (off / WA_SWIPE_TRIGGER).coerceIn(0f, 1f)
+
+// -- photo gallery --------------------------------------------------------------
+
+/** The chat's loaded photos in chat order, for the swipeable viewer. */
+fun waGalleryItems(messages: List<WaMessage>): List<WaMessage> =
+    messages.filter { it.id.isNotBlank() && !it.revoked && !it.isReaction && it.mediaKind() == WaMediaKind.IMAGE }
+
+// -- chat-list search ----------------------------------------------------------
+
+/**
+ * Whether the search bar should show a chat: name match (as before), the raw jid as a substring, or -
+ * for a person - a phone number in any format: the query's digits (3 or more, a single leading trunk
+ * zero dropped, so local "082 123 4567" matches the international "27821234567@s.whatsapp.net")
+ * contained in the jid's user part. Groups only match by name or a raw jid substring, never by loose
+ * digits.
+ */
+fun waChatMatches(chat: WaChat, query: String): Boolean {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return true
+    if (chat.name.lowercase().contains(q)) return true
+    val jid = chat.jid.lowercase()
+    if (jid.contains(q)) return true
+    if (!jid.endsWith("@s.whatsapp.net")) return false
+    val digits = q.filter { it.isDigit() }
+    if (digits.length < 3) return false
+    val needle = digits.removePrefix("0")
+    if (needle.length < 3) return false
+    return jid.substringBefore('@').filter { it.isDigit() }.contains(needle)
 }
