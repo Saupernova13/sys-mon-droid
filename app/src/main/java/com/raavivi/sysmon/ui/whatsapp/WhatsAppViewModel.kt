@@ -117,6 +117,49 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     val imageLoader: ImageLoader = container.imageLoader
 
+    /** Reactions folded from the loaded pages and live frames; they never become list items. */
+    var reactions by mutableStateOf<WaReactions>(emptyMap())
+        private set
+
+    /** Ids of messages that arrived live or were just sent: only these get the entrance animation. */
+    var freshIds by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    private fun foldReactions(page: List<WaMessage>, replace: Boolean) {
+        reactions = waAggregateReactions(page, if (replace) emptyMap() else reactions)
+    }
+
+    /**
+     * Warm Coil's caches for the media of a page that just arrived (newest 24), with the very requests
+     * the bubbles build, so photos and stickers are there when they scroll in.
+     */
+    private fun prefetchMedia(page: List<WaMessage>) {
+        val ctx = container.appContext
+        val density = ctx.resources.displayMetrics.density
+        val now = System.currentTimeMillis() / 1000.0
+        page.asReversed().asSequence()
+            .filter { !it.revoked && !it.isReaction && shouldAutoLoadImage(it.downloaded, it.ts, now) }
+            .mapNotNull { m ->
+                when (m.mediaKind()) {
+                    WaMediaKind.IMAGE -> {
+                        val box = waMediaBox(m.width, m.height)
+                        waImageRequest(ctx, mediaUrl(m, true), (box.w * density).toInt(), (box.h * density).toInt())
+                    }
+                    WaMediaKind.STICKER -> {
+                        val px = (WA_STICKER_BOX * density).toInt()
+                        waImageRequest(ctx, mediaUrl(m, false), px, px)
+                    }
+                    else -> null
+                }
+            }
+            .take(24)
+            .forEach { imageLoader.enqueue(it) }
+    }
+
+    fun clearFresh() { freshIds = emptySet() }
+
+    val currentLocalPin: Boolean get() = chats.firstOrNull { it.jid == currentJid }?.localPin ?: false
+
     /** Per-jid counter folded into the avatar's cache key; bumped when a refresh cached a new picture. */
     var avatarVersions by mutableStateOf<Map<String, Int>>(emptyMap())
         private set
@@ -147,7 +190,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         connectWs()
     }
 
-    fun mediaUrl(msg: WaMessage): String = container.api.whatsappMediaUrl(msg.chat, msg.id)
+    fun mediaUrl(msg: WaMessage, thumb: Boolean = false): String = container.api.whatsappMediaUrl(msg.chat, msg.id, thumb)
 
     fun avatarUrl(jid: String): String = container.api.whatsappAvatarUrl(jid)
 
@@ -162,7 +205,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         error = null
         viewModelScope.launch {
             when (val r = safeCall { container.api.api.waChats() }) {
-                is ApiResult.Ok -> chats = r.value.chats.map { it.toWaChat() }.sortedWith(chatOrder)
+                is ApiResult.Ok -> chats = r.value.chats.map { it.toWaChat() }.let(::waSortChats)
                 is ApiResult.Err -> error = r.message
             }
             loadingChats = false
@@ -201,6 +244,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         voice.release()
         recorder.cancel()
         timeline = null
+        reactions = emptyMap()
+        freshIds = emptySet()
         loadMessages(jid)
         viewModelScope.launch {
             val r = safeCall { container.api.api.waTimeline(chat = jid) }
@@ -254,6 +299,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         recorder.cancel()
         currentJid = null
         messages = emptyList()
+        reactions = emptyMap()
+        freshIds = emptySet()
         timeline = null
         resetWindow()
     }
@@ -293,11 +340,19 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                 val page = r.value.messages.map { it.toWaMessage() }
                 if (merge) {
                     messages = mergeMessages(messages, page).first
+                    foldReactions(page, replace = false)
                 } else {
+                    // A send / refresh while following the bottom: the few genuinely new rows animate in.
+                    val known = if (atLatest) messages.mapTo(HashSet()) { it.id } else null
                     windowEpoch++
                     messages = page.sortedBy { it.ts }
                     reachedFirst = false
+                    foldReactions(page, replace = true)
+                    val added = if (known == null || known.isEmpty()) emptyList()
+                    else messages.filter { it.id.isNotBlank() && it.id !in known && isVisibleMessage(it) }
+                    freshIds = if (added.size <= 5) added.mapTo(HashSet()) { it.id } else emptySet()
                 }
+                prefetchMedia(page)
                 atLatest = true
                 true
             }
@@ -339,6 +394,9 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                         val page = r.value.messages.map { it.toWaMessage() }
                         windowEpoch++
                         messages = page.sortedBy { it.ts }
+                        foldReactions(page, replace = true)
+                        freshIds = emptySet()
+                        prefetchMedia(page)
                         atLatest = page.size < WA_PAGE_LIMIT
                         reachedFirst = true
                         topTick++
@@ -372,6 +430,9 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                         val page = r.value.messages.map { it.toWaMessage() }
                         windowEpoch++
                         messages = page.sortedBy { it.ts }
+                        foldReactions(page, replace = true)
+                        freshIds = emptySet()
+                        prefetchMedia(page)
                         atLatest = page.size < WA_PAGE_LIMIT
                         reachedFirst = timeline?.let { ts <= it.first.firstTs } ?: false
                         topTick++
@@ -410,6 +471,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                     val page = r.value.messages.map { it.toWaMessage() }
                     val (merged, added) = mergeMessages(messages, page)
                     messages = merged
+                    foldReactions(page, replace = false)
+                    prefetchMedia(page)
                     var outcome = pageOutcome(page.size, added, WA_PAGE_LIMIT)
                     if (outcome == PageOutcome.STALLED && !strict) {
                         strict = true
@@ -452,6 +515,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                     val page = r.value.messages.map { it.toWaMessage() }
                     val (merged, added) = mergeMessages(messages, page)
                     messages = merged
+                    foldReactions(page, replace = false)
+                    prefetchMedia(page)
                     var outcome = pageOutcome(page.size, added, WA_PAGE_LIMIT)
                     if (outcome == PageOutcome.STALLED && !strict) {
                         strict = true
@@ -572,12 +637,13 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun togglePin() {
         val jid = currentJid ?: return
+        if (currentLocalPin) return   // a sys-mon pin cannot be changed from here
         val next = !currentPinned
         viewModelScope.launch {
             when (val r = safeCall { container.api.api.waPin(WaPinReq(chat = jid, pinned = next)) }) {
                 is ApiResult.Ok -> {
                     currentPinned = next
-                    chats = chats.map { if (it.jid == jid) it.copy(pinned = next) else it }.sortedWith(chatOrder)
+                    chats = chats.map { if (it.jid == jid) it.copy(pinned = next) else it }.let(::waSortChats)
                 }
                 is ApiResult.Err -> message = "Pin failed: ${r.message}"
             }
@@ -606,12 +672,28 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     private fun handleLive(text: String) {
         val obj = runCatching { SysMonJson.parseToJsonElement(text).jsonObject }.getOrNull() ?: return
         val msg = obj.toWaMessage()
-        if (msg.chat.isBlank()) return
+        if (msg.chat.isBlank() || msg.deletedForMe) return
+
+        // A reaction is a fact about another message: it updates its chip, nothing else (no row,
+        // no unread bump, no preview, no scroll-follow).
+        if (msg.isReaction) {
+            if (msg.chat == currentJid) {
+                reactions = waApplyReaction(reactions, msg.reactionToId, waReactorKey(msg), msg.reactionEmoji, msg.ts)
+            }
+            return
+        }
+        // An edit or a delete carries the original id: update that message in place, never add a second.
+        if ((msg.edited || msg.revoked) && msg.id.isNotBlank()) {
+            if (msg.chat == currentJid) waApplyLiveUpdate(messages, msg)?.let { messages = it }
+            return
+        }
 
         // Append to the open conversation, but only while the window reaches the newest message;
         // otherwise loadNewer / the final merge picks it up in order.
         if (msg.chat == currentJid && atLatest && messages.none { it.id == msg.id && it.id.isNotBlank() }) {
             messages = (messages + msg).sortedBy { it.ts }
+            if (msg.id.isNotBlank()) freshIds = freshIds + msg.id
+            prefetchMedia(listOf(msg))
             liveTick++
         }
 
@@ -622,12 +704,12 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         } else {
             val bumpUnread = !msg.fromMe && msg.chat != currentJid
             chats = chats.map {
-                if (it.jid == msg.chat) it.copy(
+                if (it.jid == msg.chat) waPreviewFromMessage(it, msg).copy(
                     lastTs = maxOf(it.lastTs, msg.ts),
                     unread = if (bumpUnread) it.unread + 1 else it.unread,
                     name = if (it.name.isBlank() && msg.chatName.isNotBlank()) msg.chatName else it.name,
                 ) else it
-            }.sortedWith(chatOrder)
+            }.let(::waSortChats)
         }
     }
 
@@ -644,6 +726,5 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         const val AVATAR_LIMIT = 40
         const val MAX_AVATAR_PASSES = 6
         const val MAX_UPLOAD_BYTES = 100L * 1024 * 1024
-        val chatOrder = compareByDescending<WaChat> { it.pinned }.thenByDescending { it.lastTs }
     }
 }
