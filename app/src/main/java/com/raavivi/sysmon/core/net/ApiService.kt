@@ -13,8 +13,13 @@ import com.raavivi.sysmon.core.model.WatchdogStatus
 import com.raavivi.sysmon.core.model.WatchdogTarget
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
+import com.raavivi.sysmon.core.model.WaDelete
+import com.raavivi.sysmon.core.model.WaEdit
+import com.raavivi.sysmon.core.model.WaForward
 import com.raavivi.sysmon.core.model.WaLatestReq
+import com.raavivi.sysmon.core.model.WaLocalPinReq
 import com.raavivi.sysmon.core.model.WaMarkRead
+import com.raavivi.sysmon.core.model.WaReact
 import com.raavivi.sysmon.core.model.DrivesResponse
 import com.raavivi.sysmon.core.model.Favorite
 import com.raavivi.sysmon.core.model.FavoriteBody
@@ -436,6 +441,25 @@ interface ApiService {
 
     @POST("api/whatsapp/pin")
     suspend fun waPin(@Body body: WaPinReq): OkResponse
+
+    /** Pin or unpin a chat in sys-mon's own pin list; wacli and WhatsApp never see these. */
+    @POST("api/whatsapp/local-pin")
+    suspend fun waLocalPin(@Body body: WaLocalPinReq): OkResponse
+
+    /** React to a message; an empty emoji removes the reaction. */
+    @POST("api/whatsapp/react")
+    suspend fun waReact(@Body body: WaReact): OkResponse
+
+    @POST("api/whatsapp/forward")
+    suspend fun waForward(@Body body: WaForward): OkResponse
+
+    /** Delete a message: `everyone` revokes one of my sent messages, otherwise it is removed for me. */
+    @POST("api/whatsapp/delete")
+    suspend fun waDelete(@Body body: WaDelete): OkResponse
+
+    /** Edit one of my sent text messages (server enforces its own age window too). */
+    @POST("api/whatsapp/edit")
+    suspend fun waEdit(@Body body: WaEdit): OkResponse
 
     @POST("api/whatsapp/backfill")
     suspend fun waBackfill(@Body body: WaBackfill): OkResponse
