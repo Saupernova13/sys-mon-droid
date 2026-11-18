@@ -8,8 +8,6 @@ import com.raavivi.sysmon.core.model.toWaMessage
 import com.raavivi.sysmon.ui.whatsapp.DayRow
 import com.raavivi.sysmon.ui.whatsapp.MsgRow
 import com.raavivi.sysmon.ui.whatsapp.WaMediaKind
-import com.raavivi.sysmon.ui.whatsapp.WA_EDIT_WINDOW_SEC
-import com.raavivi.sysmon.ui.whatsapp.WA_REVOKE_WINDOW_SEC
 import com.raavivi.sysmon.ui.whatsapp.WA_SWIPE_FREE
 import com.raavivi.sysmon.ui.whatsapp.WA_SWIPE_MAX
 import com.raavivi.sysmon.ui.whatsapp.WA_SWIPE_TRIGGER
@@ -66,10 +64,12 @@ class WhatsAppModelTest {
     private fun msg(
         id: String, ts: Double, sender: String = "a@s.whatsapp.net", fromMe: Boolean = false, text: String = id,
         reactionTo: String = "", emoji: String = "", deletedForMe: Boolean = false, mediaType: String? = null,
+        editUntil: Long = if (fromMe) ts.toLong() + 900 else 0, revokeUntil: Long = if (fromMe) ts.toLong() + 172_800 else 0,
     ) = WaMessage(
         id = id, chat = "c", chatName = "", sender = sender, senderName = "", fromMe = fromMe, ts = ts, text = text,
         mediaType = mediaType, filename = null, downloaded = false,
         reactionToId = reactionTo, reactionEmoji = emoji, deletedForMe = deletedForMe,
+        editUntil = editUntil, revokeUntil = revokeUntil,
     )
 
     // -- normalisation ---------------------------------------------------------
@@ -503,10 +503,26 @@ class WhatsAppModelTest {
         assertFalse(acts.contains(WaMenuAction.EDIT))
     }
 
+    @Test fun serverDeadlinesDecodeOntoTheMessage() {
+        val m = parse(
+            """{"MsgID":"X1","ChatJID":"1@s.whatsapp.net","FromMe":true,"Timestamp":1700000000,"Text":"hi",
+            "edit_until":1700000900,"revoke_until":1700172800}""",
+        ).toWaMessage()
+        assertEquals(1700000900L, m.editUntil)
+        assertEquals(1700172800L, m.revokeUntil)
+        val bare = parse("""{"MsgID":"X2","ChatJID":"1@s.whatsapp.net","FromMe":true,"Timestamp":1700000000}""").toWaMessage()
+        assertEquals(0L, bare.editUntil)
+        assertEquals(0L, bare.revokeUntil)
+    }
+
     @Test fun editOnlyAppliesToOwnFreshText() {
         val now = at(2026, 11, 18)
         assertTrue(waCanEdit(msg("a", now, fromMe = true), now + 60))
-        assertFalse(waCanEdit(msg("a", now, fromMe = true), now + WA_EDIT_WINDOW_SEC + 1))
+        assertFalse(waCanEdit(msg("a", now, fromMe = true), now + 901))
+        val until = msg("a", now, fromMe = true).editUntil
+        assertTrue(waCanEdit(msg("a", now, fromMe = true), until - 1.0))
+        assertFalse(waCanEdit(msg("a", now, fromMe = true), until.toDouble()))
+        assertFalse(waCanEdit(msg("a", now, fromMe = true, editUntil = 0), now + 60))
         assertFalse(waCanEdit(msg("a", now, fromMe = false), now + 60))
         assertFalse(waCanEdit(msg("p", now, fromMe = true, mediaType = "image"), now + 60))
         assertFalse(waCanEdit(msg("r", now, fromMe = true).copy(revoked = true), now + 60))
@@ -515,7 +531,11 @@ class WhatsAppModelTest {
     @Test fun revokeOnlyAppliesToOwnFreshMessages() {
         val now = at(2026, 11, 18)
         assertTrue(waCanRevoke(msg("a", now, fromMe = true), now + 60))
-        assertFalse(waCanRevoke(msg("a", now, fromMe = true), now + WA_REVOKE_WINDOW_SEC + 1))
+        assertFalse(waCanRevoke(msg("a", now, fromMe = true), now + 172_801))
+        val until = msg("a", now, fromMe = true).revokeUntil
+        assertTrue(waCanRevoke(msg("a", now, fromMe = true), until - 1.0))
+        assertFalse(waCanRevoke(msg("a", now, fromMe = true), until.toDouble()))
+        assertFalse(waCanRevoke(msg("a", now, fromMe = true, revokeUntil = 0), now + 60))
         assertFalse(waCanRevoke(msg("a", now, fromMe = false), now + 60))
         assertFalse(waCanRevoke(msg("r", now, fromMe = true).copy(revoked = true), now + 60))
     }

@@ -148,6 +148,9 @@ data class WaMessage(
     /** A reaction is its own row: target message id + emoji (empty = removed). Never a list item. */
     val reactionToId: String = "",
     val reactionEmoji: String = "",
+    /** Server-stamped deadlines (unix seconds) for Edit / Delete for everyone; 0 when absent. */
+    val editUntil: Long = 0,
+    val revokeUntil: Long = 0,
 ) {
     val isReaction: Boolean get() = reactionToId.isNotBlank()
 }
@@ -235,6 +238,8 @@ fun JsonObject.toWaMessage(): WaMessage {
         deletedForMe = pickBool("DeletedForMe", "deleted_for_me"),
         reactionToId = pickStr("ReactionToID", "reaction_to_id") ?: "",
         reactionEmoji = pickStr("ReactionEmoji", "reaction_emoji") ?: "",
+        editUntil = pickLong("edit_until"),
+        revokeUntil = pickLong("revoke_until"),
     )
 }
 
@@ -293,6 +298,14 @@ private fun JsonObject.pickInt(vararg keys: String): Int {
         (c.toIntOrNull() ?: c.toDoubleOrNull()?.toInt())?.let { return it }
     }
     return 0
+}
+
+private fun JsonObject.pickLong(vararg keys: String): Long {
+    for (k in keys) {
+        val c = (this[k] as? JsonPrimitive)?.contentOrNull ?: continue
+        (c.toLongOrNull() ?: c.toDoubleOrNull()?.toLong())?.let { return it }
+    }
+    return 0L
 }
 
 /** Timestamps arrive as RFC3339 strings or epoch numbers; normalise to seconds. */
