@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.raavivi.sysmon.ui.whatsapp
 
 import androidx.compose.animation.Crossfade
@@ -8,6 +10,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,15 +42,22 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
@@ -58,6 +69,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import coil.ImageLoader
 import com.raavivi.sysmon.core.model.WaMessage
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** Everything a message row needs from the conversation, so the row composables stay free of the VM. */
 @Stable
@@ -79,6 +92,14 @@ class ChatEnv(
     val onVoiceSeek: (WaMessage, Float) -> Unit,
     val onVoiceSpeed: () -> Unit,
     val onQuoteTap: (String) -> Unit,
+    /** Long-press opens the message menu (the screen lifts a clone at the bubble's live rect). */
+    val onLongPress: (WaMessage) -> Unit,
+    /** A completed swipe-to-reply (or the menu's Reply action). */
+    val onReply: (WaMessage) -> Unit,
+    /** React from the reactor popover: an empty emoji removes my reaction. */
+    val onReact: (WaMessage, String) -> Unit,
+    /** Live bubble bounds by message id, for the menu overlay's lifted clone. */
+    val rowBounds: MutableMap<String, Rect>,
     /** Reaction chips pop when they first appear or change; off while the conversation is still opening. */
     val popEnabled: Boolean,
     val reactionSeen: MutableMap<String, String>,
@@ -121,7 +142,8 @@ fun TimeChip(m: WaMessage, c: ChatColors, modifier: Modifier = Modifier) {
 
 /**
  * One message in the list: spacing, sender-side alignment, entrance for live items, the bubble (or the
- * bubble-free sticker / jumbo emoji) and its reaction chip.
+ * bubble-free sticker / jumbo emoji) and its reaction chip. Long-press opens the message menu; a
+ * rightward drag resists past 40dp and replies when released past 56dp.
  */
 @Composable
 fun MessageItem(row: MsgRow, env: ChatEnv, fresh: Boolean, flash: Boolean, modifier: Modifier = Modifier) {
@@ -152,61 +174,150 @@ fun MessageItem(row: MsgRow, env: ChatEnv, fresh: Boolean, flash: Boolean, modif
                 .padding(bottom = if (sum.total > 0) 12.dp else 0.dp),
         ) {
             val side = if (mine) Alignment.TopEnd else Alignment.TopStart
-            if (bubbleFree) {
-                Column(Modifier.align(side), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
-                    if (row.groupFirst && env.group && !mine) {
-                        SenderName(m, env, Modifier.padding(start = 4.dp, bottom = 2.dp))
+            // The swipe follows the finger: free to 40dp, resisted toward 72dp; a release past 56dp
+            // replies and springs back either way. Reduced motion still moves (it is a drag), but
+            // without the haptic tick.
+            val scope = rememberCoroutineScope()
+            val haptic = LocalHapticFeedback.current
+            val swipe = remember { Animatable(0f) }
+            var rawDrag by remember(m.id) { mutableStateOf(0f) }
+            var ticked by remember(m.id) { mutableStateOf(false) }
+            Icon(
+                Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = c.accent,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 10.dp, start = 2.dp)
+                    .size(18.dp)
+                    .graphicsLayer {
+                        val p = waSwipeProgress(swipe.value)
+                        alpha = p
+                        scaleX = 0.6f + 0.4f * p
+                        scaleY = 0.6f + 0.4f * p
+                    },
+            )
+            Box(
+                Modifier
+                    .onGloballyPositioned { if (m.id.isNotBlank()) env.rowBounds[m.id] = it.boundsInRoot() }
+                    .combinedClickable(onClick = {}, onLongClick = { env.onLongPress(m) })
+                    .pointerInput(m.id) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (waSwipeReached(swipe.value)) env.onReply(m)
+                                scope.launch { swipe.animateTo(0f, moveSpring()) }
+                            },
+                            onDragCancel = { scope.launch { swipe.animateTo(0f, moveSpring()) } },
+                        ) { _, dx ->
+                            rawDrag = (rawDrag + dx).coerceAtLeast(0f)
+                            scope.launch { swipe.snapTo(waSwipeOffset(rawDrag)) }
+                            val reached = waSwipeReached(swipe.value)
+                            if (reached != ticked) {
+                                ticked = reached
+                                if (reached && !env.reduced) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                        }
                     }
-                    if (sticker) {
-                        BubbleImage(
-                            msg = m, boxW = WA_STICKER_BOX.dp, boxH = WA_STICKER_BOX.dp, sticker = true, mine = mine, env = env,
-                            cornerRadius = 16.dp, onOpen = {},
-                        )
-                    } else {
-                        Text(
-                            m.text.trim(),
-                            style = chatBodyStyle(c.ink).copy(fontSize = waJumboSize(jumbo).sp, lineHeight = (waJumboSize(jumbo) + 8).sp),
-                        )
+                    .offset { IntOffset(swipe.value.roundToInt(), 0) },
+            ) {
+                if (bubbleFree) {
+                    Column(Modifier.align(side), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+                        if (row.groupFirst && env.group && !mine) {
+                            SenderName(m, env, Modifier.padding(start = 4.dp, bottom = 2.dp))
+                        }
+                        if (sticker) {
+                            BubbleImage(
+                                msg = m, boxW = WA_STICKER_BOX.dp, boxH = WA_STICKER_BOX.dp, sticker = true, mine = mine, env = env,
+                                cornerRadius = 16.dp, onOpen = {},
+                            )
+                        } else {
+                            Text(
+                                m.text.trim(),
+                                style = chatBodyStyle(c.ink).copy(fontSize = waJumboSize(jumbo).sp, lineHeight = (waJumboSize(jumbo) + 8).sp),
+                            )
+                        }
+                        TimeChip(m, c, Modifier.padding(top = 2.dp))
                     }
-                    TimeChip(m, c, Modifier.padding(top = 2.dp))
-                }
-            } else {
-                val shape = remember(mine, row.groupFirst, row.groupLast) {
-                    BubbleShape(mine, tail = row.groupFirst, topNeighbour = !row.groupFirst, bottomNeighbour = !row.groupLast)
-                }
-                val convex = remember(mine, row.groupFirst, row.groupLast) {
-                    BubbleShape(mine, tail = false, topNeighbour = !row.groupFirst, bottomNeighbour = !row.groupLast)
-                }
-                val pulse = remember { Animatable(0f) }
-                LaunchedEffect(flash) {
-                    if (flash) {
-                        pulse.animateTo(0.5f, tween(120))
-                        pulse.animateTo(0f, tween(400))
+                } else {
+                    val shape = remember(mine, row.groupFirst, row.groupLast) {
+                        BubbleShape(mine, tail = row.groupFirst, topNeighbour = !row.groupFirst, bottomNeighbour = !row.groupLast)
+                    }
+                    val convex = remember(mine, row.groupFirst, row.groupLast) {
+                        BubbleShape(mine, tail = false, topNeighbour = !row.groupFirst, bottomNeighbour = !row.groupLast)
+                    }
+                    val pulse = remember { Animatable(0f) }
+                    LaunchedEffect(flash) {
+                        if (flash) {
+                            pulse.animateTo(0.5f, tween(120))
+                            pulse.animateTo(0f, tween(400))
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .align(side)
+                            .widthIn(max = env.maxBubble)
+                            .pressScale(env.reduced)
+                            .bubbleShadow(shape, convex, mine)
+                            .background(bubbleBg(c, mine), shape)
+                            .background(c.accent.copy(alpha = pulse.value), shape),
+                    ) {
+                        BubbleBody(row, env, kind)
                     }
                 }
-                Box(
-                    Modifier
-                        .align(side)
-                        .widthIn(max = env.maxBubble)
-                        .pressScale(env.reduced)
-                        .bubbleShadow(shape, convex, mine)
-                        .background(bubbleBg(c, mine), shape)
-                        .background(c.accent.copy(alpha = pulse.value), shape),
-                ) {
-                    BubbleBody(row, env, kind)
+                if (sum.total > 0) {
+                    ReactionChip(
+                        sum = sum,
+                        m = m,
+                        env = env,
+                        modifier = Modifier
+                            .align(if (mine) Alignment.BottomEnd else Alignment.BottomStart)
+                            .offset(x = if (mine) (-8).dp else 8.dp, y = 12.dp),
+                    )
                 }
-            }
-            if (sum.total > 0) {
-                ReactionChip(
-                    sum = sum,
-                    msgId = m.id,
-                    env = env,
-                    modifier = Modifier
-                        .align(if (mine) Alignment.BottomEnd else Alignment.BottomStart)
-                        .offset(x = if (mine) (-8).dp else 8.dp, y = 12.dp),
-                )
             }
         }
+    }
+}
+
+/** The menu overlay's lifted copy of a bubble (or bubble-free sticker / jumbo): same body, no gestures. */
+@Composable
+fun BubbleClone(row: MsgRow, env: ChatEnv, modifier: Modifier = Modifier) {
+    val m = row.msg
+    val mine = m.fromMe
+    val c = env.colors
+    val kind = m.mediaKind()
+    val sticker = kind == WaMediaKind.STICKER && !m.revoked
+    val jumbo = remember(m.text, m.replyToId, m.forwarded, kind, m.revoked) {
+        if (kind == null && !m.revoked && m.replyToId.isBlank() && m.replyToText.isBlank() && !m.forwarded) waEmojiOnlyCount(m.text) else 0
+    }
+    if (sticker || jumbo > 0) {
+        Column(modifier, horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+            if (sticker) {
+                BubbleImage(
+                    msg = m, boxW = WA_STICKER_BOX.dp, boxH = WA_STICKER_BOX.dp, sticker = true, mine = mine, env = env,
+                    cornerRadius = 16.dp, onOpen = {},
+                )
+            } else {
+                Text(
+                    m.text.trim(),
+                    style = chatBodyStyle(c.ink).copy(fontSize = waJumboSize(jumbo).sp, lineHeight = (waJumboSize(jumbo) + 8).sp),
+                )
+            }
+            TimeChip(m, c, Modifier.padding(top = 2.dp))
+        }
+        return
+    }
+    val shape = remember(mine, row.groupFirst, row.groupLast) {
+        BubbleShape(mine, tail = row.groupFirst, topNeighbour = !row.groupFirst, bottomNeighbour = !row.groupLast)
+    }
+    val convex = remember(mine, row.groupFirst, row.groupLast) {
+        BubbleShape(mine, tail = false, topNeighbour = !row.groupFirst, bottomNeighbour = !row.groupLast)
+    }
+    Box(
+        modifier
+            .widthIn(max = env.maxBubble)
+            .bubbleShadow(shape, convex, mine)
+            .background(bubbleBg(c, mine), shape),
+    ) {
+        BubbleBody(row, env, kind)
     }
 }
 
@@ -360,11 +471,13 @@ private fun QuoteCard(q: QuoteView, mine: Boolean, c: ChatColors, onClick: () ->
 /**
  * Reactions hang off the bubble's bottom edge: up to 3 distinct emoji (most frequent first) and the
  * total when more than one. Pops with a spring when it first appears or changes; tapping lists who
- * reacted (removing a reaction arrives with the long-press menu).
+ * reacted, and tapping my own reaction removes it (the emoji itself is also reactable from the
+ * long-press menu).
  */
 @Composable
-private fun ReactionChip(sum: ReactionSummary, msgId: String, env: ChatEnv, modifier: Modifier = Modifier) {
+private fun ReactionChip(sum: ReactionSummary, m: WaMessage, env: ChatEnv, modifier: Modifier = Modifier) {
     val c = env.colors
+    val msgId = m.id
     val sig = waReactionSig(sum)
     val scale = remember { Animatable(1f) }
     LaunchedEffect(sig, env.popEnabled) {
@@ -402,14 +515,25 @@ private fun ReactionChip(sum: ReactionSummary, msgId: String, env: ChatEnv, modi
                     Column(Modifier.padding(vertical = 6.dp).widthIn(min = 160.dp, max = 260.dp)) {
                         for (r in sum.reactors) {
                             Row(
-                                Modifier.heightIn(min = 40.dp).padding(horizontal = 14.dp),
+                                Modifier
+                                    .heightIn(min = 40.dp)
+                                    .padding(horizontal = 14.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .combinedClickable(
+                                        onClick = {
+                                            if (r.key == "me") {
+                                                open = false
+                                                env.onReact(m, "")
+                                            }
+                                        },
+                                    ),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(r.emoji, style = chatSecondaryStyle(c.ink).copy(fontSize = 18.sp))
                                 Spacer(Modifier.width(10.dp))
                                 Text(
-                                    if (r.key == "me") "You" else waSenderLabel(r.key, env.names),
-                                    style = chatSecondaryStyle(c.ink),
+                                    if (r.key == "me") "You - tap to remove" else waSenderLabel(r.key, env.names),
+                                    style = chatSecondaryStyle(if (r.key == "me") c.accent else c.ink),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )

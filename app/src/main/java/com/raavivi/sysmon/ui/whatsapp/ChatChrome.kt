@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.raavivi.sysmon.ui.whatsapp
 
 import androidx.compose.animation.AnimatedVisibility
@@ -17,11 +19,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -36,6 +41,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -45,6 +51,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -54,6 +61,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +83,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import coil.ImageLoader
 import coil.compose.AsyncImage
@@ -263,10 +273,13 @@ fun JumpToLatestFab(
     }
 }
 
+/** The composer's context chip: the message being edited, or the one being replied to. */
+data class ComposerChip(val editing: Boolean, val who: String, val snippet: String)
+
 /**
- * Floating composer: a pill input with the attach button inside on the left, and a 44dp accent button
- * that is the mic while the input is empty and morphs to send (scale + 90 degree rotate, spring) once
- * there is text. The reply chip arrives with the reply feature.
+ * Floating composer: a pill input with the attach button inside on the left, a reply / edit chip that
+ * rides on top of the input, and a 44dp accent button that is the mic while the input is empty and
+ * morphs to send (scale + 90 degree rotate, spring) once there is text.
  */
 @Composable
 fun ChatComposer(
@@ -278,6 +291,8 @@ fun ChatComposer(
     onSend: () -> Unit,
     onAttach: () -> Unit,
     onMic: () -> Unit,
+    chip: ComposerChip? = null,
+    onChipCancel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val hasText = text.isNotBlank()
@@ -297,24 +312,59 @@ fun ChatComposer(
                 .background(c.inBg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onAttach, enabled = enabled, modifier = Modifier.size(44.dp)) {
-                Icon(Icons.Filled.AttachFile, contentDescription = "Attach file", tint = c.meta)
-            }
-            BasicTextField(
-                value = text,
-                onValueChange = onTextChange,
-                textStyle = chatBodyStyle(c.ink),
-                cursorBrush = SolidColor(c.accent),
-                maxLines = 5,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                modifier = Modifier.weight(1f).padding(vertical = 11.dp).padding(end = 14.dp),
-                decorationBox = { inner ->
-                    Box(contentAlignment = Alignment.CenterStart) {
-                        if (text.isEmpty()) Text("Message", style = chatBodyStyle(c.meta))
-                        inner()
+            Column {
+                if (chip != null) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 10.dp, end = 6.dp, top = 8.dp)
+                            .height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.width(4.dp).fillMaxHeight().background(c.accent, RoundedCornerShape(2.dp)))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (chip.editing) "Editing message" else "Replying to ${chip.who}",
+                                style = chatSecondaryStyle(c.accent, FontWeight.SemiBold),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (chip.snippet.isNotBlank()) {
+                                Text(
+                                    chip.snippet,
+                                    style = chatSecondaryStyle(c.meta),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        IconButton(onClick = onChipCancel, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.Close, contentDescription = "Cancel ${if (chip.editing) "edit" else "reply"}", tint = c.meta)
+                        }
                     }
-                },
-            )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onAttach, enabled = enabled, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Filled.AttachFile, contentDescription = "Attach file", tint = c.meta)
+                    }
+                    BasicTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        textStyle = chatBodyStyle(c.ink),
+                        cursorBrush = SolidColor(c.accent),
+                        maxLines = 5,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        modifier = Modifier.weight(1f).padding(vertical = 11.dp).padding(end = 14.dp),
+                        decorationBox = { inner ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (text.isEmpty()) Text("Message", style = chatBodyStyle(c.meta))
+                                inner()
+                            }
+                        },
+                    )
+                }
+            }
         }
         Spacer(Modifier.width(8.dp))
         Box(
@@ -432,7 +482,8 @@ fun ChatSearchField(value: String, onValueChange: (String) -> Unit, c: ChatColor
     }
 }
 
-/** A chat-list row: avatar 48dp, name + time, preview line, pin and an accent unread badge that pops on change. */
+/** A chat-list row: avatar 48dp, name + time, preview line, pin and an accent unread badge that pops
+ *  on change. Long-press opens [menu] (pins, mark as read) in an anchored dropdown. */
 @Composable
 fun ChatListRow(
     chat: WaChat,
@@ -442,54 +493,68 @@ fun ChatListRow(
     reduced: Boolean,
     active: Boolean,
     onClick: () -> Unit,
+    menuOpen: Boolean = false,
+    onMenuOpenChange: (Boolean) -> Unit = {},
+    menu: @Composable ColumnScope.() -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val preview = remember(chat) { waPreviewLine(chat, waIsGroup(chat.jid)) }
     val unread = chat.unread > 0
-    Row(
-        modifier
-            .fillMaxWidth()
-            .pressScale(reduced)
-            .background(if (active) c.accent.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .heightIn(min = 72.dp)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        avatar()
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    chat.name,
-                    style = chatSecondaryStyle(c.ink, FontWeight.SemiBold).copy(fontSize = 15.sp1(), lineHeight = 20.sp1()),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (chat.lastTs > 0) {
-                    Spacer(Modifier.width(8.dp))
+    Box(modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .pressScale(reduced)
+                .background(if (active) c.accent.copy(alpha = 0.10f) else Color.Transparent)
+                .combinedClickable(onClick = onClick, onLongClick = { onMenuOpenChange(true) })
+                .heightIn(min = 72.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            avatar()
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        waChatTime(chat.lastTs, nowSec),
-                        style = chatMetaStyle(if (unread) c.accent else c.meta),
+                        chat.name,
+                        style = chatSecondaryStyle(c.ink, FontWeight.SemiBold).copy(fontSize = 15.sp1(), lineHeight = 20.sp1()),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
+                    if (chat.lastTs > 0) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            waChatTime(chat.lastTs, nowSec),
+                            style = chatMetaStyle(if (unread) c.accent else c.meta),
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        if (preview != null) PreviewText(preview, c)
+                    }
+                    if (chat.pinned) {
+                        Icon(
+                            Icons.Filled.PushPin,
+                            contentDescription = if (chat.localPin) "Pinned in sys-mon" else "Pinned",
+                            tint = if (chat.localPin) c.accent else c.meta,
+                            modifier = Modifier.padding(start = 6.dp).size(14.dp),
+                        )
+                    }
+                    if (unread) {
+                        Spacer(Modifier.width(6.dp))
+                        UnreadBadge(chat.unread, c, reduced)
+                    }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    if (preview != null) PreviewText(preview, c)
-                }
-                if (chat.pinned) {
-                    Icon(
-                        Icons.Filled.PushPin, contentDescription = "Pinned", tint = c.meta,
-                        modifier = Modifier.padding(start = 6.dp).size(14.dp),
-                    )
-                }
-                if (unread) {
-                    Spacer(Modifier.width(6.dp))
-                    UnreadBadge(chat.unread, c, reduced)
-                }
-            }
+        }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { onMenuOpenChange(false) },
+            offset = DpOffset(56.dp, (-40).dp),
+        ) {
+            menu()
         }
     }
 }

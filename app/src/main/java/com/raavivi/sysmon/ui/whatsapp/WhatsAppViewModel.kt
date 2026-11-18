@@ -11,11 +11,16 @@ import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaDelete
+import com.raavivi.sysmon.core.model.WaEdit
+import com.raavivi.sysmon.core.model.WaForward
 import com.raavivi.sysmon.core.model.WaLatestReq
+import com.raavivi.sysmon.core.model.WaLocalPinReq
 import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPinReq
+import com.raavivi.sysmon.core.model.WaReact
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.toWaChat
@@ -535,10 +540,13 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     fun send(text: String) {
         val jid = currentJid ?: return
         if (text.isBlank() || sending) return
+        // The send button doubles as the edit's confirm while an edit chip is up.
+        editingMsg?.let { editMessage(it, text); return }
+        val replying = replyTo
         sending = true
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waSend(WaSendText(to = jid, message = text)) }) {
-                is ApiResult.Ok -> loadMessages(jid)
+            when (val r = safeCall { container.api.api.waSend(WaSendText(to = jid, message = text, replyTo = replying?.id)) }) {
+                is ApiResult.Ok -> { replyTo = null; loadMessages(jid) }
                 is ApiResult.Err -> message = "Send failed: ${r.message}"
             }
             sending = false
@@ -586,10 +594,13 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    /** Stop the recording and send it as a voice note; a too-short recording is discarded. */
+    /** Stop the recording and send it as a voice note; a too-short recording is discarded.
+     *  A pending reply chip rides along, as with a text send. */
     fun sendRecording() {
         val file = recorder.finish() ?: return
-        sendVoice(file, null)
+        val replying = replyTo
+        sendVoice(file, replying?.id)
+        replyTo = null
     }
 
     /** Upload a recorded audio file as a WhatsApp voice note, then delete it. */
@@ -655,6 +666,159 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             (safeCall { container.api.api.waContacts(q = q) } as? ApiResult.Ok)?.let {
                 contacts = it.value.contacts.map { c -> c.toWaContact() }
+            }
+        }
+    }
+
+    // -- piece B: replies, edits, reactions, deletes, forward, local pins -------------
+
+    /** The chat-row menu's WhatsApp pin toggle (never offered for sys-mon-pinned chats). */
+    fun togglePinFor(chat: WaChat) {
+        if (chat.localPin) return
+        val next = !chat.pinned
+        viewModelScope.launch {
+            when (val r = safeCall { container.api.api.waPin(WaPinReq(chat = chat.jid, pinned = next)) }) {
+                is ApiResult.Ok -> chats = chats.map { if (it.jid == chat.jid) it.copy(pinned = next) else it }.let(::waSortChats)
+                is ApiResult.Err -> message = "Pin failed: ${r.message}"
+            }
+        }
+    }
+
+    /** Mark some other chat read from the chat-row menu (not the open one). */
+    fun markReadChat(jid: String) {
+        val cleared = chats.firstOrNull { it.jid == jid }?.unread ?: 0
+        if (cleared <= 0) return
+        viewModelScope.launch {
+            when (val r = safeCall { container.api.api.waMarkRead(WaMarkRead(chat = jid)) }) {
+                is ApiResult.Ok -> {
+                    chats = chats.map { if (it.jid == jid) it.copy(unread = 0) else it }
+                    status = status?.let { it.copy(unreadTotal = (it.unreadTotal - cleared).coerceAtLeast(0)) }
+                }
+                is ApiResult.Err -> message = "Mark read failed: ${r.message}"
+            }
+        }
+    }
+
+    /** The message being replied to; the composer shows its chip until sent or cancelled. */
+    var replyTo by mutableStateOf<WaMessage?>(null)
+        private set
+
+    /** The message being edited (its text was seeded into the composer). */
+    var editingMsg by mutableStateOf<WaMessage?>(null)
+        private set
+
+    fun setReply(m: WaMessage?) {
+        editingMsg = null
+        replyTo = m
+    }
+
+    fun startEdit(m: WaMessage) {
+        if (!waCanEdit(m, System.currentTimeMillis() / 1000.0)) return
+        replyTo = null
+        editingMsg = m
+    }
+
+    /** The chip the composer should show, if any. */
+    fun composerChip(names: Map<String, String>): ComposerChip? {
+        val e = editingMsg ?: return replyTo?.let {
+            ComposerChip(
+                editing = false,
+                who = if (it.fromMe) "You" else (names[it.sender] ?: it.senderName.ifBlank { it.sender }),
+                snippet = waCaptionOf(it),
+            )
+        }
+        return ComposerChip(editing = true, who = "", snippet = e.text)
+    }
+
+    fun clearComposerContext() {
+        replyTo = null
+        editingMsg = null
+    }
+
+    /** React to [m] with [emoji] (empty removes). Optimistic with rollback; groups name the
+     *  target's original sender, which the server requires. */
+    fun react(m: WaMessage, emoji: String) {
+        val chat = currentJid ?: return
+        val before = reactions
+        reactions = waApplyReaction(reactions, m.id, "me", emoji, System.currentTimeMillis() / 1000.0)
+        viewModelScope.launch {
+            // Groups must name the target's original sender; the web sends it whenever the row has one.
+            val sender = if (waIsGroup(chat)) m.sender.ifBlank { null } else null
+            when (val r = safeCall { container.api.api.waReact(WaReact(chat = chat, id = m.id, emoji = emoji, sender = sender)) }) {
+                is ApiResult.Err -> {
+                    reactions = before
+                    message = "Reaction failed: ${r.message}"
+                }
+                is ApiResult.Ok -> Unit
+            }
+        }
+    }
+
+    /** Delete [m] for everyone (revoke, own fresh messages) or for me. Optimistic with rollback. */
+    fun removeMessage(m: WaMessage, everyone: Boolean) {
+        val chat = currentJid ?: return
+        val beforeMessages = messages
+        val beforeReactions = reactions
+        messages = messages.map {
+            when {
+                it.id != m.id -> it
+                everyone -> it.copy(revoked = true)
+                else -> it.copy(deletedForMe = true)
+            }
+        }
+        if (everyone) reactions = reactions - m.id
+        viewModelScope.launch {
+            when (val r = safeCall { container.api.api.waDelete(WaDelete(chat = chat, id = m.id, everyone = everyone)) }) {
+                is ApiResult.Err -> {
+                    messages = beforeMessages
+                    reactions = beforeReactions
+                    message = "Delete failed: ${r.message}"
+                }
+                is ApiResult.Ok -> Unit
+            }
+        }
+    }
+
+    /** Edit my own text message. Optimistic text + "edited" flag, rollback on failure. */
+    fun editMessage(m: WaMessage, text: String) {
+        val chat = currentJid ?: return
+        if (text.isBlank() || !waCanEdit(m, System.currentTimeMillis() / 1000.0)) return
+        val before = messages
+        messages = messages.map { if (it.id == m.id) it.copy(text = text, edited = true) else it }
+        editingMsg = null
+        viewModelScope.launch {
+            when (val r = safeCall { container.api.api.waEdit(WaEdit(chat = chat, id = m.id, message = text)) }) {
+                is ApiResult.Err -> {
+                    messages = before
+                    editingMsg = m
+                    message = "Edit failed: ${r.message}"
+                }
+                is ApiResult.Ok -> Unit
+            }
+        }
+    }
+
+    fun forward(m: WaMessage, to: String) {
+        val chat = currentJid ?: return
+        viewModelScope.launch {
+            when (val r = safeCall { container.api.api.waForward(WaForward(chat = chat, id = m.id, to = to)) }) {
+                is ApiResult.Ok -> message = "Forwarded"
+                is ApiResult.Err -> message = "Forward failed: ${r.message}"
+            }
+        }
+    }
+
+    /** Pin or unpin a chat in sys-mon's own list; WhatsApp and wacli never see it. */
+    fun localPin(chat: WaChat, pinned: Boolean) {
+        viewModelScope.launch {
+            when (val r = safeCall { container.api.api.waLocalPin(WaLocalPinReq(chat = chat.jid, pinned = pinned)) }) {
+                is ApiResult.Ok -> {
+                    chats = chats.map {
+                        if (it.jid != chat.jid) it
+                        else it.copy(localPin = pinned, pinned = if (pinned) true else it.waPinned)
+                    }.let(::waSortChats)
+                }
+                is ApiResult.Err -> message = "Pin failed: ${r.message}"
             }
         }
     }

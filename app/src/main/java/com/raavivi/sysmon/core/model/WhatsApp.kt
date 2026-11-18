@@ -79,6 +79,25 @@ fun waInitials(name: String): String =
 @Serializable
 data class WaBackfill(val chat: String, val count: Int = 50, val requests: Int = 1)
 
+/** React to a message; an empty [emoji] removes the reaction. [sender] is the target's original
+ *  sender JID, required for group chats. */
+@Serializable
+data class WaReact(val chat: String, val id: String, val emoji: String, val sender: String? = null)
+
+@Serializable
+data class WaForward(val chat: String, val id: String, val to: String)
+
+/** Delete a message: `everyone` revokes one of my sent messages, otherwise it is deleted for me. */
+@Serializable
+data class WaDelete(val chat: String, val id: String, val everyone: Boolean = false)
+
+@Serializable
+data class WaEdit(val chat: String, val id: String, val message: String)
+
+/** Pin or unpin a chat in sys-mon's own list; wacli and WhatsApp never see these. */
+@Serializable
+data class WaLocalPinReq(val chat: String, val pinned: Boolean = true)
+
 // ── normalised view models ───────────────────────────────────────────────────
 
 data class WaChat(
@@ -96,6 +115,9 @@ data class WaChat(
     /** A sys-mon-owned pin (wacli/WhatsApp cannot change it); [pinRank] orders them. */
     val localPin: Boolean = false,
     val pinRank: Int = 0,
+    /** WhatsApp's own pin state as the server last reported it, so dropping the sys-mon pin can
+     *  restore it (present on sys-mon-pinned rows only). */
+    val waPinned: Boolean = false,
 )
 
 data class WaMessage(
@@ -134,13 +156,14 @@ data class WaContact(val jid: String, val name: String)
 
 fun JsonObject.toWaChat(): WaChat {
     val jid = pickJid("jid", "JID", "chat_jid", "ChatJID", "Chat", "id")
+    val pinned = pickBool("pinned", "Pinned")
     return WaChat(
         jid = jid,
         name = pickStr("name", "Name", "chat_name", "ChatName", "display_name") ?: jid,
         lastTs = pickTs("last_message_ts", "LastMessageTS", "last_ts", "Timestamp", "ts"),
         unread = pickInt("unread_count", "UnreadCount").takeIf { it > 0 }
             ?: if (pickBool("unread", "Unread")) 1 else 0,
-        pinned = pickBool("pinned", "Pinned"),
+        pinned = pinned,
         preview = pickStr("preview", "Preview") ?: "",
         previewType = pickStr("preview_type", "PreviewType") ?: "",
         previewFromMe = pickBool("preview_from_me", "PreviewFromMe"),
@@ -149,6 +172,7 @@ fun JsonObject.toWaChat(): WaChat {
             pickBool("preview_revoked", "PreviewRevoked"),
         localPin = pickBool("local_pin", "LocalPin"),
         pinRank = pickInt("pin_rank", "PinRank"),
+        waPinned = pickBool("wa_pinned", "WaPinned") ?: pinned,
     )
 }
 

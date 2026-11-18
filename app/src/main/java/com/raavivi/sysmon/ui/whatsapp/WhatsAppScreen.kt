@@ -67,7 +67,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -117,6 +120,7 @@ fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
 private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
     var filter by remember { mutableStateOf("") }
     var showNew by remember { mutableStateOf(false) }
+    var menuJid by remember { mutableStateOf<String?>(null) }
     val c = rememberChatColors()
     val reduced = rememberReducedMotion()
 
@@ -140,7 +144,7 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
                 vm.loadingChats && vm.chats.isEmpty() -> LoadingBox()
                 vm.chats.isEmpty() -> Empty(vm.error ?: "No chats")
                 else -> {
-                    val shown = vm.chats.filter { filter.isBlank() || it.name.contains(filter, ignoreCase = true) }
+                    val shown = vm.chats.filter { waChatMatches(it, filter) }
                     val nowSec = remember(vm.chats) { System.currentTimeMillis() / 1000.0 }
                     LazyColumn(contentPadding = PaddingValues(vertical = 4.dp)) {
                         items(shown, key = { it.jid }) { chat ->
@@ -152,6 +156,17 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
                                 reduced = reduced,
                                 active = false,
                                 onClick = { vm.openChat(chat.jid, chat.name) },
+                                menuOpen = menuJid == chat.jid,
+                                onMenuOpenChange = { open -> menuJid = if (open) chat.jid else null },
+                                menu = {
+                                    ChatRowMenuItems(
+                                        chat = chat,
+                                        c = c,
+                                        onTogglePin = { vm.togglePinFor(chat); menuJid = null },
+                                        onToggleLocalPin = { vm.localPin(chat, !chat.localPin); menuJid = null },
+                                        onMarkRead = { vm.markReadChat(chat.jid); menuJid = null },
+                                    )
+                                },
                             )
                         }
                     }
@@ -166,6 +181,13 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
 @Composable
 private fun ConversationView(vm: WhatsAppViewModel) {
     var viewing by remember { mutableStateOf<WaMessage?>(null) }
+    // Piece B overlays: the long-pressed message's menu, the forward picker, the info sheet.
+    var menuMsg by remember(vm.currentJid) { mutableStateOf<WaMessage?>(null) }
+    var forwardMsg by remember(vm.currentJid) { mutableStateOf<WaMessage?>(null) }
+    var infoMsg by remember(vm.currentJid) { mutableStateOf<WaMessage?>(null) }
+    // The composer's text lives here so the Edit action can seed it.
+    var composerText by remember(vm.currentJid) { mutableStateOf("") }
+    val clipboard = LocalClipboardManager.current
     val listState = rememberLazyListState()
     val c = rememberChatColors()
     val reduced = rememberReducedMotion()
@@ -298,7 +320,8 @@ private fun ConversationView(vm: WhatsAppViewModel) {
         Column(Modifier.weight(1f).fillMaxWidth().chatWallpaper(c)) {
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val maxBubble = maxWidth * 0.78f
-                val env = remember(c, group, nowSec, reduced, byId, names, vm.reactions, maxBubble, popEnabled, vm.imageLoader) {
+                val rowBounds = remember(vm.currentJid) { HashMap<String, Rect>() }
+                val env = remember(c, group, nowSec, reduced, byId, names, vm.reactions, maxBubble, popEnabled, vm.imageLoader, rowBounds) {
                     ChatEnv(
                         colors = c,
                         group = group,
@@ -335,6 +358,10 @@ private fun ConversationView(vm: WhatsAppViewModel) {
                                 if (flashId == id) flashId = null
                             }
                         },
+                        onLongPress = { m -> menuMsg = m },
+                        onReply = { m -> vm.setReply(m) },
+                        onReact = { m, emoji -> vm.react(m, emoji) },
+                        rowBounds = rowBounds,
                         popEnabled = popEnabled,
                         reactionSeen = reactionSeen,
                     )
@@ -393,6 +420,32 @@ private fun ConversationView(vm: WhatsAppViewModel) {
                     onClick = { vm.jumpToLatest() },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                 )
+
+                // The message menu: last in the box, so it draws over the list and the fab.
+                menuMsg?.let { mm ->
+                    rows.filterIsInstance<MsgRow>().firstOrNull { it.msg.id == mm.id }?.let { mrow ->
+                        MessageMenuOverlay(
+                            row = mrow,
+                            env = env,
+                            danger = MaterialTheme.colorScheme.error,
+                            myEmoji = env.reactions[mm.id]?.get("me")?.emoji ?: "",
+                            onReact = { m, emoji -> vm.react(m, emoji) },
+                            onAction = { m, act ->
+                                when (act) {
+                                    WaMenuAction.REPLY -> vm.setReply(m)
+                                    WaMenuAction.COPY -> clipboard.setText(AnnotatedString(waCaptionOf(m)))
+                                    WaMenuAction.FORWARD -> forwardMsg = m
+                                    WaMenuAction.EDIT -> { vm.startEdit(m); composerText = m.text }
+                                    WaMenuAction.SAVE -> vm.saveImage(m)
+                                    WaMenuAction.INFO -> infoMsg = m
+                                    WaMenuAction.DELETE -> Unit
+                                }
+                            },
+                            onDelete = { m, everyone -> vm.removeMessage(m, everyone) },
+                            onDismiss = { menuMsg = null },
+                        )
+                    }
+                }
             }
 
             vm.uploading?.let { name ->
@@ -410,7 +463,15 @@ private fun ConversationView(vm: WhatsAppViewModel) {
 
             MessageInput(
                 vm = vm,
-                onSend = { vm.send(it) },
+                text = composerText,
+                onTextChange = { composerText = it },
+                chip = vm.composerChip(names),
+                onChipCancel = {
+                    val wasEditing = vm.editingMsg != null
+                    vm.clearComposerContext()
+                    if (wasEditing) composerText = ""
+                },
+                onSend = { vm.send(it); composerText = "" },
                 onAttach = { uri, caption -> vm.sendMedia(uri, caption) },
                 displayName = vm::displayName,
                 enabled = !vm.sending,
@@ -420,7 +481,50 @@ private fun ConversationView(vm: WhatsAppViewModel) {
         }
     }
 
-    viewing?.let { ImageViewer(it, vm, onClose = { viewing = null }) }
+    viewing?.let { tapped ->
+        val photos = remember(vm.messages) { waGalleryItems(vm.messages) }
+        if (photos.isNotEmpty()) {
+            ChatGallery(
+                photos = photos,
+                startIndex = photos.indexOfFirst { it.id == tapped.id }.coerceAtLeast(0),
+                names = names,
+                nowSec = nowSec,
+                url = { m -> vm.mediaUrl(m, false) },
+                thumbUrl = { m -> vm.mediaUrl(m, true) },
+                imageLoader = vm.imageLoader,
+                onSave = { m -> vm.saveImage(m) },
+                onShowInChat = { m ->
+                    viewing = null
+                    val i = waRowIndexOf(rows, m.id)
+                    if (i >= 0) scope.launch {
+                        listState.animateScrollToItem(i)
+                        flashId = m.id
+                        delay(700)
+                        if (flashId == m.id) flashId = null
+                    }
+                },
+                onClose = { viewing = null },
+            )
+        }
+    }
+
+    forwardMsg?.let { fm ->
+        ForwardSheet(
+            chats = vm.chats,
+            c = c,
+            onPick = { to -> vm.forward(fm, to); forwardMsg = null },
+            onDismiss = { forwardMsg = null },
+        )
+    }
+
+    infoMsg?.let { im ->
+        InfoSheet(
+            m = im,
+            names = names,
+            c = c,
+            onDismiss = { infoMsg = null },
+        )
+    }
 
     val tl = vm.timeline
     if (showDatePicker && tl != null) {
@@ -597,6 +701,10 @@ private fun GoToDateDialog(tl: WaTimeline, initialDay: String, onPick: (Long) ->
 @Composable
 private fun MessageInput(
     vm: WhatsAppViewModel,
+    text: String,
+    onTextChange: (String) -> Unit,
+    chip: ComposerChip?,
+    onChipCancel: () -> Unit,
     onSend: (String) -> Unit,
     onAttach: (Uri, String) -> Unit,
     displayName: (Uri) -> String,
@@ -604,7 +712,6 @@ private fun MessageInput(
     c: ChatColors,
     reduced: Boolean,
 ) {
-    var text by remember { mutableStateOf("") }
     var picked by remember { mutableStateOf<Uri?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) picked = uri
@@ -631,13 +738,15 @@ private fun MessageInput(
     } else {
         ChatComposer(
             text = text,
-            onTextChange = { text = it },
+            onTextChange = onTextChange,
             enabled = enabled,
             c = c,
             reduced = reduced,
-            onSend = { if (text.isNotBlank()) { onSend(text); text = "" } },
+            onSend = { if (text.isNotBlank()) onSend(text) },
             onAttach = { picker.launch("*/*") },
             onMic = onMic,
+            chip = chip,
+            onChipCancel = onChipCancel,
         )
     }
 

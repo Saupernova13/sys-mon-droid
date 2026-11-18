@@ -8,18 +8,29 @@ import com.raavivi.sysmon.core.model.toWaMessage
 import com.raavivi.sysmon.ui.whatsapp.DayRow
 import com.raavivi.sysmon.ui.whatsapp.MsgRow
 import com.raavivi.sysmon.ui.whatsapp.WaMediaKind
+import com.raavivi.sysmon.ui.whatsapp.WA_EDIT_WINDOW_SEC
+import com.raavivi.sysmon.ui.whatsapp.WA_REVOKE_WINDOW_SEC
+import com.raavivi.sysmon.ui.whatsapp.WA_SWIPE_FREE
+import com.raavivi.sysmon.ui.whatsapp.WA_SWIPE_MAX
+import com.raavivi.sysmon.ui.whatsapp.WA_SWIPE_TRIGGER
 import com.raavivi.sysmon.ui.whatsapp.buildRows
 import com.raavivi.sysmon.ui.whatsapp.waAggregateReactions
 import com.raavivi.sysmon.ui.whatsapp.waApplyLiveUpdate
 import com.raavivi.sysmon.ui.whatsapp.waApplyReaction
+import com.raavivi.sysmon.ui.whatsapp.waCanEdit
+import com.raavivi.sysmon.ui.whatsapp.waCanRevoke
 import com.raavivi.sysmon.ui.whatsapp.waCaptionOf
+import com.raavivi.sysmon.ui.whatsapp.waChatMatches
 import com.raavivi.sysmon.ui.whatsapp.waChatTime
 import com.raavivi.sysmon.ui.whatsapp.waDayKey
 import com.raavivi.sysmon.ui.whatsapp.waDayLabel
 import com.raavivi.sysmon.ui.whatsapp.waForwardLabel
+import com.raavivi.sysmon.ui.whatsapp.waGalleryItems
 import com.raavivi.sysmon.ui.whatsapp.waKindFromType
 import com.raavivi.sysmon.ui.whatsapp.waMediaBox
 import com.raavivi.sysmon.ui.whatsapp.waMediaKind
+import com.raavivi.sysmon.ui.whatsapp.waMenuActions
+import com.raavivi.sysmon.ui.whatsapp.WaMenuAction
 import com.raavivi.sysmon.ui.whatsapp.waNameBySender
 import com.raavivi.sysmon.ui.whatsapp.waNeedsDaySep
 import com.raavivi.sysmon.ui.whatsapp.waPhoneSubtitle
@@ -31,6 +42,9 @@ import com.raavivi.sysmon.ui.whatsapp.waRowIndexOf
 import com.raavivi.sysmon.ui.whatsapp.waSameGroup
 import com.raavivi.sysmon.ui.whatsapp.waSortChats
 import com.raavivi.sysmon.ui.whatsapp.waSummarizeReactions
+import com.raavivi.sysmon.ui.whatsapp.waSwipeOffset
+import com.raavivi.sysmon.ui.whatsapp.waSwipeProgress
+import com.raavivi.sysmon.ui.whatsapp.waSwipeReached
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
@@ -465,5 +479,120 @@ class WhatsAppModelTest {
         assertTrue(waPlanMeta(100, 20, 262f, 30, 14, 300, 8).inline)
         assertFalse(waPlanMeta(100, 20, 262.5f, 30, 14, 300, 8).inline)
         assertFalse(waPlanMeta(100, 20, null, 30, 14, 300, 8).inline)
+    }
+
+    // -- message menu (hold for more options) ----------------------------------
+
+    @Test fun aRevokedMessageOnlyOffersInfoAndDelete() {
+        val m = msg("r", at(2026, 11, 18)).copy(revoked = true)
+        assertEquals(listOf(WaMenuAction.INFO, WaMenuAction.DELETE), waMenuActions(m, m.ts + 1))
+    }
+
+    @Test fun aFreshOwnTextMessageOffersTheFullSetExceptSave() {
+        val now = at(2026, 11, 18, 12, 10)
+        val acts = waMenuActions(msg("a", now, fromMe = true), now + 60)
+        assertEquals(
+            listOf(WaMenuAction.REPLY, WaMenuAction.COPY, WaMenuAction.FORWARD, WaMenuAction.EDIT, WaMenuAction.INFO, WaMenuAction.DELETE),
+            acts,
+        )
+    }
+
+    @Test fun someoneElsesTextNeverOffersEdit() {
+        val now = at(2026, 11, 18)
+        val acts = waMenuActions(msg("a", now, fromMe = false), now + 60)
+        assertFalse(acts.contains(WaMenuAction.EDIT))
+    }
+
+    @Test fun editOnlyAppliesToOwnFreshText() {
+        val now = at(2026, 11, 18)
+        assertTrue(waCanEdit(msg("a", now, fromMe = true), now + 60))
+        assertFalse(waCanEdit(msg("a", now, fromMe = true), now + WA_EDIT_WINDOW_SEC + 1))
+        assertFalse(waCanEdit(msg("a", now, fromMe = false), now + 60))
+        assertFalse(waCanEdit(msg("p", now, fromMe = true, mediaType = "image"), now + 60))
+        assertFalse(waCanEdit(msg("r", now, fromMe = true).copy(revoked = true), now + 60))
+    }
+
+    @Test fun revokeOnlyAppliesToOwnFreshMessages() {
+        val now = at(2026, 11, 18)
+        assertTrue(waCanRevoke(msg("a", now, fromMe = true), now + 60))
+        assertFalse(waCanRevoke(msg("a", now, fromMe = true), now + WA_REVOKE_WINDOW_SEC + 1))
+        assertFalse(waCanRevoke(msg("a", now, fromMe = false), now + 60))
+        assertFalse(waCanRevoke(msg("r", now, fromMe = true).copy(revoked = true), now + 60))
+    }
+
+    @Test fun mediaOffersSaveAndDropsCopyWhenThereIsNoCaption() {
+        val now = at(2026, 11, 18)
+        val plain = waMenuActions(msg("p", now, mediaType = "image", text = "[image]"), now + 60)
+        assertTrue(plain.contains(WaMenuAction.SAVE))
+        assertFalse(plain.contains(WaMenuAction.COPY))
+        assertFalse(plain.contains(WaMenuAction.EDIT))
+        val captioned = waMenuActions(msg("c", now, mediaType = "image", text = "Look at this"), now + 60)
+        assertTrue(captioned.contains(WaMenuAction.COPY))
+        assertTrue(captioned.contains(WaMenuAction.SAVE))
+    }
+
+    // -- swipe to reply ---------------------------------------------------------
+
+    @Test fun theSwipeFollowsTheFingerThenResistsTowardTheCap() {
+        assertEquals(0f, waSwipeOffset(0f), 0.01f)
+        assertEquals(0f, waSwipeOffset(-30f), 0.01f)
+        assertEquals(30f, waSwipeOffset(30f), 0.01f)
+        assertEquals(WA_SWIPE_FREE, waSwipeOffset(WA_SWIPE_FREE), 0.01f)
+        val past = waSwipeOffset(WA_SWIPE_FREE + 20)
+        assertTrue("resisted, got $past", past > WA_SWIPE_FREE && past < WA_SWIPE_MAX)
+        assertTrue("never exceeds the cap", waSwipeOffset(400f) < WA_SWIPE_MAX)
+        assertTrue("still creeps toward the cap", waSwipeOffset(400f) > waSwipeOffset(80f))
+    }
+
+    @Test fun theReplyTriggersPastItsOffsetThreshold() {
+        // Web parity: a 60px drag eases to ~54.9 (no reply), 70px reaches ~59.5 (reply).
+        assertFalse(waSwipeReached(waSwipeOffset(60f)))
+        assertTrue(waSwipeReached(waSwipeOffset(70f)))
+        assertEquals(0f, waSwipeProgress(0f), 0.01f)
+        assertEquals(1f, waSwipeProgress(WA_SWIPE_TRIGGER + 20), 0.01f)
+        assertTrue(waSwipeProgress(waSwipeOffset(60f)) > 0.9f)
+    }
+
+    // -- photo gallery ----------------------------------------------------------
+
+    @Test fun theGalleryCollectsLoadedPhotosInOrderAndNothingElse() {
+        val t = at(2026, 11, 18)
+        val msgs = listOf(
+            msg("p1", t, mediaType = "image"),
+            msg("t1", t + 1),
+            msg("p2", t + 2, fromMe = true, mediaType = "image"),
+            msg("s1", t + 3, mediaType = "sticker"),
+            msg("r1", t + 4, reactionTo = "p1", emoji = "👍"),
+            msg("p3", t + 5, mediaType = "image").copy(revoked = true),
+            msg("", t + 6, mediaType = "image"),
+            msg("v1", t + 7, mediaType = "video"),
+        )
+        assertEquals(listOf("p1", "p2"), waGalleryItems(msgs).map { it.id })
+    }
+
+    // -- chat-list search ------------------------------------------------------
+
+    private fun searchChat(jid: String, name: String) = WaChat(jid = jid, name = name, lastTs = 1.0, unread = 0, pinned = false)
+
+    @Test fun searchMatchesByNameRawJidAndPhoneDigits() {
+        val dm = searchChat("27821234567@s.whatsapp.net", "Ravi")
+        val group = searchChat("120363012345678901@g.us", "Family")
+        assertTrue(waChatMatches(dm, ""))
+        assertTrue(waChatMatches(dm, "   "))
+        assertTrue(waChatMatches(dm, "rav"))
+        assertTrue(waChatMatches(dm, "27821234567@s.whatsapp.net"))
+        assertTrue(waChatMatches(dm, "34567@s.whatsapp.net"))
+        assertTrue(waChatMatches(dm, "+27 82 123 4567"))
+        assertTrue(waChatMatches(dm, "0821234567"))
+        assertTrue(waChatMatches(dm, "082 123 4567"))
+        assertFalse(waChatMatches(dm, "00821234567"))   // only one trunk 0 is dropped
+        assertTrue(waChatMatches(dm, "2782"))
+        assertFalse(waChatMatches(dm, "zzz"))
+        assertFalse(waChatMatches(dm, "999"))
+        assertFalse(waChatMatches(dm, "012"))
+        assertTrue(waChatMatches(group, "fam"))
+        assertTrue(waChatMatches(group, "4567890"))       // raw jid substring, not the digit rule
+        assertFalse(waChatMatches(group, "888"))
+        assertFalse(waChatMatches(searchChat("x@lid", "Linked"), "2782"))
     }
 }
