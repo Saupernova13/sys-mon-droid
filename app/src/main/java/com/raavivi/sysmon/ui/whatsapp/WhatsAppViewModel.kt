@@ -1,53 +1,33 @@
 package com.raavivi.sysmon.ui.whatsapp
 
-import android.net.Uri
-import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil.ImageLoader
 import com.raavivi.sysmon.AppContainer
-import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
+import com.raavivi.sysmon.core.data.whatsapp.UploadSource
+import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.model.WaChat
-import com.raavivi.sysmon.core.model.WaDelete
-import com.raavivi.sysmon.core.model.WaEdit
-import com.raavivi.sysmon.core.model.WaForward
-import com.raavivi.sysmon.core.model.WaLatestReq
-import com.raavivi.sysmon.core.model.WaLocalPinReq
-import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
-import com.raavivi.sysmon.core.model.WaPinReq
-import com.raavivi.sysmon.core.model.WaReact
-import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
-import com.raavivi.sysmon.core.model.toWaChat
-import com.raavivi.sysmon.core.model.toWaContact
-import com.raavivi.sysmon.core.model.toWaMessage
 import com.raavivi.sysmon.core.net.ApiResult
-import com.raavivi.sysmon.core.net.SysMonJson
-import com.raavivi.sysmon.core.net.safeCall
-import coil.ImageLoader
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.jsonObject
-import okhttp3.MediaType
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import okio.BufferedSink
-import okio.source
 import java.io.File
 
-class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
+class WhatsAppViewModel(
+    private val repo: WhatsAppRepository,
+    private val uploads: UploadSource,
+    private val mediaTools: WhatsAppMediaTools,
+    val imageLoader: ImageLoader,
+    voiceFactory: (scope: CoroutineScope, onMessage: (String) -> Unit) -> VoiceNotePlayer,
+    recorderFactory: (scope: CoroutineScope, onMessage: (String) -> Unit) -> VoiceRecorder,
+    private val nowSeconds: () -> Double = { System.currentTimeMillis() / 1000.0 },
+) : ViewModel() {
 
     var status by mutableStateOf<WaStatus?>(null)
         private set
@@ -120,8 +100,6 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     var contacts by mutableStateOf<List<WaContact>>(emptyList())
         private set
 
-    val imageLoader: ImageLoader = container.imageLoader
-
     /** Reactions folded from the loaded pages and live frames; they never become list items. */
     var reactions by mutableStateOf<WaReactions>(emptyMap())
         private set
@@ -132,33 +110,6 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun foldReactions(page: List<WaMessage>, replace: Boolean) {
         reactions = waAggregateReactions(page, if (replace) emptyMap() else reactions)
-    }
-
-    /**
-     * Warm Coil's caches for the media of a page that just arrived (newest 24), with the very requests
-     * the bubbles build, so photos and stickers are there when they scroll in.
-     */
-    private fun prefetchMedia(page: List<WaMessage>) {
-        val ctx = container.appContext
-        val density = ctx.resources.displayMetrics.density
-        val now = System.currentTimeMillis() / 1000.0
-        page.asReversed().asSequence()
-            .filter { !it.revoked && !it.isReaction && shouldAutoLoadImage(it.downloaded, it.ts, now) }
-            .mapNotNull { m ->
-                when (m.mediaKind()) {
-                    WaMediaKind.IMAGE -> {
-                        val box = waMediaBox(m.width, m.height)
-                        waImageRequest(ctx, mediaUrl(m, true), (box.w * density).toInt(), (box.h * density).toInt())
-                    }
-                    WaMediaKind.STICKER -> {
-                        val px = (WA_STICKER_BOX * density).toInt()
-                        waImageRequest(ctx, mediaUrl(m, false), px, px)
-                    }
-                    else -> null
-                }
-            }
-            .take(24)
-            .forEach { imageLoader.enqueue(it) }
     }
 
     fun clearFresh() { freshIds = emptySet() }
@@ -172,36 +123,23 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     /** Jids already offered to the server's avatar refresh this session. */
     private val avatarTried = mutableSetOf<String>()
 
-    val voice = VoiceNotePlayer(
-        cacheDir = container.appContext.cacheDir,
-        client = container.api.okHttpClient,
-        scope = viewModelScope,
-        onMessage = { message = it },
-    )
+    val voice: VoiceNotePlayer = voiceFactory(viewModelScope) { message = it }
 
-    val recorder = VoiceRecorder(
-        context = container.appContext,
-        scope = viewModelScope,
-        onMessage = { message = it },
-    )
-
-    private val frames = Channel<String>(Channel.UNLIMITED)
-    private var ws: WebSocket? = null
+    val recorder: VoiceRecorder = recorderFactory(viewModelScope) { message = it }
 
     init {
         loadStatus()
         loadChats()
-        viewModelScope.launch { for (f in frames) handleLive(f) }
-        connectWs()
+        viewModelScope.launch { repo.liveMessages().collect(::handleLive) }
     }
 
-    fun mediaUrl(msg: WaMessage, thumb: Boolean = false): String = container.api.whatsappMediaUrl(msg.chat, msg.id, thumb)
+    fun mediaUrl(msg: WaMessage, thumb: Boolean = false): String = repo.mediaUrl(msg.chat, msg.id, thumb)
 
-    fun avatarUrl(jid: String): String = container.api.whatsappAvatarUrl(jid)
+    fun avatarUrl(jid: String): String = repo.avatarUrl(jid)
 
     fun loadStatus() {
         viewModelScope.launch {
-            (safeCall { container.api.api.waStatus() } as? ApiResult.Ok)?.let { status = it.value }
+            (repo.status() as? ApiResult.Ok)?.let { status = it.value }
         }
     }
 
@@ -209,8 +147,8 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         loadingChats = true
         error = null
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waChats() }) {
-                is ApiResult.Ok -> chats = r.value.chats.map { it.toWaChat() }.let(::waSortChats)
+            when (val r = repo.chats()) {
+                is ApiResult.Ok -> chats = waSortChats(r.value)
                 is ApiResult.Err -> error = r.message
             }
             loadingChats = false
@@ -229,10 +167,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         avatarTried += pending
         repeat(MAX_AVATAR_PASSES) {
             if (pending.isEmpty()) return
-            val r = safeCall {
-                container.api.api.waAvatarsRefresh(WaAvatarsRefreshReq(jids = pending.toList(), limit = AVATAR_LIMIT))
-            }
-            val ok = (r as? ApiResult.Ok)?.value ?: return
+            val ok = (repo.refreshAvatars(pending.toList(), AVATAR_LIMIT) as? ApiResult.Ok)?.value ?: return
             if (ok.updated.isNotEmpty()) {
                 avatarVersions = avatarVersions + ok.updated.associateWith { (avatarVersions[it] ?: 0) + 1 }
                 pending.removeAll(ok.updated.toSet())
@@ -253,10 +188,10 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         freshIds = emptySet()
         loadMessages(jid)
         viewModelScope.launch {
-            val r = safeCall { container.api.api.waTimeline(chat = jid) }
+            val r = repo.timeline(jid)
             if (currentJid != jid) return@launch
             // A failure leaves the timeline null: the scrubber and date picker just stay hidden.
-            if (r is ApiResult.Ok) timeline = buildTimeline(r.value.days)
+            if (r is ApiResult.Ok) timeline = buildTimeline(r.value)
         }
     }
 
@@ -266,36 +201,15 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     /** The server no longer marks a chat read on its own; this does it explicitly. */
     fun markRead() {
         val jid = currentJid ?: return
-        val cleared = currentUnread
-        if (cleared <= 0) return
-        viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waMarkRead(WaMarkRead(chat = jid)) }) {
-                is ApiResult.Ok -> {
-                    chats = chats.map { if (it.jid == jid) it.copy(unread = 0) else it }
-                    status = status?.let { it.copy(unreadTotal = (it.unreadTotal - cleared).coerceAtLeast(0)) }
-                }
-                is ApiResult.Err -> message = "Mark read failed: ${r.message}"
-            }
-        }
+        markReadChat(jid)
     }
 
     /** Download an image message and store it in the public Pictures collection. */
     fun saveImage(msg: WaMessage) {
         viewModelScope.launch {
             message = "Saving..."
-            message = withContext(Dispatchers.IO) {
-                runCatching {
-                    val req = okhttp3.Request.Builder().url(mediaUrl(msg)).build()
-                    container.api.okHttpClient.newCall(req).execute().use { resp ->
-                        if (!resp.isSuccessful) error("HTTP ${resp.code}")
-                        val mime = resp.header("Content-Type")?.substringBefore(';')?.trim()
-                        val body = resp.body ?: error("empty response")
-                        val name = MediaSaver.fileName(msg, mime)
-                        val where = MediaSaver.save(container.appContext, name, mime, body.byteStream())
-                        "Saved to $where"
-                    }
-                }.getOrElse { "Save failed: ${it.message ?: "unknown error"}" }
-            }
+            message = runCatching { "Saved to ${mediaTools.saveImage(msg)}" }
+                .getOrElse { "Save failed: ${it.message ?: "unknown error"}" }
         }
     }
 
@@ -337,12 +251,12 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
      */
     private suspend fun fetchNewest(jid: String, merge: Boolean = false): Boolean {
         val epoch = windowEpoch
-        val r = safeCall { container.api.api.waMessages(chat = jid, limit = WA_PAGE_LIMIT) }
+        val r = repo.messages(chat = jid, limit = WA_PAGE_LIMIT)
         if (currentJid != jid) return false
         if (merge && windowEpoch != epoch) return false
         return when (r) {
             is ApiResult.Ok -> {
-                val page = r.value.messages.map { it.toWaMessage() }
+                val page = r.value
                 if (merge) {
                     messages = mergeMessages(messages, page).first
                     foldReactions(page, replace = false)
@@ -357,7 +271,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                     else messages.filter { it.id.isNotBlank() && it.id !in known && isVisibleMessage(it) }
                     freshIds = if (added.size <= 5) added.mapTo(HashSet()) { it.id } else emptySet()
                 }
-                prefetchMedia(page)
+                mediaTools.prefetch(page)
                 atLatest = true
                 true
             }
@@ -374,7 +288,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
             try {
                 if (fetchNewest(jid)) scrollTick++
                 if (currentJid != jid) return@launch
-                val r = safeCall { container.api.api.waLatest(WaLatestReq(chat = jid)) }
+                val r = repo.fetchLatest(jid)
                 if (r is ApiResult.Err && currentJid == jid) message = "Latest failed: ${r.message}"
                 if (fetchNewest(jid)) scrollTick++
             } finally {
@@ -390,18 +304,16 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         jumpingFirst = true
         viewModelScope.launch {
             try {
-                val r = safeCall {
-                    container.api.api.waMessages(chat = jid, limit = WA_PAGE_LIMIT, asc = true)
-                }
+                val r = repo.messages(chat = jid, limit = WA_PAGE_LIMIT, asc = true)
                 if (currentJid != jid) return@launch
                 when (r) {
                     is ApiResult.Ok -> {
-                        val page = r.value.messages.map { it.toWaMessage() }
+                        val page = r.value
                         windowEpoch++
                         messages = page.sortedBy { it.ts }
                         foldReactions(page, replace = true)
                         freshIds = emptySet()
-                        prefetchMedia(page)
+                        mediaTools.prefetch(page)
                         atLatest = page.size < WA_PAGE_LIMIT
                         reachedFirst = true
                         topTick++
@@ -424,20 +336,18 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         jumpingDate = true
         viewModelScope.launch {
             try {
-                val r = safeCall {
-                    container.api.api.waMessages(
-                        chat = jid, limit = WA_PAGE_LIMIT, after = waInclusiveAfter(ts.toDouble()), asc = true,
-                    )
-                }
+                val r = repo.messages(
+                    chat = jid, limit = WA_PAGE_LIMIT, after = waInclusiveAfter(ts.toDouble()), asc = true,
+                )
                 if (currentJid != jid) return@launch
                 when (r) {
                     is ApiResult.Ok -> {
-                        val page = r.value.messages.map { it.toWaMessage() }
+                        val page = r.value
                         windowEpoch++
                         messages = page.sortedBy { it.ts }
                         foldReactions(page, replace = true)
                         freshIds = emptySet()
-                        prefetchMedia(page)
+                        mediaTools.prefetch(page)
                         atLatest = page.size < WA_PAGE_LIMIT
                         reachedFirst = timeline?.let { ts <= it.first.firstTs } ?: false
                         topTick++
@@ -468,16 +378,14 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                 var strict = false
                 while (true) {
                     val before = if (strict) waBeforeCursor(oldest) else waInclusiveBefore(oldest)
-                    val r = safeCall {
-                        container.api.api.waMessages(chat = jid, limit = WA_PAGE_LIMIT, before = before)
-                    }
+                    val r = repo.messages(chat = jid, limit = WA_PAGE_LIMIT, before = before)
                     if (currentJid != jid || windowEpoch != epoch) return@launch
                     if (r !is ApiResult.Ok) return@launch
-                    val page = r.value.messages.map { it.toWaMessage() }
+                    val page = r.value
                     val (merged, added) = mergeMessages(messages, page)
                     messages = merged
                     foldReactions(page, replace = false)
-                    prefetchMedia(page)
+                    mediaTools.prefetch(page)
                     var outcome = pageOutcome(page.size, added, WA_PAGE_LIMIT)
                     if (outcome == PageOutcome.STALLED && !strict) {
                         strict = true
@@ -512,16 +420,14 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
                 while (true) {
                     // Strict `after` is the floor of the second: wacli then returns only later seconds.
                     val after = if (strict) waBeforeCursor(newest) else waInclusiveAfter(newest)
-                    val r = safeCall {
-                        container.api.api.waMessages(chat = jid, limit = WA_PAGE_LIMIT, after = after, asc = true)
-                    }
+                    val r = repo.messages(chat = jid, limit = WA_PAGE_LIMIT, after = after, asc = true)
                     if (currentJid != jid || windowEpoch != epoch) return@launch
                     if (r !is ApiResult.Ok) return@launch
-                    val page = r.value.messages.map { it.toWaMessage() }
+                    val page = r.value
                     val (merged, added) = mergeMessages(messages, page)
                     messages = merged
                     foldReactions(page, replace = false)
-                    prefetchMedia(page)
+                    mediaTools.prefetch(page)
                     var outcome = pageOutcome(page.size, added, WA_PAGE_LIMIT)
                     if (outcome == PageOutcome.STALLED && !strict) {
                         strict = true
@@ -545,7 +451,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         val replying = replyTo
         sending = true
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waSend(WaSendText(to = jid, message = text, replyTo = replying?.id)) }) {
+            when (val r = repo.sendText(to = jid, message = text, replyTo = replying?.id)) {
                 is ApiResult.Ok -> { replyTo = null; loadMessages(jid) }
                 is ApiResult.Err -> message = "Send failed: ${r.message}"
             }
@@ -553,39 +459,24 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    /** Display name of a picked document, for the confirm dialog. */
-    fun displayName(uri: Uri): String = queryOpenable(uri).first ?: DEFAULT_UPLOAD_NAME
+    /** Display name of a picked document ([ref] is the opaque reference the picker produced), for the confirm dialog. */
+    fun displayName(ref: String): String = uploads.displayName(ref)
 
-    /**
-     * Upload a picked file to the open chat. The body is streamed straight from
-     * the content resolver so a large file never sits in memory.
-     */
-    fun sendMedia(uri: Uri, caption: String) {
+    /** Upload a picked file to the open chat; the repository streams it, so a large file never sits in memory. */
+    fun sendMedia(ref: String, caption: String) {
         val jid = currentJid ?: return
         if (sending || uploading != null) return
-        val resolver = container.appContext.contentResolver
         sending = true
         viewModelScope.launch {
-            val (name, size) = withContext(Dispatchers.IO) { queryOpenable(uri) }
-            val filename = name ?: DEFAULT_UPLOAD_NAME
+            val file = uploads.describe(ref)
+            val size = file.size
             if (size != null && size > MAX_UPLOAD_BYTES) {
-                message = "Send failed: $filename is larger than 100 MiB"
+                message = "Send failed: ${file.name} is larger than 100 MiB"
                 sending = false
                 return@launch
             }
-            uploading = "Uploading $filename..."
-            val body = object : RequestBody() {
-                override fun contentType(): MediaType? = resolver.getType(uri)?.toMediaTypeOrNull()
-                override fun contentLength(): Long = size ?: -1L
-                override fun writeTo(sink: BufferedSink) {
-                    val input = resolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open $filename")
-                    input.use { sink.writeAll(it.source()) }
-                }
-            }
-            val r = withContext(Dispatchers.IO) {
-                safeCall { container.api.api.waSendMedia(jid, filename, caption, body) }
-            }
-            when (r) {
+            uploading = "Uploading ${file.name}..."
+            when (val r = repo.sendMedia(jid, file, caption)) {
                 is ApiResult.Ok -> loadMessages(jid)
                 is ApiResult.Err -> message = "Send failed: ${r.message}"
             }
@@ -613,11 +504,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         sending = true
         uploading = "Sending voice note..."
         viewModelScope.launch {
-            val body = file.asRequestBody("audio/mp4".toMediaType())
-            val r = withContext(Dispatchers.IO) {
-                safeCall { container.api.api.waSendVoice(jid, replyTo, body) }
-            }
-            when (r) {
+            when (val r = repo.sendVoice(jid, replyTo, file)) {
                 is ApiResult.Ok -> loadMessages(jid)
                 is ApiResult.Err -> message = "Send failed: ${r.message}"
             }
@@ -627,31 +514,12 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    /** Display name and size in bytes of a content Uri; either may be unknown. */
-    private fun queryOpenable(uri: Uri): Pair<String?, Long?> {
-        var name: String? = null
-        var size: Long? = null
-        runCatching {
-            container.appContext.contentResolver
-                .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
-                ?.use { c ->
-                    if (c.moveToFirst()) {
-                        val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        val s = c.getColumnIndex(OpenableColumns.SIZE)
-                        if (n >= 0 && !c.isNull(n)) name = c.getString(n)
-                        if (s >= 0 && !c.isNull(s)) size = c.getLong(s)
-                    }
-                }
-        }
-        return name to size
-    }
-
     fun togglePin() {
         val jid = currentJid ?: return
         if (currentLocalPin) return   // a sys-mon pin cannot be changed from here
         val next = !currentPinned
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waPin(WaPinReq(chat = jid, pinned = next)) }) {
+            when (val r = repo.setPinned(jid, next)) {
                 is ApiResult.Ok -> {
                     currentPinned = next
                     chats = chats.map { if (it.jid == jid) it.copy(pinned = next) else it }.let(::waSortChats)
@@ -664,9 +532,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     fun searchContacts(q: String) {
         if (q.isBlank()) { contacts = emptyList(); return }
         viewModelScope.launch {
-            (safeCall { container.api.api.waContacts(q = q) } as? ApiResult.Ok)?.let {
-                contacts = it.value.contacts.map { c -> c.toWaContact() }
-            }
+            (repo.searchContacts(q) as? ApiResult.Ok)?.let { contacts = it.value }
         }
     }
 
@@ -677,19 +543,19 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         if (chat.localPin) return
         val next = !chat.pinned
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waPin(WaPinReq(chat = chat.jid, pinned = next)) }) {
+            when (val r = repo.setPinned(chat.jid, next)) {
                 is ApiResult.Ok -> chats = chats.map { if (it.jid == chat.jid) it.copy(pinned = next) else it }.let(::waSortChats)
                 is ApiResult.Err -> message = "Pin failed: ${r.message}"
             }
         }
     }
 
-    /** Mark some other chat read from the chat-row menu (not the open one). */
+    /** Mark a chat read: the open one from the conversation menu, or another from the chat-row menu. */
     fun markReadChat(jid: String) {
         val cleared = chats.firstOrNull { it.jid == jid }?.unread ?: 0
         if (cleared <= 0) return
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waMarkRead(WaMarkRead(chat = jid)) }) {
+            when (val r = repo.markRead(jid)) {
                 is ApiResult.Ok -> {
                     chats = chats.map { if (it.jid == jid) it.copy(unread = 0) else it }
                     status = status?.let { it.copy(unreadTotal = (it.unreadTotal - cleared).coerceAtLeast(0)) }
@@ -713,7 +579,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun startEdit(m: WaMessage) {
-        if (!waCanEdit(m, System.currentTimeMillis() / 1000.0)) return
+        if (!waCanEdit(m, nowSeconds())) return
         replyTo = null
         editingMsg = m
     }
@@ -740,11 +606,11 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     fun react(m: WaMessage, emoji: String) {
         val chat = currentJid ?: return
         val before = reactions
-        reactions = waApplyReaction(reactions, m.id, "me", emoji, System.currentTimeMillis() / 1000.0)
+        reactions = waApplyReaction(reactions, m.id, "me", emoji, nowSeconds())
         viewModelScope.launch {
             // Groups must name the target's original sender; the web sends it whenever the row has one.
             val sender = if (waIsGroup(chat)) m.sender.ifBlank { null } else null
-            when (val r = safeCall { container.api.api.waReact(WaReact(chat = chat, id = m.id, emoji = emoji, sender = sender)) }) {
+            when (val r = repo.react(chat, m.id, emoji, sender)) {
                 is ApiResult.Err -> {
                     reactions = before
                     message = "Reaction failed: ${r.message}"
@@ -768,7 +634,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         }
         if (everyone) reactions = reactions - m.id
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waDelete(WaDelete(chat = chat, id = m.id, everyone = everyone)) }) {
+            when (val r = repo.delete(chat, m.id, everyone)) {
                 is ApiResult.Err -> {
                     messages = beforeMessages
                     reactions = beforeReactions
@@ -782,12 +648,12 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     /** Edit my own text message. Optimistic text + "edited" flag, rollback on failure. */
     fun editMessage(m: WaMessage, text: String) {
         val chat = currentJid ?: return
-        if (text.isBlank() || !waCanEdit(m, System.currentTimeMillis() / 1000.0)) return
+        if (text.isBlank() || !waCanEdit(m, nowSeconds())) return
         val before = messages
         messages = messages.map { if (it.id == m.id) it.copy(text = text, edited = true) else it }
         editingMsg = null
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waEdit(WaEdit(chat = chat, id = m.id, message = text)) }) {
+            when (val r = repo.edit(chat, m.id, text)) {
                 is ApiResult.Err -> {
                     messages = before
                     editingMsg = m
@@ -801,7 +667,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     fun forward(m: WaMessage, to: String) {
         val chat = currentJid ?: return
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waForward(WaForward(chat = chat, id = m.id, to = to)) }) {
+            when (val r = repo.forward(chat, m.id, to)) {
                 is ApiResult.Ok -> message = "Forwarded"
                 is ApiResult.Err -> message = "Forward failed: ${r.message}"
             }
@@ -811,7 +677,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     /** Pin or unpin a chat in sys-mon's own list; WhatsApp and wacli never see it. */
     fun localPin(chat: WaChat, pinned: Boolean) {
         viewModelScope.launch {
-            when (val r = safeCall { container.api.api.waLocalPin(WaLocalPinReq(chat = chat.jid, pinned = pinned)) }) {
+            when (val r = repo.setLocalPin(chat.jid, pinned)) {
                 is ApiResult.Ok -> {
                     chats = chats.map {
                         if (it.jid != chat.jid) it
@@ -823,19 +689,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun connectWs() {
-        ws?.cancel()
-        ws = container.api.openWebSocket("/ws/whatsapp", emptyMap(), object : WebSocketListener() {
-            override fun onMessage(webSocket: WebSocket, text: String) { frames.trySend(text) }
-            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) { frames.trySend(bytes.utf8()) }
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {}
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { webSocket.close(code, null) }
-        })
-    }
-
-    private fun handleLive(text: String) {
-        val obj = runCatching { SysMonJson.parseToJsonElement(text).jsonObject }.getOrNull() ?: return
-        val msg = obj.toWaMessage()
+    private fun handleLive(msg: WaMessage) {
         if (msg.chat.isBlank() || msg.deletedForMe) return
 
         // A reaction is a fact about another message: it updates its chip, nothing else (no row,
@@ -857,7 +711,7 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
         if (msg.chat == currentJid && atLatest && messages.none { it.id == msg.id && it.id.isNotBlank() }) {
             messages = (messages + msg).sortedBy { it.ts }
             if (msg.id.isNotBlank()) freshIds = freshIds + msg.id
-            prefetchMedia(listOf(msg))
+            mediaTools.prefetch(listOf(msg))
             liveTick++
         }
 
@@ -880,15 +734,31 @@ class WhatsAppViewModel(private val container: AppContainer) : ViewModel() {
     override fun onCleared() {
         voice.release()
         recorder.cancel()
-        ws?.cancel()
-        frames.close()
         super.onCleared()
     }
 
-    private companion object {
-        const val DEFAULT_UPLOAD_NAME = "upload.bin"
-        const val AVATAR_LIMIT = 40
-        const val MAX_AVATAR_PASSES = 6
-        const val MAX_UPLOAD_BYTES = 100L * 1024 * 1024
+    companion object {
+        private const val AVATAR_LIMIT = 40
+        private const val MAX_AVATAR_PASSES = 6
+        private const val MAX_UPLOAD_BYTES = 100L * 1024 * 1024
+
+        /** Composition edge: wires the screen's ViewModel to the app-wide [AppContainer]. */
+        fun from(container: AppContainer): WhatsAppViewModel {
+            val context = container.appContext
+            return WhatsAppViewModel(
+                repo = container.whatsapp,
+                uploads = container.uploads,
+                mediaTools = AndroidWhatsAppMediaTools(
+                    context, container.imageLoader, container.api.okHttpClient, container.whatsapp,
+                ),
+                imageLoader = container.imageLoader,
+                voiceFactory = { scope, onMessage ->
+                    VoiceNotePlayer(context.cacheDir, container.api.okHttpClient, scope, onMessage)
+                },
+                recorderFactory = { scope, onMessage ->
+                    VoiceRecorder(context.cacheDir, { newMediaRecorder(context) }, scope, onMessage)
+                },
+            )
+        }
     }
 }

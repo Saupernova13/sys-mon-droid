@@ -10,6 +10,10 @@ import coil.decode.ImageDecoderDecoder
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.auth.TokenRenewer
 import com.raavivi.sysmon.core.data.SettingsStore
+import com.raavivi.sysmon.core.data.whatsapp.ContentResolverUploadSource
+import com.raavivi.sysmon.core.data.whatsapp.HttpWhatsAppRepository
+import com.raavivi.sysmon.core.data.whatsapp.UploadSource
+import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.log.AppLog
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.push.PushRegistrar
@@ -30,6 +34,10 @@ class AppContainer(application: Application) {
     val pushRegistrar: PushRegistrar = PushRegistrar(appContext, settings, api)
     val tokenRenewer: TokenRenewer = TokenRenewer(settings, api)
     val session: SessionManager = SessionManager(settings, api, pushRegistrar, tokenRenewer)
+
+    /** WhatsApp data layer (REST + live socket) and the picked-file reader its uploads use. */
+    val whatsapp: WhatsAppRepository = HttpWhatsAppRepository(api)
+    val uploads: UploadSource = ContentResolverUploadSource(appContext.contentResolver)
 
     /** In-app updates downloaded from sys-mon. */
     val updates: UpdateManager = UpdateManager(appContext, settings, api)

@@ -100,7 +100,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
-    val vm = rememberContainerViewModel { WhatsAppViewModel(it) }
+    val vm = rememberContainerViewModel { WhatsAppViewModel.from(it) }
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(2500); vm.message = null } }
 
     // Leaving the screen (tab switch) must not leave the microphone open.
@@ -472,8 +472,8 @@ private fun ConversationView(vm: WhatsAppViewModel) {
                     if (wasEditing) composerText = ""
                 },
                 onSend = { vm.send(it); composerText = "" },
-                onAttach = { uri, caption -> vm.sendMedia(uri, caption) },
-                displayName = vm::displayName,
+                onAttach = { uri, caption -> vm.sendMedia(uri.toString(), caption) },
+                displayName = { vm.displayName(it.toString()) },
                 enabled = !vm.sending,
                 c = c,
                 reduced = reduced,

@@ -21,7 +21,8 @@ import java.io.File
  * file ([capped]), so the user can still send it.
  */
 class VoiceRecorder(
-    private val context: Context,
+    private val cacheDir: File,
+    private val newMediaRecorder: () -> MediaRecorder,
     private val scope: CoroutineScope,
     private val onMessage: (String) -> Unit,
 ) {
@@ -40,9 +41,9 @@ class VoiceRecorder(
     /** Begin recording; false (with a message) if the recorder could not start. */
     fun start(): Boolean {
         if (recording) return true
-        val dir = File(context.cacheDir, "wa-rec").apply { mkdirs() }
+        val dir = File(cacheDir, "wa-rec").apply { mkdirs() }
         val out = File(dir, "${System.currentTimeMillis()}.m4a")
-        val rec = newRecorder()
+        val rec = newMediaRecorder()
         try {
             rec.setAudioSource(MediaRecorder.AudioSource.MIC)
             rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
@@ -130,10 +131,6 @@ class VoiceRecorder(
         elapsedMs = 0
     }
 
-    @Suppress("DEPRECATION")
-    private fun newRecorder(): MediaRecorder =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
-
     companion object {
         const val MAX_MS = 15L * 60 * 1000
         const val MIN_MS = 500L
@@ -142,3 +139,8 @@ class VoiceRecorder(
         private const val BIT_RATE = 64_000
     }
 }
+
+/** The platform [MediaRecorder], built the way the API level wants. */
+@Suppress("DEPRECATION")
+fun newMediaRecorder(context: Context): MediaRecorder =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()

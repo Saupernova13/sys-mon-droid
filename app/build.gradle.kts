@@ -85,4 +85,5 @@ dependencies {
     implementation(libs.coil.gif)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
