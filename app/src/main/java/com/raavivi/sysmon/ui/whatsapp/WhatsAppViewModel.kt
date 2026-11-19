@@ -16,6 +16,7 @@ import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.net.ApiResult
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -119,6 +120,24 @@ class WhatsAppViewModel(
 
     val recorder: VoiceRecorder = recorderFactory(viewModelScope) { message = it }
 
+    // The screen re-requests both loads from several places at once — the Refresh
+    // button, the status banner's retry, and a live message for a chat the first
+    // load hasn't listed yet — so each runs as a SingleFlight: one request in the
+    // air, later asks coalesced into exactly one follow-up.
+    private val statusLoad = SingleFlight(viewModelScope) {
+        (repo.status() as? ApiResult.Ok)?.let { status = it.value }
+    }
+    private val chatsLoad = SingleFlight(viewModelScope) {
+        loadingChats = true
+        error = null
+        when (val r = repo.chats()) {
+            is ApiResult.Ok -> chats = waSortChats(r.value)
+            is ApiResult.Err -> error = r.message
+        }
+        loadingChats = false
+        refreshAvatars()
+    }
+
     init {
         loadStatus()
         loadChats()
@@ -130,21 +149,33 @@ class WhatsAppViewModel(
     fun avatarUrl(jid: String): String = repo.avatarUrl(jid)
 
     fun loadStatus() {
-        viewModelScope.launch {
-            (repo.status() as? ApiResult.Ok)?.let { status = it.value }
-        }
+        statusLoad.trigger()
     }
 
     fun loadChats() {
-        loadingChats = true
-        error = null
-        viewModelScope.launch {
-            when (val r = repo.chats()) {
-                is ApiResult.Ok -> chats = waSortChats(r.value)
-                is ApiResult.Err -> error = r.message
+        chatsLoad.trigger()
+    }
+
+    /** One load at a time: a trigger while one runs only asks for one more
+     *  after it, so bursts of triggers never stack concurrent requests. */
+    private class SingleFlight(private val scope: CoroutineScope, private val run: suspend () -> Unit) {
+        private var job: Job? = null
+        private var wanted = false
+
+        fun trigger() {
+            if (job?.isActive == true) {
+                wanted = true
+                return
             }
-            loadingChats = false
-            refreshAvatars()
+            start()
+        }
+
+        private fun start() {
+            wanted = false
+            job = scope.launch {
+                run()
+                if (wanted) start()
+            }
         }
     }
 

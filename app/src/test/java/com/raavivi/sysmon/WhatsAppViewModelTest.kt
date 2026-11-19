@@ -14,6 +14,7 @@ import com.raavivi.sysmon.ui.whatsapp.WhatsAppViewModel
 import com.raavivi.sysmon.ui.whatsapp.waBeforeCursor
 import com.raavivi.sysmon.ui.whatsapp.waInclusiveAfter
 import com.raavivi.sysmon.ui.whatsapp.waInclusiveBefore
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -138,6 +139,59 @@ class WhatsAppViewModelTest {
 
         assertEquals("Network error: down", vm.error)
         assertTrue(vm.chats.isEmpty())
+    }
+
+    @Test
+    fun `refresh taps and unknown-chat live messages do not stack chats calls on a running load`() {
+        val gate = CompletableDeferred<Unit>()
+        repo.chatsGate = gate
+        val vm = newViewModel()   // init's loadChats parks on the gate
+
+        vm.loadChats()
+        vm.loadChats()
+        repo.emitLive(msg("z1", 1500.0, chat = "27820000009@s.whatsapp.net"))
+
+        assertEquals(1, repo.chatsCalls.size)
+        assertTrue(vm.loadingChats)
+
+        gate.complete(Unit)   // let the parked load (and its follow-up) finish
+    }
+
+    @Test
+    fun `chats loads requested during a flight run exactly once after it and win`() {
+        val gate = CompletableDeferred<Unit>()
+        repo.chatsGate = gate
+        repo.chatsResult = ApiResult.Ok(listOf(chat(alice, lastTs = 10.0)))
+        val vm = newViewModel()
+        vm.loadChats()
+        repo.emitLive(msg("z1", 1500.0, chat = "27820000009@s.whatsapp.net"))
+        assertEquals(1, repo.chatsCalls.size)
+
+        repo.chatsResult = ApiResult.Ok(listOf(chat(alice, lastTs = 10.0), chat(bob, lastTs = 20.0)))
+        gate.complete(Unit)
+
+        assertEquals(2, repo.chatsCalls.size)   // one follow-up, not one per trigger
+        assertEquals(listOf(bob, alice), vm.chats.map { it.jid })
+        assertFalse(vm.loadingChats)
+    }
+
+    @Test
+    fun `loadStatus does not stack while a status load is in flight`() {
+        val gate = CompletableDeferred<Unit>()
+        repo.statusGate = gate
+        repo.statusResult = ApiResult.Ok(WaStatus(enabled = true, unreadTotal = 4))
+        val vm = newViewModel()   // init's loadStatus parks on the gate
+
+        vm.loadStatus()
+        vm.loadStatus()
+
+        assertEquals(1, repo.statusCalls.size)
+
+        repo.statusResult = ApiResult.Ok(WaStatus(enabled = true, unreadTotal = 7))
+        gate.complete(Unit)
+
+        assertEquals(2, repo.statusCalls.size)   // one coalesced follow-up
+        assertEquals(7, vm.status?.unreadTotal)
     }
 
     @Test
