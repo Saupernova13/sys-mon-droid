@@ -3,9 +3,11 @@ package com.raavivi.sysmon.widget
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.raavivi.sysmon.core.log.AppLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Handles taps on either widget: toggle a relay, or pull a fresh reading.
@@ -16,6 +18,12 @@ import kotlinx.coroutines.launch
  *
  * Both widgets are redrawn after any action, since one plug can be showing in a
  * per-plug tile and in the list at the same time.
+ *
+ * The async work carries a hard budget: plug alerts push a REFRESH broadcast
+ * roughly every 30s, and a foreground broadcast ANR-kills the whole process if
+ * the pending result hasn't finished within ~10s — so anything slower than
+ * [WORK_BUDGET_MS] is dropped in favour of the cached snapshot, which the next
+ * push or tap refreshes anyway.
  */
 class PlugWidgetActionReceiver : BroadcastReceiver() {
 
@@ -43,11 +51,19 @@ class PlugWidgetActionReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                block()
+                if (withTimeoutOrNull(WORK_BUDGET_MS) { block() } == null) {
+                    AppLog.w("Widget", "action overran its ${WORK_BUDGET_MS}ms budget; keeping the cached snapshot")
+                }
             } finally {
                 PlugWidgets.updateAll(context)
                 pending.finish()
             }
         }
+    }
+
+    internal companion object {
+        /** Foreground broadcasts get ~10s before the system ANR-kills the
+         *  process; finish comfortably inside that. */
+        const val WORK_BUDGET_MS = 8_000L
     }
 }
