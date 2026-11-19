@@ -98,6 +98,14 @@ data class WaEdit(val chat: String, val id: String, val message: String)
 @Serializable
 data class WaLocalPinReq(val chat: String, val pinned: Boolean = true)
 
+/** `POST /api/whatsapp/chat-name`: a blank [name] goes back to WhatsApp's. */
+@Serializable
+data class WaChatNameReq(val chat: String, val name: String = "")
+
+/** The stored sys-mon name, or null once removed. */
+@Serializable
+data class WaChatNameResponse(val ok: Boolean = false, val chat: String = "", val name: String? = null)
+
 // ── normalised view models ───────────────────────────────────────────────────
 
 data class WaChat(
@@ -118,6 +126,10 @@ data class WaChat(
     /** WhatsApp's own pin state as the server last reported it, so dropping the sys-mon pin can
      *  restore it (present on sys-mon-pinned rows only). */
     val waPinned: Boolean = false,
+    /** Named in sys-mon (wacli/WhatsApp cannot change it): [name] is that name, [waName] WhatsApp's own
+     *  ("" if it has none). */
+    val renamed: Boolean = false,
+    val waName: String = "",
 )
 
 data class WaMessage(
@@ -176,6 +188,8 @@ fun JsonObject.toWaChat(): WaChat {
         localPin = pickBool("local_pin", "LocalPin"),
         pinRank = pickInt("pin_rank", "PinRank"),
         waPinned = pickBool("wa_pinned", "WaPinned") ?: pinned,
+        renamed = containsKey("wa_name"),
+        waName = pickStr("wa_name") ?: "",
     )
 }
 

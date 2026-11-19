@@ -316,6 +316,16 @@ fun waSortChats(chats: List<WaChat>): List<WaChat> {
     return wa + local + rest
 }
 
+/**
+ * The row once the server stored [stored] as its sys-mon name; null went back to WhatsApp's. The first
+ * rename remembers WhatsApp's name (none when the row only showed the JID), later ones keep it.
+ */
+fun WaChat.withSysmonName(stored: String?): WaChat = when {
+    stored != null -> copy(name = stored, renamed = true, waName = if (renamed) waName else name.takeIf { it != jid }.orEmpty())
+    renamed -> copy(name = waName.ifBlank { jid }, renamed = false, waName = "")
+    else -> this
+}
+
 /** What the second line of a chat row shows: [prefix] ("You: ", "Sam: "), an optional [kind] icon, the [text]. */
 data class PreviewLine(val prefix: String, val kind: WaMediaKind?, val text: String, val revoked: Boolean)
 

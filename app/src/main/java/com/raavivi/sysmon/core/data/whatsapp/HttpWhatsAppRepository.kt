@@ -9,6 +9,7 @@ import com.raavivi.sysmon.core.model.WaEdit
 import com.raavivi.sysmon.core.model.WaForward
 import com.raavivi.sysmon.core.model.WaLatestReq
 import com.raavivi.sysmon.core.model.WaLocalPinReq
+import com.raavivi.sysmon.core.model.WaChatNameReq
 import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPinReq
@@ -110,6 +111,9 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
 
     override suspend fun setLocalPin(chat: String, pinned: Boolean): ApiResult<Unit> =
         safeCall { api.api.waLocalPin(WaLocalPinReq(chat = chat, pinned = pinned)) }.mapOk { }
+
+    override suspend fun setChatName(chat: String, name: String): ApiResult<String?> =
+        safeCall { api.api.waChatName(WaChatNameReq(chat = chat, name = name)) }.mapOk { it.name }
 
     override suspend fun markRead(chat: String): ApiResult<Unit> =
         safeCall { api.api.waMarkRead(WaMarkRead(chat = chat)) }.mapOk { }

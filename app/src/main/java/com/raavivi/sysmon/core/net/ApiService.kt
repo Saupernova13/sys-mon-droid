@@ -18,6 +18,8 @@ import com.raavivi.sysmon.core.model.WaEdit
 import com.raavivi.sysmon.core.model.WaForward
 import com.raavivi.sysmon.core.model.WaLatestReq
 import com.raavivi.sysmon.core.model.WaLocalPinReq
+import com.raavivi.sysmon.core.model.WaChatNameReq
+import com.raavivi.sysmon.core.model.WaChatNameResponse
 import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaReact
 import com.raavivi.sysmon.core.model.DrivesResponse
@@ -445,6 +447,10 @@ interface ApiService {
     /** Pin or unpin a chat in sys-mon's own pin list; wacli and WhatsApp never see these. */
     @POST("api/whatsapp/local-pin")
     suspend fun waLocalPin(@Body body: WaLocalPinReq): OkResponse
+
+    /** Name a chat in sys-mon only; a blank name goes back to WhatsApp's. */
+    @POST("api/whatsapp/chat-name")
+    suspend fun waChatName(@Body body: WaChatNameReq): WaChatNameResponse
 
     /** React to a message; an empty emoji removes the reaction. */
     @POST("api/whatsapp/react")

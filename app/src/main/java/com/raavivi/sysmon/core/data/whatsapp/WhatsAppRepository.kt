@@ -44,6 +44,9 @@ interface WhatsAppRepository {
 
     /** sys-mon's own pin list. */
     suspend fun setLocalPin(chat: String, pinned: Boolean): ApiResult<Unit>
+
+    /** sys-mon's own chat name; a blank [name] removes it. Ok carries the stored name, null once removed. */
+    suspend fun setChatName(chat: String, name: String): ApiResult<String?>
     suspend fun markRead(chat: String): ApiResult<Unit>
 
     /** Have the server download missing media for the chat's newest messages (can take tens of seconds). */
