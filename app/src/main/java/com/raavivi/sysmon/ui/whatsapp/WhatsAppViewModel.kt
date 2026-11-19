@@ -45,8 +45,10 @@ class WhatsAppViewModel(
         private set
     var currentPinned by mutableStateOf(false)
         private set
-    var messages by mutableStateOf<List<WaMessage>>(emptyList())
-        private set
+    /** The loaded slice of the open conversation and its paging state; the rules live in [ConversationWindow]. */
+    private var window by mutableStateOf(ConversationWindow())
+
+    val messages: List<WaMessage> get() = window.messages
     var loadingMessages by mutableStateOf(false)
         private set
     var sending by mutableStateOf(false)
@@ -81,14 +83,10 @@ class WhatsAppViewModel(
         private set
 
     /** Whether the loaded window includes the chat's newest message; false after jumping to the first page. */
-    var atLatest by mutableStateOf(true)
-        private set
+    val atLatest: Boolean get() = window.atLatest
 
     private var loadingOlder = false
     private var loadingNewer = false
-
-    /** The oldest message is loaded, so there is nothing older to request. */
-    private var reachedFirst = false
 
     /** Bumped whenever the window is replaced, so a page still in flight for the old window is dropped. */
     private var windowEpoch = 0
@@ -101,18 +99,12 @@ class WhatsAppViewModel(
         private set
 
     /** Reactions folded from the loaded pages and live frames; they never become list items. */
-    var reactions by mutableStateOf<WaReactions>(emptyMap())
-        private set
+    val reactions: WaReactions get() = window.reactions
 
     /** Ids of messages that arrived live or were just sent: only these get the entrance animation. */
-    var freshIds by mutableStateOf<Set<String>>(emptySet())
-        private set
+    val freshIds: Set<String> get() = window.freshIds
 
-    private fun foldReactions(page: List<WaMessage>, replace: Boolean) {
-        reactions = waAggregateReactions(page, if (replace) emptyMap() else reactions)
-    }
-
-    fun clearFresh() { freshIds = emptySet() }
+    fun clearFresh() { window = window.clearedFresh() }
 
     val currentLocalPin: Boolean get() = chats.firstOrNull { it.jid == currentJid }?.localPin ?: false
 
@@ -184,8 +176,6 @@ class WhatsAppViewModel(
         voice.release()
         recorder.cancel()
         timeline = null
-        reactions = emptyMap()
-        freshIds = emptySet()
         loadMessages(jid)
         viewModelScope.launch {
             val r = repo.timeline(jid)
@@ -217,9 +207,7 @@ class WhatsAppViewModel(
         voice.release()
         recorder.cancel()
         currentJid = null
-        messages = emptyList()
-        reactions = emptyMap()
-        freshIds = emptySet()
+        window = ConversationWindow()
         timeline = null
         resetWindow()
     }
@@ -227,8 +215,7 @@ class WhatsAppViewModel(
     /** Back to "newest page, nothing in flight" when a conversation opens or closes. */
     private fun resetWindow() {
         windowEpoch++
-        atLatest = true
-        reachedFirst = false
+        window = window.reopened()
         loadingOlder = false
         loadingNewer = false
         jumpingFirst = false
@@ -258,21 +245,12 @@ class WhatsAppViewModel(
             is ApiResult.Ok -> {
                 val page = r.value
                 if (merge) {
-                    messages = mergeMessages(messages, page).first
-                    foldReactions(page, replace = false)
+                    window = window.mergedWithNewest(page)
                 } else {
-                    // A send / refresh while following the bottom: the few genuinely new rows animate in.
-                    val known = if (atLatest) messages.mapTo(HashSet()) { it.id } else null
                     windowEpoch++
-                    messages = page.sortedBy { it.ts }
-                    reachedFirst = false
-                    foldReactions(page, replace = true)
-                    val added = if (known == null || known.isEmpty()) emptyList()
-                    else messages.filter { it.id.isNotBlank() && it.id !in known && isVisibleMessage(it) }
-                    freshIds = if (added.size <= 5) added.mapTo(HashSet()) { it.id } else emptySet()
+                    window = window.replacedByNewest(page)
                 }
                 mediaTools.prefetch(page)
-                atLatest = true
                 true
             }
             is ApiResult.Err -> { error = r.message; false }
@@ -310,12 +288,8 @@ class WhatsAppViewModel(
                     is ApiResult.Ok -> {
                         val page = r.value
                         windowEpoch++
-                        messages = page.sortedBy { it.ts }
-                        foldReactions(page, replace = true)
-                        freshIds = emptySet()
+                        window = window.replacedByPage(page, reachedFirst = true)
                         mediaTools.prefetch(page)
-                        atLatest = page.size < WA_PAGE_LIMIT
-                        reachedFirst = true
                         topTick++
                     }
                     is ApiResult.Err -> message = "First message failed: ${r.message}"
@@ -344,12 +318,9 @@ class WhatsAppViewModel(
                     is ApiResult.Ok -> {
                         val page = r.value
                         windowEpoch++
-                        messages = page.sortedBy { it.ts }
-                        foldReactions(page, replace = true)
-                        freshIds = emptySet()
+                        val startsAtFirst = timeline?.let { ts <= it.first.firstTs } ?: false
+                        window = window.replacedByPage(page, reachedFirst = startsAtFirst)
                         mediaTools.prefetch(page)
-                        atLatest = page.size < WA_PAGE_LIMIT
-                        reachedFirst = timeline?.let { ts <= it.first.firstTs } ?: false
                         topTick++
                     }
                     is ApiResult.Err -> message = "Jump failed: ${r.message}"
@@ -369,31 +340,29 @@ class WhatsAppViewModel(
     fun loadOlder(silent: Boolean = false) {
         val jid = currentJid ?: return
         if (loadingOlder) return
-        if (reachedFirst) { if (!silent) message = "No older messages"; return }
-        val oldest = messages.firstOrNull()?.takeIf { it.ts > 0 }?.ts ?: return
+        if (window.reachedFirst) { if (!silent) message = "No older messages"; return }
+        val oldest = window.oldestTs ?: return
         val epoch = windowEpoch
         loadingOlder = true
         viewModelScope.launch {
             try {
                 var strict = false
                 while (true) {
-                    val before = if (strict) waBeforeCursor(oldest) else waInclusiveBefore(oldest)
+                    val before = ConversationWindow.olderCursor(oldest, strict)
                     val r = repo.messages(chat = jid, limit = WA_PAGE_LIMIT, before = before)
                     if (currentJid != jid || windowEpoch != epoch) return@launch
                     if (r !is ApiResult.Ok) return@launch
                     val page = r.value
-                    val (merged, added) = mergeMessages(messages, page)
-                    messages = merged
-                    foldReactions(page, replace = false)
+                    val (merged, added) = window.merged(page)
+                    window = merged
                     mediaTools.prefetch(page)
-                    var outcome = pageOutcome(page.size, added, WA_PAGE_LIMIT)
-                    if (outcome == PageOutcome.STALLED && !strict) {
+                    val outcome = ConversationWindow.settle(page.size, added, strict)
+                    if (outcome == PageOutcome.STALLED) {
                         strict = true
                         continue
                     }
-                    if (outcome == PageOutcome.STALLED) outcome = PageOutcome.END
                     if (outcome == PageOutcome.END) {
-                        reachedFirst = true
+                        window = window.withReachedFirst()
                         if (added == 0 && !silent) message = "No older messages"
                     }
                     return@launch
@@ -411,7 +380,7 @@ class WhatsAppViewModel(
     fun loadNewer() {
         val jid = currentJid ?: return
         if (atLatest || loadingNewer) return
-        val newest = messages.lastOrNull()?.takeIf { it.ts > 0 }?.ts ?: return
+        val newest = window.newestTs ?: return
         val epoch = windowEpoch
         loadingNewer = true
         viewModelScope.launch {
@@ -419,21 +388,19 @@ class WhatsAppViewModel(
                 var strict = false
                 while (true) {
                     // Strict `after` is the floor of the second: wacli then returns only later seconds.
-                    val after = if (strict) waBeforeCursor(newest) else waInclusiveAfter(newest)
+                    val after = ConversationWindow.newerCursor(newest, strict)
                     val r = repo.messages(chat = jid, limit = WA_PAGE_LIMIT, after = after, asc = true)
                     if (currentJid != jid || windowEpoch != epoch) return@launch
                     if (r !is ApiResult.Ok) return@launch
                     val page = r.value
-                    val (merged, added) = mergeMessages(messages, page)
-                    messages = merged
-                    foldReactions(page, replace = false)
+                    val (merged, added) = window.merged(page)
+                    window = merged
                     mediaTools.prefetch(page)
-                    var outcome = pageOutcome(page.size, added, WA_PAGE_LIMIT)
-                    if (outcome == PageOutcome.STALLED && !strict) {
+                    val outcome = ConversationWindow.settle(page.size, added, strict)
+                    if (outcome == PageOutcome.STALLED) {
                         strict = true
                         continue
                     }
-                    if (outcome == PageOutcome.STALLED) outcome = PageOutcome.END
                     if (outcome == PageOutcome.END) fetchNewest(jid, merge = true)
                     return@launch
                 }
@@ -606,13 +573,13 @@ class WhatsAppViewModel(
     fun react(m: WaMessage, emoji: String) {
         val chat = currentJid ?: return
         val before = reactions
-        reactions = waApplyReaction(reactions, m.id, "me", emoji, nowSeconds())
+        window = window.withReaction(m.id, "me", emoji, nowSeconds())
         viewModelScope.launch {
             // Groups must name the target's original sender; the web sends it whenever the row has one.
             val sender = if (waIsGroup(chat)) m.sender.ifBlank { null } else null
             when (val r = repo.react(chat, m.id, emoji, sender)) {
                 is ApiResult.Err -> {
-                    reactions = before
+                    window = window.copy(reactions = before)
                     message = "Reaction failed: ${r.message}"
                 }
                 is ApiResult.Ok -> Unit
@@ -625,19 +592,11 @@ class WhatsAppViewModel(
         val chat = currentJid ?: return
         val beforeMessages = messages
         val beforeReactions = reactions
-        messages = messages.map {
-            when {
-                it.id != m.id -> it
-                everyone -> it.copy(revoked = true)
-                else -> it.copy(deletedForMe = true)
-            }
-        }
-        if (everyone) reactions = reactions - m.id
+        window = window.withRemoved(m.id, everyone)
         viewModelScope.launch {
             when (val r = repo.delete(chat, m.id, everyone)) {
                 is ApiResult.Err -> {
-                    messages = beforeMessages
-                    reactions = beforeReactions
+                    window = window.copy(messages = beforeMessages, reactions = beforeReactions)
                     message = "Delete failed: ${r.message}"
                 }
                 is ApiResult.Ok -> Unit
@@ -650,12 +609,12 @@ class WhatsAppViewModel(
         val chat = currentJid ?: return
         if (text.isBlank() || !waCanEdit(m, nowSeconds())) return
         val before = messages
-        messages = messages.map { if (it.id == m.id) it.copy(text = text, edited = true) else it }
+        window = window.withEdited(m.id, text)
         editingMsg = null
         viewModelScope.launch {
             when (val r = repo.edit(chat, m.id, text)) {
                 is ApiResult.Err -> {
-                    messages = before
+                    window = window.copy(messages = before)
                     editingMsg = m
                     message = "Edit failed: ${r.message}"
                 }
@@ -692,30 +651,22 @@ class WhatsAppViewModel(
     private fun handleLive(msg: WaMessage) {
         if (msg.chat.isBlank() || msg.deletedForMe) return
 
-        // A reaction is a fact about another message: it updates its chip, nothing else (no row,
-        // no unread bump, no preview, no scroll-follow).
-        if (msg.isReaction) {
-            if (msg.chat == currentJid) {
-                reactions = waApplyReaction(reactions, msg.reactionToId, waReactorKey(msg), msg.reactionEmoji, msg.ts)
+        val applied = window.applyLive(msg, inOpenChat = msg.chat == currentJid)
+        window = applied.window
+        when (applied.effect) {
+            // Reactions and in-place edits / deletes touch no row, unread count, preview or scroll-follow.
+            LiveEffect.REACTION_FOLDED, LiveEffect.ROW_UPDATED -> return
+            LiveEffect.APPENDED -> {
+                mediaTools.prefetch(listOf(msg))
+                liveTick++
             }
-            return
+            LiveEffect.NONE -> Unit
         }
-        // An edit or a delete carries the original id: update that message in place, never add a second.
-        if ((msg.edited || msg.revoked) && msg.id.isNotBlank()) {
-            if (msg.chat == currentJid) waApplyLiveUpdate(messages, msg)?.let { messages = it }
-            return
-        }
+        updateChatListFor(msg)
+    }
 
-        // Append to the open conversation, but only while the window reaches the newest message;
-        // otherwise loadNewer / the final merge picks it up in order.
-        if (msg.chat == currentJid && atLatest && messages.none { it.id == msg.id && it.id.isNotBlank() }) {
-            messages = (messages + msg).sortedBy { it.ts }
-            if (msg.id.isNotBlank()) freshIds = freshIds + msg.id
-            mediaTools.prefetch(listOf(msg))
-            liveTick++
-        }
-
-        // Update the chat list ordering / unread tally.
+    /** Reorder the chat list and tally unread for a live message. */
+    private fun updateChatListFor(msg: WaMessage) {
         val existing = chats.firstOrNull { it.jid == msg.chat }
         if (existing == null) {
             loadChats()
