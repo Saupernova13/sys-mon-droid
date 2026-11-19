@@ -11,6 +11,7 @@ import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.ui.whatsapp.WhatsAppMediaTools
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import java.io.File
@@ -60,12 +61,25 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     val markedRead = mutableListOf<String>()
     val latestFetched = mutableListOf<String>()
 
+    /** When set, `chats()`/`status()` park on it until completed — for single-flight tests. */
+    var chatsGate: CompletableDeferred<Unit>? = null
+    var statusGate: CompletableDeferred<Unit>? = null
+
     private val live = MutableSharedFlow<WaMessage>(extraBufferCapacity = 64)
 
     fun emitLive(msg: WaMessage) { check(live.tryEmit(msg)) }
 
-    override suspend fun status(): ApiResult<WaStatus> { statusCalls += Unit; return statusResult }
-    override suspend fun chats(): ApiResult<List<WaChat>> { chatsCalls += Unit; return chatsResult }
+    override suspend fun status(): ApiResult<WaStatus> {
+        statusCalls += Unit
+        statusGate?.await()
+        return statusResult
+    }
+
+    override suspend fun chats(): ApiResult<List<WaChat>> {
+        chatsCalls += Unit
+        chatsGate?.await()
+        return chatsResult
+    }
 
     override suspend fun messages(
         chat: String,
