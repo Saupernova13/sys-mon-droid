@@ -2,6 +2,7 @@ package com.raavivi.sysmon.core.net
 
 import com.raavivi.sysmon.core.log.HttpLogInterceptor
 import kotlinx.serialization.ExperimentalSerializationApi
+import okhttp3.Dispatcher
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -52,6 +53,15 @@ class ApiProvider(initialBaseUrl: String = DEFAULT_BASE_URL) {
         // Asks for br,gzip and decodes both. Body-less responses (a WebSocket 101) pass untouched,
         // and requests that already set Accept-Encoding are left alone.
         .addInterceptor(BrotliInterceptor)
+        // Everything talks to one host (the user's own PC), and each open WebSocket
+        // holds a dispatcher slot for its whole life, so the default 5-per-host cap
+        // queued the widget refresh behind the WhatsApp calls into an ANR.
+        .dispatcher(
+            Dispatcher().apply {
+                maxRequests = 64
+                maxRequestsPerHost = 32
+            }
+        )
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
