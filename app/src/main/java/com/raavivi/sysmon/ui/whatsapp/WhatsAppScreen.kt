@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.raavivi.sysmon.ui.theme.SysMon
+import com.raavivi.sysmon.core.model.WaChat
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.common.ScreenHeader
@@ -80,6 +81,7 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
     var filter by remember { mutableStateOf("") }
     var showNew by remember { mutableStateOf(false) }
     var menuJid by remember { mutableStateOf<String?>(null) }
+    var renaming by remember { mutableStateOf<WaChat?>(null) }
     val c = rememberChatColors()
     val reduced = rememberReducedMotion()
 
@@ -123,6 +125,7 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
                                         c = c,
                                         onTogglePin = { vm.togglePinFor(chat); menuJid = null },
                                         onToggleLocalPin = { vm.localPin(chat, !chat.localPin); menuJid = null },
+                                        onRename = { renaming = chat; menuJid = null },
                                         onMarkRead = { vm.markReadChat(chat.jid); menuJid = null },
                                     )
                                 },
@@ -135,6 +138,47 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
     }
 
     if (showNew) NewChatDialog(vm, onDismiss = { showNew = false })
+    renaming?.let { chat ->
+        RenameChatDialog(
+            chat = chat,
+            onSave = { name -> vm.renameChat(chat, name); renaming = null },
+            onDismiss = { renaming = null },
+        )
+    }
+}
+
+/** Name a chat in sys-mon only; "Use WhatsApp name" (a renamed chat) saves a blank name. */
+@Composable
+private fun RenameChatDialog(chat: WaChat, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember(chat.jid) { mutableStateOf(chat.name) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename in sys-mon") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text("Chat name") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    if (chat.renamed && chat.waName.isNotBlank()) "Only sys-mon shows this name. On WhatsApp it is \"${chat.waName}\"."
+                    else "Only sys-mon shows this name. WhatsApp keeps its own.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text("Save") } },
+        dismissButton = {
+            Row {
+                if (chat.renamed) TextButton(onClick = { onSave("") }) { Text("Use WhatsApp name") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 @Composable

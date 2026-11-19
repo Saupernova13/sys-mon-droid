@@ -283,9 +283,16 @@ private fun EmojiCell(emoji: String, ink: Color, ring: Color, ringed: Boolean, o
     }
 }
 
-/** The chat-row menu (long-press a chat): pins and mark-as-read, hosted by the row's DropdownMenu. */
+/** The chat-row menu (long-press a chat): pins, rename and mark-as-read, hosted by the row's DropdownMenu. */
 @Composable
-fun ChatRowMenuItems(chat: WaChat, c: ChatColors, onTogglePin: () -> Unit, onToggleLocalPin: () -> Unit, onMarkRead: () -> Unit) {
+fun ChatRowMenuItems(
+    chat: WaChat,
+    c: ChatColors,
+    onTogglePin: () -> Unit,
+    onToggleLocalPin: () -> Unit,
+    onRename: () -> Unit,
+    onMarkRead: () -> Unit,
+) {
     if (chat.localPin) {
         DropdownMenuItem(
             text = { Text("Remove sys-mon pin") },
@@ -306,6 +313,11 @@ fun ChatRowMenuItems(chat: WaChat, c: ChatColors, onTogglePin: () -> Unit, onTog
             )
         }
     }
+    DropdownMenuItem(
+        text = { Text("Rename in sys-mon") },
+        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = c.meta) },
+        onClick = onRename,
+    )
     if (chat.unread > 0) {
         DropdownMenuItem(
             text = { Text("Mark as read") },

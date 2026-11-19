@@ -648,6 +648,19 @@ class WhatsAppViewModel(
         }
     }
 
+    /** Name a chat in sys-mon only (a blank name goes back to WhatsApp's); WhatsApp and wacli never see it. */
+    fun renameChat(chat: WaChat, name: String) {
+        viewModelScope.launch {
+            when (val r = repo.setChatName(chat.jid, name)) {
+                is ApiResult.Ok -> {
+                    chats = chats.map { if (it.jid == chat.jid) it.withSysmonName(r.value) else it }
+                    if (currentJid == chat.jid) chats.firstOrNull { it.jid == chat.jid }?.let { currentName = it.name }
+                }
+                is ApiResult.Err -> message = "Rename failed: ${r.message}"
+            }
+        }
+    }
+
     private fun handleLive(msg: WaMessage) {
         if (msg.chat.isBlank() || msg.deletedForMe) return
 

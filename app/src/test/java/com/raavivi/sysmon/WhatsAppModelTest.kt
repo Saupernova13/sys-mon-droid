@@ -1,6 +1,9 @@
 package com.raavivi.sysmon
 
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaChatNameReq
+import com.raavivi.sysmon.core.net.SysMonJson
+import com.raavivi.sysmon.ui.whatsapp.withSysmonName
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.splitQuotedDisplay
 import com.raavivi.sysmon.core.model.toWaChat
@@ -446,6 +449,37 @@ class WhatsAppModelTest {
         assertTrue(c.localPin)
         assertEquals(3, c.pinRank)
         assertFalse(parse("""{"jid":"1@s.whatsapp.net"}""").toWaChat().localPin)
+    }
+
+    @Test fun sysmonNameFieldsAreParsed() {
+        val c = parse("""{"jid":"1@s.whatsapp.net","name":"Old number","wa_name":"Contact Fake"}""").toWaChat()
+        assertEquals(Triple("Old number", true, "Contact Fake"), Triple(c.name, c.renamed, c.waName))
+        val nameless = parse("""{"jid":"1@s.whatsapp.net","name":"Old number","wa_name":""}""").toWaChat()
+        assertEquals(true to "", nameless.renamed to nameless.waName)
+        assertFalse(parse("""{"jid":"1@s.whatsapp.net","name":"Contact Fake"}""").toWaChat().renamed)
+    }
+
+    @Test fun aSysmonNameRemembersWhatsAppsAndClearingRestoresIt() {
+        val plain = WaChat(jid = "27820000001@s.whatsapp.net", name = "Contact Fake", lastTs = 0.0, unread = 0, pinned = false)
+        val renamed = plain.withSysmonName("Old number")
+        assertEquals(Triple("Old number", true, "Contact Fake"), Triple(renamed.name, renamed.renamed, renamed.waName))
+        assertEquals("Contact Fake", renamed.withSysmonName("Second").waName)   // a later rename keeps WhatsApp's name
+        val back = renamed.withSysmonName(null)
+        assertEquals(Triple("Contact Fake", false, ""), Triple(back.name, back.renamed, back.waName))
+        assertEquals(plain, plain.withSysmonName(null))
+    }
+
+    @Test fun aChatWithoutAWhatsAppNameFallsBackToItsJid() {
+        val jid = "27820000001@s.whatsapp.net"
+        val renamed = WaChat(jid = jid, name = jid, lastTs = 0.0, unread = 0, pinned = false).withSysmonName("Old number")
+        assertEquals("", renamed.waName)
+        assertEquals(jid, renamed.withSysmonName(null).name)
+    }
+
+    @Test fun aChatNameRequestOmitsABlankName() {
+        fun enc(r: WaChatNameReq) = SysMonJson.encodeToString(WaChatNameReq.serializer(), r)
+        assertEquals("""{"chat":"1@s.whatsapp.net"}""", enc(WaChatNameReq("1@s.whatsapp.net")))
+        assertEquals("""{"chat":"1@s.whatsapp.net","name":"Old number"}""", enc(WaChatNameReq("1@s.whatsapp.net", "Old number")))
     }
 
     // -- meta placement --------------------------------------------------------

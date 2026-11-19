@@ -56,6 +56,7 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     val edits = mutableListOf<Edited>()
     val pins = mutableListOf<PinCall>()
     val localPins = mutableListOf<PinCall>()
+    val chatNames = mutableListOf<Pair<String, String>>()
     val markedRead = mutableListOf<String>()
     val latestFetched = mutableListOf<String>()
 
@@ -125,6 +126,15 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     override suspend fun setLocalPin(chat: String, pinned: Boolean): ApiResult<Unit> {
         localPins += PinCall(chat, pinned)
         return actionResult
+    }
+
+    /** Stores like the server: trimmed, blank removes. */
+    override suspend fun setChatName(chat: String, name: String): ApiResult<String?> {
+        chatNames += chat to name
+        return when (val r = actionResult) {
+            is ApiResult.Ok -> ApiResult.Ok(name.trim().ifBlank { null })
+            is ApiResult.Err -> r
+        }
     }
 
     override suspend fun markRead(chat: String): ApiResult<Unit> {

@@ -468,6 +468,29 @@ class WhatsAppViewModelTest {
     }
 
     @Test
+    fun `renaming a chat shows the sys-mon name and keeps WhatsApp's`() {
+        val vm = openedViewModel(chats = listOf(chat(alice, name = "Alice Fake"), chat(bob)))
+
+        vm.renameChat(vm.chats.first { it.jid == alice }, " Old number ")
+
+        assertEquals(listOf(alice to " Old number "), repo.chatNames)
+        val row = vm.chats.first { it.jid == alice }
+        assertEquals(Triple("Old number", true, "Alice Fake"), Triple(row.name, row.renamed, row.waName))
+        assertEquals("Old number", vm.currentName)   // alice is the open chat
+    }
+
+    @Test
+    fun `a failed rename keeps the name and says why`() {
+        repo.actionResult = ApiResult.Err("nope")
+        val vm = openedViewModel(chats = listOf(chat(alice, name = "Alice Fake")))
+
+        vm.renameChat(vm.chats.first(), "Old number")
+
+        assertEquals("Alice Fake", vm.chats.first().name)
+        assertEquals("Rename failed: nope", vm.message)
+    }
+
+    @Test
     fun `whatsapp pin toggles through the repository and is skipped for local pins`() {
         val vm = openedViewModel()
 
