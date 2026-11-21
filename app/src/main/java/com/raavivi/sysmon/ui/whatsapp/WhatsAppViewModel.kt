@@ -12,7 +12,9 @@ import com.raavivi.sysmon.core.data.whatsapp.UploadSource
 import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.model.WaChat
 import com.raavivi.sysmon.core.model.WaContact
+import com.raavivi.sysmon.core.model.WaConvResult
 import com.raavivi.sysmon.core.model.WaMessage
+import com.raavivi.sysmon.core.model.WaSearchRow
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.net.ApiResult
 import kotlinx.coroutines.CoroutineScope
@@ -81,6 +83,15 @@ class WhatsAppViewModel(
 
     /** Bumped only when a live message is appended to the open conversation (drives follow-the-bottom). */
     var liveTick by mutableIntStateOf(0)
+        private set
+
+    /** The message search surfaces: the Search view, the in-chat bar, a tapped conversation's range. */
+    val search = WhatsAppSearch(repo, viewModelScope, { currentJid }, ::focusHit, { message = it })
+
+    /** The message to scroll to and flash (a search hit); [focusTick] bumps for every such request. */
+    var focusId by mutableStateOf<String?>(null)
+        private set
+    var focusTick by mutableIntStateOf(0)
         private set
 
     /** Whether the loaded window includes the chat's newest message; false after jumping to the first page. */
@@ -200,6 +211,11 @@ class WhatsAppViewModel(
     }
 
     fun openChat(jid: String, name: String) {
+        beginChat(jid, name) { loadMessages(jid) }
+    }
+
+    /** Switch to [jid]: reset the window, voice and search state, run [load] for the messages, then the timeline. */
+    private fun beginChat(jid: String, name: String, load: () -> Unit) {
         currentJid = jid
         currentName = name
         currentPinned = chats.firstOrNull { it.jid == jid }?.pinned ?: false
@@ -207,12 +223,86 @@ class WhatsAppViewModel(
         voice.release()
         recorder.cancel()
         timeline = null
-        loadMessages(jid)
+        search.onChatChanged()
+        load()
         viewModelScope.launch {
             val r = repo.timeline(jid)
             if (currentJid != jid) return@launch
             // A failure leaves the timeline null: the scrubber and date picker just stay hidden.
             if (r is ApiResult.Ok) timeline = buildTimeline(r.value)
+        }
+    }
+
+    /**
+     * Open [jid] at a moment instead of its newest page: the page that starts just before [ts], so a hit or a
+     * conversation start sits near the top. [focusId] is scrolled to and flashed; [range] (a conversation's
+     * start..end, unix seconds) is tinted in the chat.
+     */
+    fun openChatAt(jid: String, name: String, ts: Long, focusId: String? = null, range: LongRange? = null) {
+        beginChat(jid, name) {
+            loadingMessages = true
+            viewModelScope.launch {
+                loadWindowAt(jid, ts, focusId)
+                loadingMessages = false
+            }
+        }
+        search.rangeHighlight = range
+    }
+
+    /** A Search-view message hit: open its chat at that message, then carry the query on in the in-chat bar. */
+    fun openSearchHit(hit: WaSearchRow) {
+        val q = search.query.trim()
+        openChatAt(hit.chatJid, searchChatName(hit.chatJid, hit.chatName), hit.ts, hit.msgId)
+        search.inChat.continueWith(q, hit.msgId)
+    }
+
+    /** A conversation card: open its chat at the node's start and tint the node's range. */
+    fun openConversation(conv: WaConvResult) {
+        openChatAt(conv.chat, searchChatName(conv.chat, conv.chatName), conv.startTs, range = conv.startTs..conv.endTs)
+    }
+
+    /** The name a search result shows for [jid]: the chat list's, else the hit's own, else the jid. */
+    fun searchChatName(jid: String, fallback: String): String =
+        chats.firstOrNull { it.jid == jid }?.name?.takeIf { it.isNotBlank() } ?: fallback.ifBlank { jid }
+
+    /** Bring an in-chat search hit into view: scroll to it when loaded, else open the window at it. */
+    fun focusHit(hit: WaSearchRow) {
+        val jid = currentJid ?: return
+        if (messages.any { it.id == hit.msgId }) {
+            focusId = hit.msgId
+            focusTick++
+            return
+        }
+        jumpingDate = true
+        viewModelScope.launch {
+            try {
+                loadWindowAt(jid, hit.ts, hit.msgId)
+            } finally {
+                jumpingDate = false
+            }
+        }
+    }
+
+    /** Replace the window with the page just before [ts] (one request) and scroll to [focus], else to the top. */
+    private suspend fun loadWindowAt(jid: String, ts: Long, focus: String?) {
+        val from = ts.toDouble() - SEEK_MARGIN_SEC
+        val r = repo.messages(chat = jid, limit = WA_PAGE_LIMIT, after = waInclusiveAfter(from), asc = true)
+        if (currentJid != jid) return
+        when (r) {
+            is ApiResult.Ok -> {
+                val page = r.value
+                windowEpoch++
+                val startsAtFirst = timeline?.let { from <= it.first.firstTs } ?: false
+                window = window.replacedByPage(page, reachedFirst = startsAtFirst)
+                mediaTools.prefetch(page)
+                if (focus != null) {
+                    focusId = focus
+                    focusTick++
+                } else {
+                    topTick++
+                }
+            }
+            is ApiResult.Err -> message = "Open failed: ${r.message}"
         }
     }
 
@@ -241,6 +331,7 @@ class WhatsAppViewModel(
         window = ConversationWindow()
         timeline = null
         resetWindow()
+        search.onChatChanged()
     }
 
     /** Back to "newest page, nothing in flight" when a conversation opens or closes. */
@@ -735,6 +826,8 @@ class WhatsAppViewModel(
     companion object {
         private const val AVATAR_LIMIT = 40
         private const val MAX_AVATAR_PASSES = 6
+        /** A search hit opens the page starting this far before it, so a little context sits above it. */
+        private const val SEEK_MARGIN_SEC = 60.0
         private const val MAX_UPLOAD_BYTES = 100L * 1024 * 1024
 
         /** Composition edge: wires the screen's ViewModel to the app-wide [AppContainer]. */

@@ -88,6 +88,12 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     var chatsGate: CompletableDeferred<Unit>? = null
     var statusGate: CompletableDeferred<Unit>? = null
 
+    /** When set, `search()` parks on it (after recording the call) until completed - for stale-response tests. */
+    var searchGate: CompletableDeferred<Unit>? = null
+
+    /** When set, `chatSearchPick()` parks on it (after recording the body) until completed. */
+    var pickGate: CompletableDeferred<Unit>? = null
+
     private val live = MutableSharedFlow<WaMessage>(extraBufferCapacity = 64)
 
     fun emitLive(msg: WaMessage) { check(live.tryEmit(msg)) }
@@ -199,6 +205,7 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     ): ApiResult<WaSearchResponse> {
         val call = SearchCall(q, chat, fromMe, media, limit, offset)
         searchCalls += call
+        searchGate?.await()
         return searchResponder(call)
     }
 
@@ -234,6 +241,7 @@ class FakeWhatsAppRepository : WhatsAppRepository {
 
     override suspend fun chatSearchPick(body: WaPickReq): ApiResult<WaPickCounts> {
         picks += body
+        pickGate?.await()
         return pickResult
     }
 
