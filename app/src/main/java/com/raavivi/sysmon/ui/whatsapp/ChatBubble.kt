@@ -425,7 +425,7 @@ private fun BubbleBody(row: MsgRow, env: ChatEnv, kind: WaMediaKind?) {
                 FormatTheme(codeBg = ink.copy(alpha = 0.1f), link = if (mine) c.outLink else c.accent, quoteInk = metaInk)
             }
             val ann = remember(f, theme, env.marks) {
-                f.toAnnotatedString(theme).withHighlights(findTermRanges(f.text, env.marks), c.accent.copy(alpha = 0.4f))
+                f.toAnnotatedString(theme).withHighlights(findTermRanges(f.text, env.marks), c.markBg())
             }
             TextWithMeta(
                 text = ann,

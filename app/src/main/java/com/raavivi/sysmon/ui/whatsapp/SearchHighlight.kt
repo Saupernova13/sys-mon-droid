@@ -24,3 +24,6 @@ fun Snippet.toAnnotated(bg: Color, ink: Color): AnnotatedString = buildAnnotated
 /** [text] with the content words of [q] highlighted, for a conversation preview or summary line. */
 fun queryMarked(text: String, q: String, bg: Color): AnnotatedString =
     AnnotatedString(text).withHighlights(markQueryWords(text, q), bg)
+
+/** The highlight fill for searched words: accent at low alpha, so the normal ink stays readable in light and dark. */
+fun ChatColors.markBg(): Color = accent.copy(alpha = 0.3f)

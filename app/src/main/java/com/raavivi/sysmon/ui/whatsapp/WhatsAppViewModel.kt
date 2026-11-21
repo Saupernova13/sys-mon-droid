@@ -253,12 +253,14 @@ class WhatsAppViewModel(
     /** A Search-view message hit: open its chat at that message, then carry the query on in the in-chat bar. */
     fun openSearchHit(hit: WaSearchRow) {
         val q = search.query.trim()
+        search.noteQuery(q)
         openChatAt(hit.chatJid, searchChatName(hit.chatJid, hit.chatName), hit.ts, hit.msgId)
         search.inChat.continueWith(q, hit.msgId)
     }
 
     /** A conversation card: open its chat at the node's start and tint the node's range. */
     fun openConversation(conv: WaConvResult) {
+        search.noteQuery(search.query)
         openChatAt(conv.chat, searchChatName(conv.chat, conv.chatName), conv.startTs, range = conv.startTs..conv.endTs)
     }
 

@@ -17,7 +17,13 @@ import kotlinx.coroutines.launch
 /** The message you see when a search fails for a reason that is not the user's input. */
 const val SEARCH_FAILED = "Search failed"
 
+/** The in-chat counter when the query matched nothing. */
+const val NO_MATCHES = "No matches"
+
 /** A failed search as the text to show: the server's own words for a 400 (they are about the input), else a plain failure. */
+/** Whether a shown search error is worth a Retry: a rejected query (the server's own words) is not. */
+fun isRetryableSearchError(text: String?): Boolean = text == SEARCH_FAILED
+
 fun searchErrorText(e: ApiResult.Err): String = if (e.code == 400) e.message else SEARCH_FAILED
 
 /**
@@ -58,12 +64,17 @@ class InChatSearchState(
     var error by mutableStateOf<String?>(null)
         private set
 
+    /** The current query has been answered (so zero hits can say "No matches"). */
+    var searched by mutableStateOf(false)
+        private set
+
     private var epoch = 0
     private var stepping = false
     private var debounce: Job? = null
 
     /** The counter text, or the failure that replaced it. */
-    val countLabel: String get() = error ?: countText(total, capped, hits.size, sel)
+    val countLabel: String
+        get() = error ?: if (searched && hits.isEmpty()) NO_MATCHES else countText(total, capped, hits.size, sel)
     val buttons: StepButtons get() = stepButtons(sel, hits.size, next != null)
 
     fun toggle() { if (open) close() else openBar() }
@@ -121,6 +132,7 @@ class InChatSearchState(
         terms = emptyList()
         days = null
         error = null
+        searched = false
     }
 
     private suspend fun run(seekId: String?) {
@@ -134,6 +146,7 @@ class InChatSearchState(
             is ApiResult.Ok -> {
                 if (mine != epoch || chat != currentChat()) return
                 val page = r.value
+                searched = true
                 hits = page.results
                 total = if (page.total > 0) page.total else hits.size
                 capped = page.totalCapped

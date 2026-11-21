@@ -118,8 +118,9 @@ internal fun ConversationView(vm: WhatsAppViewModel) {
     LaunchedEffect(vm.focusTick) { if (vm.focusTick > 0) vm.focusId?.let(scrollToMessage) }
 
     Column(Modifier.fillMaxSize().imePadding()) {
-        ConversationHeaderHost(vm, c, onGoToDate = { showDatePicker = true })
-        if (vm.search.inChat.open) InChatSearchBar(vm.search.inChat, c)
+        // While in-chat search is open its top bar replaces the header (and its bottom bar the composer).
+        if (vm.search.inChat.open) InChatSearchTopBar(vm.search.inChat, c)
+        else ConversationHeaderHost(vm, c, onGoToDate = { showDatePicker = true })
         vm.message?.let { Toast(it) }
         Column(Modifier.weight(1f).fillMaxWidth().chatWallpaper(c)) {
             MessageArea(
@@ -141,11 +142,15 @@ internal fun ConversationView(vm: WhatsAppViewModel) {
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
-            vm.uploading?.let { UploadingRow(it, c) }
-            ComposerHost(
-                vm = vm, names = data.names, c = c, reduced = reduced,
-                text = composerText, onTextChange = { composerText = it },
-            )
+            if (vm.search.inChat.open) {
+                InChatSearchBottomBar(vm.search.inChat, c)
+            } else {
+                vm.uploading?.let { UploadingRow(it, c) }
+                ComposerHost(
+                    vm = vm, names = data.names, c = c, reduced = reduced,
+                    text = composerText, onTextChange = { composerText = it },
+                )
+            }
         }
     }
 

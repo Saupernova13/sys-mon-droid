@@ -1,34 +1,50 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.raavivi.sysmon.core.model.WaConvLine
 import com.raavivi.sysmon.core.model.WaConvResult
-
-/** The note over results that came back word-shaped only (no embedder answered). */
-private const val DEGRADED_NOTE = "Word matches only — meaning search is off"
 
 /** What a pick button reads: "Saved" once saved, "Not saved" after a failed save, else its own [base] label. */
 fun pickLabel(base: String, key: Int, pick: PickState): String = when {
@@ -37,29 +53,41 @@ fun pickLabel(base: String, key: Int, pick: PickState): String = when {
     else -> base
 }
 
-/** The Conversations mode's results: one card per conversation, each with "Found it", then "Not here". */
+/**
+ * The Conversations mode's results: one card per conversation with "Found it" at its bottom right, and "Not
+ * here" with its "N marked" count in a bar pinned under the list once the query has an answer.
+ */
 @Composable
 internal fun ConversationResults(vm: WhatsAppViewModel, c: ChatColors, modifier: Modifier = Modifier) {
     val s = vm.search
     val conv = s.conv
     val nowSec = remember(conv.results) { System.currentTimeMillis() / 1000.0 }
-    when {
-        s.query.isBlank() -> SearchNote("Search for a conversation", c, modifier)
-        conv.phase == SearchPhase.IDLE || conv.phase == SearchPhase.LOADING -> SearchNote("Searching…", c, modifier)
-        conv.phase == SearchPhase.ERROR -> SearchNote(conv.error ?: SEARCH_FAILED, c, modifier)
-        conv.results.isEmpty() -> Column(modifier) {
-            SearchNote("No conversations found", c)
-            // Nothing matched: "Not here" still says so for the query.
-            NotHereBar(conv, c)
-        }
-        else -> LazyColumn(modifier) {
-            if (conv.degraded) item(key = "degraded") { Text(DEGRADED_NOTE, style = chatSecondaryStyle(c.meta), modifier = Modifier.padding(16.dp, 4.dp)) }
-            itemsIndexed(conv.results, key = { _, r -> "c:${r.nodeId}:${r.startRowid}:${r.endRowid}" }) { i, r ->
-                ConvCard(vm, r, conv.resultsQ, nowSec, c, foundLabel = pickLabel("Found it", i, conv.pick),
-                    foundEnabled = conv.pick.busy == null, onFound = { conv.pickFound(i) }, onOpen = { vm.openConversation(r) })
+    val reduced = rememberReducedMotion()
+    Column(modifier) {
+        Box(Modifier.weight(1f)) {
+            when {
+                s.query.isBlank() -> SearchIdle(SearchMode.CONVERSATIONS, s.recent, s::openFor, s::clearRecent, c)
+                conv.phase == SearchPhase.IDLE || conv.phase == SearchPhase.LOADING -> SearchSkeleton(card = true, c = c, reduced = reduced)
+                conv.phase == SearchPhase.ERROR -> {
+                    val text = conv.error ?: SEARCH_FAILED
+                    SearchError(text, c, onRetry = if (isRetryableSearchError(text)) s::submit else null)
+                }
+                conv.results.isEmpty() -> SearchEmpty("No conversations found", "Try describing it differently", c)
+                else -> LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (conv.degraded) item(key = "degraded") { InfoBanner(DEGRADED_NOTE, c) }
+                    itemsIndexed(conv.results, key = { _, r -> "c:${r.nodeId}:${r.startRowid}:${r.endRowid}" }) { i, r ->
+                        ConvCard(
+                            vm, r, conv.resultsQ, nowSec, c, reduced,
+                            foundLabel = pickLabel("Found it", i, conv.pick),
+                            foundEnabled = conv.pick.busy == null,
+                            onFound = { conv.pickFound(i) },
+                            onOpen = { vm.openConversation(r) },
+                        )
+                    }
+                }
             }
-            item(key = "notHere") { NotHereBar(conv, c) }
         }
+        if (conv.phase == SearchPhase.DONE) NotHereBar(conv, c, reduced)
     }
 }
 
@@ -71,6 +99,7 @@ private fun ConvCard(
     q: String,
     nowSec: Double,
     c: ChatColors,
+    reduced: Boolean,
     foundLabel: String,
     foundEnabled: Boolean,
     onFound: () -> Unit,
@@ -79,19 +108,16 @@ private fun ConvCard(
     val name = r.chatName.ifBlank { vm.searchChatName(r.chat, "") }
     val card = r.card?.takeIf { it.title.isNotBlank() }
     val range = convRange(r.startTs, r.endTs, nowSec)
-    val mark = c.accent.copy(alpha = 0.35f)
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(14.dp)).background(c.inBg),
-    ) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.inBg)) {
         // "Found it" is the card's sibling below, never inside the clickable area: no button in a button.
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(start = 12.dp, end = 12.dp, top = 12.dp)) {
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 8.dp)) {
             Avatar(name, r.chat, vm, size = 40.dp)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         card?.title ?: name,
-                        style = chatSecondaryStyle(c.ink, FontWeight.SemiBold),
+                        style = chatBodyStyle(c.ink).copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -104,41 +130,82 @@ private fun ConvCard(
                     Text(convCrumb(it.startTs, it.endTs, it.nMsgs), style = chatMetaStyle(c.meta).copy(fontStyle = FontStyle.Italic))
                 }
                 card?.summary?.takeIf { it.isNotBlank() }?.let {
-                    Text(queryMarked(it, q, mark), style = chatSecondaryStyle(c.ink), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(queryMarked(it, q, c.markBg()), style = chatSecondaryStyle(c.ink), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                for (line in r.preview) PreviewLine(line, q, c, mark)
+                for (line in r.preview.take(3)) PreviewLine(line, q, c)
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onFound, enabled = foundEnabled) { Text(foundLabel, color = c.accent) }
+        Row(Modifier.fillMaxWidth().padding(end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.End) {
+            PickButton(foundLabel, "Found it", foundEnabled, c, reduced, onFound)
         }
     }
 }
 
-/** One preview line: mine on the right and tinted like my bubbles, theirs on the left; the query's words marked. */
+/** One preview line as a tiny bubble: mine on the right and tinted like my bubbles, theirs on the left; the query's words marked. */
 @Composable
-private fun PreviewLine(line: WaConvLine, q: String, c: ChatColors, mark: androidx.compose.ui.graphics.Color) {
-    Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = if (line.fromMe) Alignment.CenterEnd else Alignment.CenterStart) {
+private fun PreviewLine(line: WaConvLine, q: String, c: ChatColors) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = if (line.fromMe) Alignment.CenterEnd else Alignment.CenterStart) {
         Text(
-            queryMarked(line.text, q, mark),
+            queryMarked(line.text, q, c.markBg()),
             style = chatSecondaryStyle(if (line.fromMe) c.outInk else c.ink),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(if (line.fromMe) c.outBg else c.wallLift)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
 }
 
-/** "Not here" under the list (also shown with no results for a non-empty query), with how many queries are marked. */
+/**
+ * "Not here" and how many queries are marked, pinned under the list (thumb zone), shown once the query has an
+ * answer (also when that answer is no results).
+ */
 @Composable
-private fun NotHereBar(conv: ConvSearchState, c: ChatColors) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = conv::pickNotHere, enabled = conv.pick.busy == null) {
-            Text(pickLabel("Not here", PICK_NOT_HERE, conv.pick), color = c.accent)
-        }
+private fun NotHereBar(conv: ConvSearchState, c: ChatColors, reduced: Boolean) {
+    Row(
+        Modifier.fillMaxWidth().background(c.inBg).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PickButton(pickLabel("Not here", PICK_NOT_HERE, conv.pick), "Not here", conv.pick.busy == null, c, reduced, conv::pickNotHere)
+        Spacer(Modifier.weight(1f))
         conv.pick.marked?.let { Text("$it marked", style = chatMetaStyle(c.meta)) }
+    }
+}
+
+/**
+ * An outlined 48 dp button that morphs to a check and "Saved" when its verdict is saved: a short scale and
+ * fade (none under reduced motion) and a light haptic tick. "Not saved" shows on failure, and the button
+ * stays usable.
+ */
+@Composable
+private fun PickButton(label: String, base: String, enabled: Boolean, c: ChatColors, reduced: Boolean, onClick: () -> Unit) {
+    val saved = label == "Saved"
+    val haptic = LocalHapticFeedback.current
+    LaunchedEffect(saved) { if (saved) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.heightIn(min = 48.dp),
+        border = BorderStroke(1.dp, c.accent.copy(alpha = if (saved) 1f else 0.5f)),
+        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(containerColor = if (saved) c.accent.copy(alpha = 0.3f) else Color.Transparent),
+    ) {
+        AnimatedContent(
+            targetState = label,
+            transitionSpec = {
+                if (reduced) EnterTransition.None togetherWith ExitTransition.None
+                else (fadeIn(tween(150)) + scaleIn(tween(150), initialScale = 0.8f)) togetherWith fadeOut(tween(100))
+            },
+            label = "pick-$base",
+        ) { text ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (text == "Saved") {
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = c.ink, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(text, style = chatSecondaryStyle(if (text == "Saved") c.ink else c.accent, FontWeight.SemiBold))
+            }
+        }
     }
 }

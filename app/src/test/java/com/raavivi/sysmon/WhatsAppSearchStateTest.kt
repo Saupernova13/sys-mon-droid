@@ -10,7 +10,10 @@ import com.raavivi.sysmon.core.model.WaSearchRow
 import com.raavivi.sysmon.core.model.WaSearchTerm
 import com.raavivi.sysmon.core.model.WaTimelineDay
 import com.raavivi.sysmon.core.net.ApiResult
+import com.raavivi.sysmon.ui.whatsapp.MAX_RECENT
+import com.raavivi.sysmon.ui.whatsapp.NO_MATCHES
 import com.raavivi.sysmon.ui.whatsapp.PICK_NOT_HERE
+import com.raavivi.sysmon.ui.whatsapp.isRetryableSearchError
 import com.raavivi.sysmon.ui.whatsapp.SEARCH_DEBOUNCE_MS
 import com.raavivi.sysmon.ui.whatsapp.SEARCH_FAILED
 import com.raavivi.sysmon.ui.whatsapp.SearchChip
@@ -589,5 +592,53 @@ class WhatsAppSearchStateTest {
         repo.actionResult = ApiResult.Err("cards are not configured: set SYS_MON_CARD_URL", 409)
         search.conv.toggleCards(running = false)
         assertEquals("cards are not configured: set SYS_MON_CARD_URL", toasts.last())
+    }
+
+    // -- recent queries, empty counter, retry ----------------------------------------------------
+
+    @Test
+    fun `recent queries keep the newest first, dedupe ignoring case, cap and clear`() {
+        search.noteQuery("cinema")
+        search.noteQuery("pottery")
+        search.noteQuery("CINEMA")
+        assertEquals(listOf("CINEMA", "pottery"), search.recent)
+
+        search.noteQuery("a")   // too short to be worth remembering
+        (1..20).forEach { search.noteQuery("query $it") }
+        assertEquals(MAX_RECENT, search.recent.size)
+        assertEquals("query 20", search.recent.first())
+
+        search.clearRecent()
+        assertTrue(search.recent.isEmpty())
+    }
+
+    @Test
+    fun `submitting and the filter's way in remember the query but typing alone does not`() {
+        search.onQueryChange("cin")
+        advance(SEARCH_DEBOUNCE_MS + 1)
+        assertTrue(search.recent.isEmpty())
+
+        search.submit()
+        search.openFor("pottery")
+
+        assertEquals(listOf("pottery", "cin"), search.recent)
+    }
+
+    @Test
+    fun `the in-chat counter says No matches for an answered query with no hits`() {
+        repo.searchResponder = { page(total = 0) }
+
+        search.inChat.continueWith("zzzz", null)
+
+        assertEquals(NO_MATCHES, search.inChat.countLabel)
+        assertTrue(search.inChat.buttons.olderOff)
+        assertTrue(search.inChat.buttons.newerOff)
+    }
+
+    @Test
+    fun `only a plain failure is worth a Retry`() {
+        assertTrue(isRetryableSearchError(SEARCH_FAILED))
+        assertFalse(isRetryableSearchError("query is too long"))
+        assertFalse(isRetryableSearchError(null))
     }
 }
