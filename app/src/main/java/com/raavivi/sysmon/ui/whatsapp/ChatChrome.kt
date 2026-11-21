@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -67,8 +66,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -83,7 +80,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -457,48 +453,6 @@ fun ChatRecordingBar(
                 .semantics { contentDescription = "Send voice note" },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = c.onAccent) }
-    }
-}
-
-/** Search field as a pill with a leading search icon. */
-@Composable
-fun ChatSearchField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    c: ChatColors,
-    modifier: Modifier = Modifier,
-    placeholder: String = "Search chats",
-    /** The IME's Search key; null keeps the plain keyboard. */
-    onSearch: (() -> Unit)? = null,
-    autoFocus: Boolean = false,
-) {
-    val focus = remember { FocusRequester() }
-    if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
-    Row(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(c.inBg),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = c.meta, modifier = Modifier.padding(start = 14.dp, end = 8.dp).size(20.dp))
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = chatBodyStyle(c.ink),
-            cursorBrush = SolidColor(c.accent),
-            keyboardOptions = KeyboardOptions(imeAction = if (onSearch != null) ImeAction.Search else ImeAction.Default),
-            keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
-            modifier = Modifier.weight(1f).padding(vertical = 11.dp).padding(end = 14.dp).focusRequester(focus),
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) Text(placeholder, style = chatBodyStyle(c.meta))
-                    inner()
-                }
-            },
-        )
     }
 }
 
