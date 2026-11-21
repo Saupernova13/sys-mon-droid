@@ -3,6 +3,8 @@ package com.raavivi.sysmon.core.data.whatsapp
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaChatSearchResponse
+import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaDelete
 import com.raavivi.sysmon.core.model.WaEdit
@@ -12,8 +14,11 @@ import com.raavivi.sysmon.core.model.WaLocalPinReq
 import com.raavivi.sysmon.core.model.WaChatNameReq
 import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaMessage
+import com.raavivi.sysmon.core.model.WaPickCounts
+import com.raavivi.sysmon.core.model.WaPickReq
 import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaReact
+import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
@@ -21,8 +26,11 @@ import com.raavivi.sysmon.core.model.toWaChat
 import com.raavivi.sysmon.core.model.toWaContact
 import com.raavivi.sysmon.core.model.toWaMessage
 import com.raavivi.sysmon.core.net.ApiProvider
+import com.raavivi.sysmon.core.log.AppLog
+import com.raavivi.sysmon.core.model.ErrorEnvelope
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.SysMonJson
+import com.raavivi.sysmon.core.net.parseHttpError
 import com.raavivi.sysmon.core.net.safeCall
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -43,6 +51,8 @@ import okhttp3.WebSocketListener
 import okio.BufferedSink
 import okio.ByteString
 import okio.source
+import retrofit2.HttpException
+import retrofit2.Response as RetrofitResponse
 import java.io.File
 import java.io.IOException
 
@@ -124,6 +134,36 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
     override suspend fun refreshAvatars(jids: List<String>, limit: Int): ApiResult<WaAvatarsRefreshResponse> =
         safeCall { api.api.waAvatarsRefresh(WaAvatarsRefreshReq(jids = jids, limit = limit)) }
 
+    override suspend fun search(
+        q: String,
+        chat: String?,
+        fromMe: Boolean?,
+        media: String?,
+        limit: Int,
+        offset: Int?,
+    ): ApiResult<WaSearchResponse> =
+        safeCall { api.api.waSearch(q = q, chat = chat, fromMe = fromMe, media = media, limit = limit, offset = offset) }
+
+    override suspend fun searchDays(q: String, chat: String): ApiResult<List<WaTimelineDay>> =
+        safeCall { api.api.waSearchDays(q = q, chat = chat) }.mapOk { it.days }
+
+    override suspend fun chatSearchStatus(): ApiResult<WaChatSearchStatus> = safeCall { api.api.waChatSearchStatus() }
+
+    override suspend fun chatSearchIndex(): ApiResult<Unit> = safeCall { api.api.waChatSearchIndex() }.mapOk { }
+
+    override suspend fun chatSearchCardsRun(): ApiResult<Unit> = safeCall { api.api.waChatSearchCardsRun() }.mapOk { }
+
+    override suspend fun chatSearchCardsStop(): ApiResult<Unit> = safeCall { api.api.waChatSearchCardsStop() }.mapOk { }
+
+    override suspend fun chatSearch(q: String, limit: Int): ApiResult<WaChatSearchResponse> =
+        when (val r = safeCall { api.api.waChatSearch(q = q, limit = limit) }) {
+            is ApiResult.Ok -> chatSearchResult(r.value)
+            is ApiResult.Err -> r
+        }
+
+    override suspend fun chatSearchPick(body: WaPickReq): ApiResult<WaPickCounts> =
+        safeCall { api.api.waChatSearchPick(body) }
+
     override fun mediaUrl(chat: String, id: String, thumb: Boolean): String =
         api.whatsappMediaUrl(chat, id, thumb)
 
@@ -152,4 +192,21 @@ internal fun parseLiveFrame(text: String): WaMessage? =
 private inline fun <T, R> ApiResult<T>.mapOk(transform: (T) -> R): ApiResult<R> = when (this) {
     is ApiResult.Ok -> ApiResult.Ok(transform(value))
     is ApiResult.Err -> this
+}
+
+/**
+ * A conversation-search reply as a result. The server answers a word-only search with a 503 that still
+ * carries the full body (`"degraded": "keyword"`); that is usable, so it is Ok. Any other failure is an Err
+ * carrying the server's message (about the user's input, never the query). The body is read once.
+ */
+internal fun chatSearchResult(r: RetrofitResponse<WaChatSearchResponse>): ApiResult<WaChatSearchResponse> {
+    if (r.isSuccessful) return r.body()?.let { ApiResult.Ok(it) } ?: ApiResult.Err("Empty response", r.code())
+    val raw = runCatching { r.errorBody()?.string() }.getOrNull()?.takeIf { it.isNotBlank() }
+    if (r.code() == 503 && raw != null) {
+        val body = runCatching { SysMonJson.decodeFromString(WaChatSearchResponse.serializer(), raw) }.getOrNull()
+        if (body?.degraded != null) return ApiResult.Ok(body)
+    }
+    val envelope = raw?.let { runCatching { SysMonJson.decodeFromString(ErrorEnvelope.serializer(), it) }.getOrNull() }
+    AppLog.w("Api", "error code=${r.code()} apiCode=${envelope?.code}")
+    return ApiResult.Err(parseHttpError(HttpException(r), envelope), r.code(), envelope?.code)
 }

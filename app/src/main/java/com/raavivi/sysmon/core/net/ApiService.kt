@@ -93,9 +93,16 @@ import com.raavivi.sysmon.core.model.WaMessagesResponse
 import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
+import com.raavivi.sysmon.core.model.WaChatSearchResponse
+import com.raavivi.sysmon.core.model.WaChatSearchStatus
+import com.raavivi.sysmon.core.model.WaPickCounts
+import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaRunResponse
+import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaTimelineResponse
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -475,6 +482,39 @@ interface ApiService {
 
     @POST("api/whatsapp/avatars/refresh")
     suspend fun waAvatarsRefresh(@Body body: WaAvatarsRefreshReq): WaAvatarsRefreshResponse
+
+    /** Keyword search over every chat, or one chat when [chat] is set; the query is private (see LogRules). */
+    @GET("api/whatsapp/search")
+    suspend fun waSearch(
+        @Query("q") q: String,
+        @Query("chat") chat: String? = null,
+        @Query("from_me") fromMe: Boolean? = null,
+        @Query("media") media: String? = null,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int? = null,
+    ): WaSearchResponse
+
+    @GET("api/whatsapp/search/days")
+    suspend fun waSearchDays(@Query("q") q: String, @Query("chat") chat: String): WaTimelineResponse
+
+    @GET("api/whatsapp/chat-search/status")
+    suspend fun waChatSearchStatus(): WaChatSearchStatus
+
+    @POST("api/whatsapp/chat-search/index")
+    suspend fun waChatSearchIndex(): WaRunResponse
+
+    @POST("api/whatsapp/chat-search/cards/run")
+    suspend fun waChatSearchCardsRun(): WaRunResponse
+
+    @POST("api/whatsapp/chat-search/cards/stop")
+    suspend fun waChatSearchCardsStop(): WaRunResponse
+
+    /** A [Response], not a bare body: a 503 still carries the usable word-only results (see the repository). */
+    @GET("api/whatsapp/chat-search")
+    suspend fun waChatSearch(@Query("q") q: String, @Query("limit") limit: Int = 20): Response<WaChatSearchResponse>
+
+    @POST("api/whatsapp/chat-search/pick")
+    suspend fun waChatSearchPick(@Body body: WaPickReq): WaPickCounts
 
     // ── Jellyfin ─────────────────────────────────────────────────────────────────
     @GET("api/jellyfin/config")

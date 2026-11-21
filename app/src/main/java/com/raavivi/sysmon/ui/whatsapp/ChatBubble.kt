@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import coil.ImageLoader
 import com.raavivi.sysmon.core.model.WaMessage
+import com.raavivi.sysmon.core.model.WaSearchTerm
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -103,6 +104,10 @@ class ChatEnv(
     /** Reaction chips pop when they first appear or change; off while the conversation is still opening. */
     val popEnabled: Boolean,
     val reactionSeen: MutableMap<String, String>,
+    /** The in-chat search's terms, highlighted inside message text; empty when the bar has no results. */
+    val marks: List<WaSearchTerm> = emptyList(),
+    /** A tapped conversation's start..end (unix seconds): rows inside it are tinted. */
+    val range: LongRange? = null,
 )
 
 private fun bubbleBg(c: ChatColors, mine: Boolean) = if (mine) c.outBg else c.inBg
@@ -161,9 +166,11 @@ fun MessageItem(row: MsgRow, env: ChatEnv, fresh: Boolean, flash: Boolean, modif
     val sticker = kind == WaMediaKind.STICKER && !revoked
     val bubbleFree = sticker || jumbo > 0
 
+    val inRange = env.range?.let { m.ts.toLong() in it } == true
     Box(
         modifier
             .fillMaxWidth()
+            .then(if (inRange) Modifier.background(c.accent.copy(alpha = 0.12f)) else Modifier)
             .padding(top = if (row.groupFirst) 10.dp else 2.dp)
             .padding(horizontal = 10.dp),
         contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart,
@@ -417,7 +424,9 @@ private fun BubbleBody(row: MsgRow, env: ChatEnv, kind: WaMediaKind?) {
             val theme = remember(c, mine) {
                 FormatTheme(codeBg = ink.copy(alpha = 0.1f), link = if (mine) c.outLink else c.accent, quoteInk = metaInk)
             }
-            val ann = remember(f, theme) { f.toAnnotatedString(theme) }
+            val ann = remember(f, theme, env.marks) {
+                f.toAnnotatedString(theme).withHighlights(findTermRanges(f.text, env.marks), c.markBg())
+            }
             TextWithMeta(
                 text = ann,
                 style = chatBodyStyle(ink),

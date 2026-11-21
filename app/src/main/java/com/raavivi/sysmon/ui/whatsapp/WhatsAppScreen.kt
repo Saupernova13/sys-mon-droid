@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,11 +69,15 @@ fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
 
     // System back from a conversation returns to the chat list, not out of the tab.
     BackHandler(enabled = vm.currentJid != null) { vm.closeChat() }
+    // The Search view stays up behind an opened hit; Back from the chat lands on it, Back from it on the list.
+    BackHandler(enabled = vm.currentJid == null && vm.search.open) { vm.search.closeView() }
+    // An open in-chat search bar closes before the chat does.
+    BackHandler(enabled = vm.currentJid != null && vm.search.inChat.open) { vm.search.inChat.close() }
 
-    if (vm.currentJid == null) {
-        ChatListView(vm, onBack)
-    } else {
-        ConversationView(vm)
+    when {
+        vm.currentJid != null -> ConversationView(vm)
+        vm.search.open -> SearchScreen(vm)
+        else -> ChatListView(vm, onBack)
     }
 }
 
@@ -88,6 +93,7 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "WhatsApp", actions = {
             StatusDot(vm.status)
+            IconButton(onClick = { vm.search.openView() }) { Icon(Icons.Filled.Search, contentDescription = "Search messages") }
             IconButton(onClick = { showNew = true }) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
             IconButton(onClick = { vm.loadChats(); vm.loadStatus() }) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }
             onBack?.let { back ->
@@ -98,7 +104,12 @@ private fun ChatListView(vm: WhatsAppViewModel, onBack: (() -> Unit)?) {
         StatusBanner(vm.status, onRetry = { vm.loadStatus(); vm.loadChats() })
         vm.message?.let { Toast(it) }
 
-        ChatSearchField(filter, { filter = it }, c, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+        val offered = filter.trim().length >= SEARCH_MIN_CHARS
+        ChatSearchField(
+            filter, { filter = it }, c, Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            onSearch = if (offered) ({ vm.search.openFor(filter.trim()) }) else null,
+        )
+        if (offered) SearchMessagesRow(filter.trim(), c) { vm.search.openFor(filter.trim()) }
 
         Box(Modifier.fillMaxSize()) {
             when {

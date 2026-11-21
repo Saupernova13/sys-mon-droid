@@ -136,7 +136,7 @@ private fun Dp.sp1() = androidx.compose.ui.unit.TextUnit(this.value, androidx.co
 
 /** One of the header's round icon buttons: 44dp, press fill at 8% ink, with an optional count badge. */
 @Composable
-private fun HeaderAction(
+internal fun HeaderAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     c: ChatColors,
@@ -189,12 +189,14 @@ fun ConversationHeader(
     pinned: Boolean,
     localPin: Boolean,
     jumpingFirst: Boolean,
+    searchOn: Boolean,
     c: ChatColors,
     onBack: () -> Unit,
     onMarkRead: () -> Unit,
     onGoToDate: () -> Unit,
     onJumpFirst: () -> Unit,
     onPin: () -> Unit,
+    onSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -220,6 +222,7 @@ fun ConversationHeader(
                 Text(subtitle, style = chatSecondaryStyle(c.meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+        HeaderAction(Icons.Filled.Search, "Search in chat", c, onSearch, tint = if (searchOn) c.accent else c.ink)
         HeaderAction(Icons.Filled.DoneAll, "Mark as read", c, onMarkRead, enabled = unread > 0, badge = unread)
         HeaderAction(Icons.Filled.CalendarMonth, "Go to date", c, onGoToDate, enabled = canGoToDate)
         HeaderAction(Icons.Filled.VerticalAlignTop, "Jump to first message", c, onJumpFirst, busy = jumpingFirst)
@@ -450,35 +453,6 @@ fun ChatRecordingBar(
                 .semantics { contentDescription = "Send voice note" },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = c.onAccent) }
-    }
-}
-
-/** Search field as a pill with a leading search icon. */
-@Composable
-fun ChatSearchField(value: String, onValueChange: (String) -> Unit, c: ChatColors, modifier: Modifier = Modifier) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(c.inBg),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = c.meta, modifier = Modifier.padding(start = 14.dp, end = 8.dp).size(20.dp))
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = chatBodyStyle(c.ink),
-            cursorBrush = SolidColor(c.accent),
-            modifier = Modifier.weight(1f).padding(vertical = 11.dp).padding(end = 14.dp),
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) Text("Search chats", style = chatBodyStyle(c.meta))
-                    inner()
-                }
-            },
-        )
     }
 }
 

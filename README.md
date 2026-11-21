@@ -155,6 +155,13 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   zoomable viewer and Save, send text and files, pin, load-older/backfill,
   contact search, and pairing-status guidance including why the sync daemon
   stopped. Reading a chat leaves it unread; *Mark as read* clears it on WhatsApp too.
+  Two searches: the magnifier in the chat list (or "Search messages for ..." under the chat
+  filter) opens a Search view over every chat, grouped by chat with Mine / Theirs / Photos /
+  Videos / Voice notes / Documents chips; where the server's conversation search is on, a
+  *Conversations* mode finds a whole conversation by meaning (topic cards, *Found it* / *Not
+  here* verdicts, and the index / topic-card status lines). Opening a hit lands on the message,
+  and the in-chat bar (magnifier in the conversation header) steps through that chat's hits,
+  highlights the words and marks the days on the timeline scrubber.
 
 - **Health (watchdog)** — More → Tools → Health shows every target of the central watchdog
   (`GET /api/watchdog/status`): a state dot, "Healthy" / "Down - <error>" / "Paused

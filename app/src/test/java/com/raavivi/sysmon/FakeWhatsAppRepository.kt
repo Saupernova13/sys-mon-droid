@@ -5,8 +5,13 @@ import com.raavivi.sysmon.core.data.whatsapp.UploadSource
 import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaChatSearchResponse
+import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
+import com.raavivi.sysmon.core.model.WaPickCounts
+import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
 import com.raavivi.sysmon.core.net.ApiResult
@@ -26,6 +31,9 @@ data class Reacted(val chat: String, val id: String, val emoji: String, val send
 data class Deleted(val chat: String, val id: String, val everyone: Boolean)
 data class Edited(val chat: String, val id: String, val message: String)
 data class PinCall(val chat: String, val pinned: Boolean)
+
+/** One recorded `search` request. */
+data class SearchCall(val q: String, val chat: String?, val fromMe: Boolean?, val media: String?, val limit: Int, val offset: Int?)
 
 /**
  * Scriptable in-memory [WhatsAppRepository]: set the `*Result` properties (or [messagesResponder]) before
@@ -61,9 +69,30 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     val markedRead = mutableListOf<String>()
     val latestFetched = mutableListOf<String>()
 
+    /** Answers each `search` request; defaults to an empty page. */
+    var searchResponder: (SearchCall) -> ApiResult<WaSearchResponse> = { ApiResult.Ok(WaSearchResponse()) }
+    var searchDaysResult: ApiResult<List<WaTimelineDay>> = ApiResult.Ok(emptyList())
+    var chatSearchStatusResult: ApiResult<WaChatSearchStatus> = ApiResult.Ok(WaChatSearchStatus())
+    var chatSearchResult: ApiResult<WaChatSearchResponse> = ApiResult.Ok(WaChatSearchResponse())
+    var pickResult: ApiResult<WaPickCounts> = ApiResult.Ok(WaPickCounts())
+    val searchCalls = mutableListOf<SearchCall>()
+    val searchDaysCalls = mutableListOf<Pair<String, String>>()
+    val chatSearchQueries = mutableListOf<String>()
+    val picks = mutableListOf<WaPickReq>()
+    var statusReads = 0
+    var indexRequests = 0
+    var cardsRuns = 0
+    var cardsStops = 0
+
     /** When set, `chats()`/`status()` park on it until completed — for single-flight tests. */
     var chatsGate: CompletableDeferred<Unit>? = null
     var statusGate: CompletableDeferred<Unit>? = null
+
+    /** When set, `search()` parks on it (after recording the call) until completed - for stale-response tests. */
+    var searchGate: CompletableDeferred<Unit>? = null
+
+    /** When set, `chatSearchPick()` parks on it (after recording the body) until completed. */
+    var pickGate: CompletableDeferred<Unit>? = null
 
     private val live = MutableSharedFlow<WaMessage>(extraBufferCapacity = 64)
 
@@ -164,6 +193,56 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     override suspend fun refreshAvatars(jids: List<String>, limit: Int): ApiResult<WaAvatarsRefreshResponse> {
         avatarCalls += jids
         return avatarsResult
+    }
+
+    override suspend fun search(
+        q: String,
+        chat: String?,
+        fromMe: Boolean?,
+        media: String?,
+        limit: Int,
+        offset: Int?,
+    ): ApiResult<WaSearchResponse> {
+        val call = SearchCall(q, chat, fromMe, media, limit, offset)
+        searchCalls += call
+        searchGate?.await()
+        return searchResponder(call)
+    }
+
+    override suspend fun searchDays(q: String, chat: String): ApiResult<List<WaTimelineDay>> {
+        searchDaysCalls += q to chat
+        return searchDaysResult
+    }
+
+    override suspend fun chatSearchStatus(): ApiResult<WaChatSearchStatus> {
+        statusReads++
+        return chatSearchStatusResult
+    }
+
+    override suspend fun chatSearchIndex(): ApiResult<Unit> {
+        indexRequests++
+        return actionResult
+    }
+
+    override suspend fun chatSearchCardsRun(): ApiResult<Unit> {
+        cardsRuns++
+        return actionResult
+    }
+
+    override suspend fun chatSearchCardsStop(): ApiResult<Unit> {
+        cardsStops++
+        return actionResult
+    }
+
+    override suspend fun chatSearch(q: String, limit: Int): ApiResult<WaChatSearchResponse> {
+        chatSearchQueries += q
+        return chatSearchResult
+    }
+
+    override suspend fun chatSearchPick(body: WaPickReq): ApiResult<WaPickCounts> {
+        picks += body
+        pickGate?.await()
+        return pickResult
     }
 
     override fun mediaUrl(chat: String, id: String, thumb: Boolean): String = "https://fake.test/media/$chat/$id"

@@ -32,6 +32,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -62,6 +65,8 @@ internal fun TimelineScrubber(
     busy: Boolean,
     onJump: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    /** Track positions (0..1) to mark: days with search hits, the ends of a tapped conversation. */
+    marks: List<Double> = emptyList(),
 ) {
     val density = LocalDensity.current
     var heightPx by remember { mutableIntStateOf(0) }
@@ -77,6 +82,7 @@ internal fun TimelineScrubber(
             heightPx = heightPx,
             thumbY = thumbY,
             busy = busy,
+            marks = marks,
             description = fmtDay(seg.day),
             onDrag = { dragFrac = it },
             onJump = onJump,
@@ -99,6 +105,7 @@ private fun ScrubberTrack(
     heightPx: Int,
     thumbY: Float,
     busy: Boolean,
+    marks: List<Double>,
     description: String,
     onDrag: (Double?) -> Unit,
     onJump: (Long) -> Unit,
@@ -142,6 +149,16 @@ private fun ScrubberTrack(
                 .fillMaxHeight()
                 .background(MaterialTheme.colorScheme.outlineVariant),
         )
+        if (marks.isNotEmpty()) {
+            val markColor = MaterialTheme.colorScheme.tertiary
+            Box(
+                Modifier.matchParentSize().drawBehind {
+                    val w = 10.dp.toPx()
+                    val h = 2.dp.toPx()
+                    for (m in marks) drawRect(markColor, Offset(size.width - 11.dp.toPx(), (m * size.height).toFloat()), Size(w, h))
+                },
+            )
+        }
         ScrubberYearLabels(tl, heightPx)
         if (busy) {
             CircularProgressIndicator(

@@ -2,8 +2,13 @@ package com.raavivi.sysmon.core.data.whatsapp
 
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaChatSearchResponse
+import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
+import com.raavivi.sysmon.core.model.WaPickCounts
+import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
 import com.raavivi.sysmon.core.net.ApiResult
@@ -52,6 +57,30 @@ interface WhatsAppRepository {
     /** Have the server download missing media for the chat's newest messages (can take tens of seconds). */
     suspend fun fetchLatest(chat: String): ApiResult<Unit>
     suspend fun refreshAvatars(jids: List<String>, limit: Int): ApiResult<WaAvatarsRefreshResponse>
+
+    // -- search (query text is private: callers never log it) ---------------------------------
+
+    /** One page of keyword hits over every chat, or only [chat]; [fromMe] / [media] filter, [offset] pages. */
+    suspend fun search(
+        q: String,
+        chat: String? = null,
+        fromMe: Boolean? = null,
+        media: String? = null,
+        limit: Int,
+        offset: Int? = null,
+    ): ApiResult<WaSearchResponse>
+
+    /** The days of [chat] that have hits for [q], for marking the scrubber. */
+    suspend fun searchDays(q: String, chat: String): ApiResult<List<WaTimelineDay>>
+
+    suspend fun chatSearchStatus(): ApiResult<WaChatSearchStatus>
+    suspend fun chatSearchIndex(): ApiResult<Unit>
+    suspend fun chatSearchCardsRun(): ApiResult<Unit>
+    suspend fun chatSearchCardsStop(): ApiResult<Unit>
+
+    /** Conversation search; a word-only answer (the server's 503) is Ok with `degraded` set. */
+    suspend fun chatSearch(q: String, limit: Int): ApiResult<WaChatSearchResponse>
+    suspend fun chatSearchPick(body: WaPickReq): ApiResult<WaPickCounts>
 
     fun mediaUrl(chat: String, id: String, thumb: Boolean = false): String
     fun avatarUrl(jid: String): String
