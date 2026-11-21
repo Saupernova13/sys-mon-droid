@@ -392,17 +392,19 @@ private fun ThemeRow() {
             title = "Theme",
             subtitle = "Instrument matches the web panel; Minimal keeps Health first",
         )
+        // Full card width and no check icon: three labels must fit on one line each on a narrow phone.
         SingleChoiceSegmentedButtonRow(
             Modifier
                 .fillMaxWidth()
-                .padding(start = side + 36.dp + 16.dp, end = side, bottom = 8.dp),
+                .padding(start = side, end = side, bottom = 8.dp),
         ) {
             ThemeStyle.entries.forEachIndexed { index, style ->
                 SegmentedButton(
                     selected = style == current,
                     onClick = { scope.launch { container.settings.setThemeStyle(style.key) } },
                     shape = SegmentedButtonDefaults.itemShape(index, ThemeStyle.entries.size),
-                ) { Text(style.label) }
+                    icon = {},
+                ) { Text(style.label, maxLines = 1, softWrap = false) }
             }
         }
     }
