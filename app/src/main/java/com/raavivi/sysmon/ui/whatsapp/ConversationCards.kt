@@ -135,7 +135,8 @@ private fun ConvCard(
                 for (line in r.preview.take(3)) PreviewLine(line, q, c)
             }
         }
-        Row(Modifier.fillMaxWidth().padding(end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.End) {
+        // 24 dp to the card's edge like its content; a 48 dp target draws 40 dp, so 20 dp reads as 24.
+        Row(Modifier.fillMaxWidth().padding(end = 24.dp, bottom = 20.dp), horizontalArrangement = Arrangement.End) {
             PickButton(foundLabel, "Found it", foundEnabled, c, reduced, onFound)
         }
     }
