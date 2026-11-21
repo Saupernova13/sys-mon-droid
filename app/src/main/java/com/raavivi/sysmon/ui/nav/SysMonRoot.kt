@@ -44,6 +44,8 @@ import com.raavivi.sysmon.ui.screen.ScreenShareScreen
 import com.raavivi.sysmon.ui.settings.JellyfinScreen
 import com.raavivi.sysmon.ui.settings.SettingsScreen
 import com.raavivi.sysmon.ui.setup.LoginScreen
+import com.raavivi.sysmon.ui.theme.LocalThemeStyle
+import com.raavivi.sysmon.ui.theme.ThemeStyle
 import com.raavivi.sysmon.ui.terminal.TerminalScreen
 import com.raavivi.sysmon.ui.update.UpdateScreen
 import com.raavivi.sysmon.ui.whatsapp.WhatsAppScreen
@@ -75,12 +77,9 @@ private fun MainScaffold() {
 
     // WhatsApp is both admin-only and feature-gated (its router 404s when off),
     // so its tab only exists when the server actually answers for it.
-    val visibleDests = TopDest.entries.filter { dest ->
-        when (dest) {
-            TopDest.WhatsApp -> isAdmin && features?.whatsapp == true
-            else -> true
-        }
-    }
+    val style = LocalThemeStyle.current
+    val minimal = style == ThemeStyle.Minimal
+    val visibleDests = bottomTabs(style, isAdmin, features)
 
     // Silent update check whenever the app comes to the foreground (throttled to 12 h inside).
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -89,9 +88,8 @@ private fun MainScaffold() {
     }
 
     // If the tab or tool we're on disappears (role/flag change), fall back home.
-    LaunchedEffect(visibleDests, currentRoute, isAdmin, features) {
-        val onHiddenTab = TopDest.entries.any { it.route == currentRoute } &&
-            visibleDests.none { it.route == currentRoute }
+    LaunchedEffect(visibleDests, currentRoute, isAdmin, features, style) {
+        val onHiddenTab = isStrandedOnTab(style, currentRoute, visibleDests)
         val onHiddenTool = when (currentRoute) {
             Routes.TERMINAL, Routes.SCREEN, Routes.SETTINGS, Routes.JELLYFIN -> !isAdmin
             Routes.MODEL_LOG -> !isAdmin || features?.modelLog != true
@@ -99,7 +97,7 @@ private fun MainScaffold() {
             else -> false
         }
         if (onHiddenTab || onHiddenTool) {
-            nav.navigate(TopDest.Dashboard.route) {
+            nav.navigate(startTab(style).route) {
                 popUpTo(nav.graph.findStartDestination().id) { saveState = false }
                 launchSingleTop = true
             }
@@ -109,11 +107,18 @@ private fun MainScaffold() {
     // A notification asked for a screen (MainActivity.openIntent). Wait for the
     // feature flags, or the hidden-tool check above would bounce straight back.
     val pendingRoute by container.pendingRoute.collectAsStateWithLifecycle()
-    LaunchedEffect(pendingRoute, isAdmin, features) {
+    LaunchedEffect(pendingRoute, isAdmin, features, style) {
         val route = pendingRoute ?: return@LaunchedEffect
         val flags = features ?: return@LaunchedEffect
         container.pendingRoute.value = null
-        if (route == Routes.FIND_ME && isAdmin && flags.findme) {
+        if (visibleDests.any { it.route == route }) {
+            // Minimal: Health and Find me are tabs, so open them directly.
+            nav.navigate(route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        } else if (route == Routes.FIND_ME && isAdmin && flags.findme) {
             nav.navigate(TopDest.More.route) {
                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                 launchSingleTop = true
@@ -152,7 +157,7 @@ private fun MainScaffold() {
     ) { padding ->
         NavHost(
             navController = nav,
-            startDestination = TopDest.Dashboard.route,
+            startDestination = startTab(style).route,
             modifier = Modifier.padding(padding),
         ) {
             composable(TopDest.Dashboard.route) {
@@ -179,6 +184,9 @@ private fun MainScaffold() {
                     onOpenHealth = { nav.navigate(Routes.HEALTH) },
                     onOpenUpdate = { nav.navigate(Routes.UPDATE) },
                     onOpenSchedules = { nav.navigate(Routes.POWER_SCHEDULES) },
+                    onOpenStats = { nav.navigate(TopDest.Dashboard.route) },
+                    onOpenProcesses = { nav.navigate(TopDest.Processes.route) },
+                    onOpenFiles = { nav.navigate(TopDest.Files.route) },
                 )
             }
             composable(
@@ -198,7 +206,9 @@ private fun MainScaffold() {
             composable(Routes.TERMINAL) { TerminalScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SCREEN) { ScreenShareScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.MODEL_LOG) { ModelLogScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.FIND_ME) { FindMeScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.FIND_ME) {
+                FindMeScreen(onBack = if (minimal) null else ({ nav.popBackStack() }))
+            }
             composable(
                 route = "${Routes.POWER}?tab={tab}",
                 arguments = listOf(
@@ -224,7 +234,9 @@ private fun MainScaffold() {
             composable(Routes.LOGS) { LogsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.JELLYFIN) { JellyfinScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.HEALTH) { HealthScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.HEALTH) {
+                HealthScreen(onBack = if (minimal) null else ({ nav.popBackStack() }))
+            }
             composable(Routes.UPDATE) { UpdateScreen(onBack = { nav.popBackStack() }) }
         }
     }

@@ -110,6 +110,7 @@ fun SysMonTheme(
     val instrument = style == ThemeStyle.Instrument
     CompositionLocalProvider(
         LocalSysMonPalette provides if (instrument) InstrumentPalette else ClassicPalette,
+        LocalThemeStyle provides style,
     ) {
         MaterialTheme(
             colorScheme = when {

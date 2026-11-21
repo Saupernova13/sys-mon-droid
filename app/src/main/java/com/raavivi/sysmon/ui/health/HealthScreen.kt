@@ -49,7 +49,7 @@ private const val PAUSE_MINUTES = 30
 
 /** Watchdog targets and their recent events; refreshes every 30 s while visible. */
 @Composable
-fun HealthScreen(onBack: () -> Unit) {
+fun HealthScreen(onBack: (() -> Unit)? = null) {
     val vm = rememberContainerViewModel { HealthViewModel(it) }
     val container = LocalAppContainer.current
     val role by container.session.role.collectAsStateWithLifecycle()
@@ -77,8 +77,10 @@ fun HealthScreen(onBack: () -> Unit) {
             IconButton(onClick = { vm.refresh() }, enabled = !vm.loading) {
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
             }
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            onBack?.let { back ->
+                IconButton(onClick = back) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
             }
         })
 

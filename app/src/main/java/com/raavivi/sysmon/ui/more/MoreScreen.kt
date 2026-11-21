@@ -20,9 +20,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Notifications
@@ -74,6 +77,7 @@ import com.raavivi.sysmon.ui.common.SettingsRow
 import com.raavivi.sysmon.ui.common.Tile
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import com.raavivi.sysmon.ui.theme.SysMon
+import com.raavivi.sysmon.ui.theme.LocalThemeStyle
 import com.raavivi.sysmon.ui.theme.ThemeStyle
 import kotlinx.coroutines.launch
 
@@ -90,6 +94,9 @@ fun MoreScreen(
     onOpenHealth: () -> Unit = {},
     onOpenUpdate: () -> Unit = {},
     onOpenSchedules: () -> Unit = {},
+    onOpenStats: () -> Unit = {},
+    onOpenProcesses: () -> Unit = {},
+    onOpenFiles: () -> Unit = {},
 ) {
     val vm = rememberContainerViewModel { MoreViewModel(it) }
     val container = LocalAppContainer.current
@@ -101,6 +108,7 @@ fun MoreScreen(
     val pushOn by container.settings.pushEnabled.collectAsStateWithLifecycle(initialValue = false)
     val loggingOn by container.settings.loggingEnabled.collectAsStateWithLifecycle(initialValue = AppLog.isEnabled())
     val isAdmin = role == SessionManager.ROLE_ADMIN
+    val minimal = LocalThemeStyle.current == ThemeStyle.Minimal
     val available = updateUi.check as? UpdateCheck.Available
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     val snackbar = remember { SnackbarHostState() }
@@ -136,14 +144,21 @@ fun MoreScreen(
                         if (isAdmin) {
                             add(Tile("Terminal", Icons.Filled.Terminal, palette.idCpu, onOpenTerminal))
                             add(Tile("Screen share", Icons.AutoMirrored.Filled.ScreenShare, palette.idGpu, onOpenScreen))
-                            if (features?.findme == true) {
+                            if (features?.findme == true && !minimal) {
                                 add(Tile("Find Me", Icons.Filled.MyLocation, palette.idMem, onOpenFindMe))
                             }
                             if (features?.modelLog == true) {
                                 add(Tile("Model log", Icons.Filled.Psychology, palette.idDisk, onOpenModelLog))
                             }
                         }
-                        add(Tile("Health", Icons.Filled.MonitorHeart, palette.sigOk, onOpenHealth))
+                        if (minimal) {
+                            // Stats, Procs and Files are not tabs in Minimal, so they live here.
+                            add(Tile("Stats", Icons.Filled.Dashboard, palette.idCpu, onOpenStats))
+                            add(Tile("Procs", Icons.Filled.Memory, palette.idMem, onOpenProcesses))
+                            add(Tile("Files", Icons.Filled.Folder, palette.idDisk, onOpenFiles))
+                        } else {
+                            add(Tile("Health", Icons.Filled.MonitorHeart, palette.sigOk, onOpenHealth))
+                        }
                         add(Tile("Schedules", Icons.Filled.Schedule, palette.idPwr, onOpenSchedules))
                     }
                     ActionTileGrid(tiles)
@@ -362,7 +377,7 @@ private fun AccountHeader(username: String, role: String, serverUrl: String) {
     }
 }
 
-/** Local, per-phone look: Classic or Instrument (the sys-mon web panel's style). */
+/** Local, per-phone look: Classic, Instrument (the sys-mon web panel's style) or Minimal (a slimmer bottom bar). */
 @Composable
 private fun ThemeRow() {
     val container = LocalAppContainer.current
@@ -375,7 +390,7 @@ private fun ThemeRow() {
         SettingsRow(
             icon = Icons.Filled.Palette,
             title = "Theme",
-            subtitle = "Instrument matches the sys-mon web panel",
+            subtitle = "Instrument matches the web panel; Minimal keeps Health first",
         )
         SingleChoiceSegmentedButtonRow(
             Modifier

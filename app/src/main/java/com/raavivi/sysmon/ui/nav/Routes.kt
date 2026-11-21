@@ -5,6 +5,8 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -15,6 +17,10 @@ enum class TopDest(
     val icon: ImageVector,
 ) {
     Dashboard("dashboard", "Stats", Icons.Filled.Dashboard),
+    /** A tab in Minimal only; elsewhere the same route is a tool opened from More. */
+    Health("health", "Health", Icons.Filled.MonitorHeart),
+    /** A tab in Minimal only; elsewhere the same route is a tool opened from More. */
+    FindMe("findme", "Find me", Icons.Filled.MyLocation),
     Processes("processes", "Procs", Icons.Filled.Memory),
     Files("files", "Files", Icons.Filled.Folder),
     WhatsApp("whatsapp", "WhatsApp", Icons.AutoMirrored.Filled.Chat),
