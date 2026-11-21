@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raavivi.sysmon.AppContainer
+import com.raavivi.sysmon.core.data.autofix.HttpAutoFixRepository
 import com.raavivi.sysmon.core.model.WatchdogEvent
 import com.raavivi.sysmon.core.model.WatchdogPauseBody
 import com.raavivi.sysmon.core.model.WatchdogStatus
@@ -29,6 +30,9 @@ class HealthViewModel(private val container: AppContainer) : ViewModel() {
     var message by mutableStateOf<String?>(null)
     var busyId by mutableStateOf<String?>(null)
         private set
+
+    /** The Auto fix card's state; its polling follows the screen via attach/detach. */
+    val autoFix = AutoFixState(HttpAutoFixRepository(container.api), viewModelScope)
 
     init {
         refresh()

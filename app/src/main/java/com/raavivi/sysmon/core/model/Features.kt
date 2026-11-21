@@ -18,6 +18,8 @@ data class FeaturesResponse(
     val remoteControl: Boolean = false,
     /** Find Me is on server-side; its whole router 404s otherwise. */
     val findme: Boolean = false,
+    /** The Auto fix agent is on server-side (Health screen, Minimal theme); its router 404s otherwise. */
+    val autofix: Boolean = false,
     /** Config-driven: the server has a Firebase key and can send FCM pushes. */
     val push: Boolean = false,
     /** S.M.A.R.T. widget on AND CrystalDiskInfo / smartctl available. */
