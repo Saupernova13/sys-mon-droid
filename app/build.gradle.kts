@@ -14,13 +14,17 @@ android {
         applicationId = "com.raavivi.sysmon"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "0.19.1"
+        versionCode = 25
+        versionName = "0.20.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
     buildTypes {
+        // The shipped build. Debuggable builds run Compose far slower (no AOT,
+        // no baseline profiles), so sys-mon ships this one. Signed with the
+        // debug keystore so it updates in place over existing installs.
         release {
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
