@@ -1,6 +1,7 @@
 package com.raavivi.sysmon.ui.whatsapp
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
@@ -38,7 +39,7 @@ class InChatSearchState(
         private set
     var hits by mutableStateOf<List<WaSearchRow>>(emptyList())
         private set
-    var total by mutableStateOf(0)
+    var total by mutableIntStateOf(0)
         private set
     var capped by mutableStateOf(false)
         private set
@@ -46,7 +47,7 @@ class InChatSearchState(
         private set
 
     /** -1: results loaded, nothing selected yet. Hits run newest first, so a higher index is older. */
-    var sel by mutableStateOf(-1)
+    var sel by mutableIntStateOf(-1)
         private set
     var terms by mutableStateOf<List<WaSearchTerm>>(emptyList())
         private set

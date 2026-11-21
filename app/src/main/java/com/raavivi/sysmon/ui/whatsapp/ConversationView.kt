@@ -114,8 +114,12 @@ internal fun ConversationView(vm: WhatsAppViewModel) {
         }
     }
 
+    // A search hit (or an in-chat step) asked to bring a message into view; tick 0 is "never asked".
+    LaunchedEffect(vm.focusTick) { if (vm.focusTick > 0) vm.focusId?.let(scrollToMessage) }
+
     Column(Modifier.fillMaxSize().imePadding()) {
         ConversationHeaderHost(vm, c, onGoToDate = { showDatePicker = true })
+        if (vm.search.inChat.open) InChatSearchBar(vm.search.inChat, c)
         vm.message?.let { Toast(it) }
         Column(Modifier.weight(1f).fillMaxWidth().chatWallpaper(c)) {
             MessageArea(
@@ -184,12 +188,14 @@ private fun ConversationHeaderHost(vm: WhatsAppViewModel, c: ChatColors, onGoToD
         pinned = vm.currentPinned,
         localPin = vm.currentLocalPin,
         jumpingFirst = vm.jumpingFirst,
+        searchOn = vm.search.inChat.open,
         c = c,
         onBack = { vm.closeChat() },
         onMarkRead = { vm.markRead() },
         onGoToDate = onGoToDate,
         onJumpFirst = { vm.jumpToFirst() },
         onPin = { vm.togglePin() },
+        onSearch = { vm.search.inChat.toggle() },
     )
 }
 
@@ -258,7 +264,9 @@ private fun rememberChatEnv(
     onLongPress: (WaMessage) -> Unit,
 ): ChatEnv {
     val group = waIsGroup(vm.currentJid)
-    return remember(c, group, data.nowSec, reduced, data.byId, data.names, vm.reactions, maxBubble, popEnabled, vm.imageLoader, rowBounds) {
+    val marks = vm.search.inChat.terms
+    val range = vm.search.rangeHighlight
+    return remember(c, group, data.nowSec, reduced, data.byId, data.names, vm.reactions, maxBubble, popEnabled, vm.imageLoader, rowBounds, marks, range) {
         ChatEnv(
             colors = c,
             group = group,
@@ -282,6 +290,8 @@ private fun rememberChatEnv(
             rowBounds = rowBounds,
             popEnabled = popEnabled,
             reactionSeen = reactionSeen,
+            marks = marks,
+            range = range,
         )
     }
 }
@@ -357,6 +367,9 @@ private fun BoxScope.ScrollOverlays(
             busy = vm.jumpingDate,
             onJump = { vm.jumpToTs(it) },
             modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, bottom = 64.dp),
+            marks = remember(tl, vm.search.inChat.days, vm.search.rangeHighlight) {
+                scrubberMarks(tl, vm.search.inChat.days, vm.search.rangeHighlight)
+            },
         )
     }
     JumpToLatestFab(

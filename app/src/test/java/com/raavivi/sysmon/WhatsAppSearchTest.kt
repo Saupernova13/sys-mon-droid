@@ -2,6 +2,7 @@ package com.raavivi.sysmon
 
 import com.raavivi.sysmon.core.model.WaConvResult
 import com.raavivi.sysmon.core.model.WaSearchRow
+import com.raavivi.sysmon.core.model.WaTimelineDay
 import com.raavivi.sysmon.ui.whatsapp.ChipFilters
 import com.raavivi.sysmon.ui.whatsapp.ChipSel
 import com.raavivi.sysmon.ui.whatsapp.GROUP_PREVIEW_ROWS
@@ -17,8 +18,10 @@ import com.raavivi.sysmon.ui.whatsapp.groupHits
 import com.raavivi.sysmon.ui.whatsapp.groupWindow
 import com.raavivi.sysmon.ui.whatsapp.markQueryWords
 import com.raavivi.sysmon.ui.whatsapp.notHerePick
+import com.raavivi.sysmon.ui.whatsapp.buildTimeline
 import com.raavivi.sysmon.ui.whatsapp.parseSnippet
 import com.raavivi.sysmon.ui.whatsapp.pressChip
+import com.raavivi.sysmon.ui.whatsapp.scrubberMarks
 import com.raavivi.sysmon.ui.whatsapp.stepButtons
 import com.raavivi.sysmon.ui.whatsapp.stepTarget
 import com.raavivi.sysmon.ui.whatsapp.waClock
@@ -206,5 +209,29 @@ class WhatsAppSearchTest {
         assertNull(body.hit)
         assertNull(body.rank)
         assertEquals(4, body.shown)
+    }
+
+    // -- scrubber marks --------------------------------------------------------------------------
+
+    private val timeline = buildTimeline(
+        listOf(WaTimelineDay("2026-01-01", 10, 1000), WaTimelineDay("2026-01-02", 10, 2000), WaTimelineDay("2026-01-03", 10, 3000)),
+    )!!
+
+    @Test
+    fun `hit days and a conversation's ends become track positions`() {
+        val days = listOf(WaTimelineDay("2026-01-02", 2, 2000))
+
+        val marks = scrubberMarks(timeline, days, 1000L..3000L)
+
+        assertEquals(timeline.segments[1].start, marks[0], 0.0)
+        assertTrue(marks.contains(timeline.segments[0].start))
+        assertTrue(marks.contains(timeline.segments[2].start))
+        assertEquals(3, marks.size)
+    }
+
+    @Test
+    fun `no hits and no range mark nothing`() {
+        assertTrue(scrubberMarks(timeline, null, null).isEmpty())
+        assertTrue(scrubberMarks(timeline, emptyList(), null).isEmpty())
     }
 }

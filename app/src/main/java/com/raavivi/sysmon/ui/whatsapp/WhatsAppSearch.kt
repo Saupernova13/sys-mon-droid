@@ -4,6 +4,7 @@ import com.raavivi.sysmon.core.model.WaConvResult
 import com.raavivi.sysmon.core.model.WaPickHit
 import com.raavivi.sysmon.core.model.WaPickReq
 import com.raavivi.sysmon.core.model.WaSearchRow
+import com.raavivi.sysmon.core.model.WaTimelineDay
 import java.time.Instant
 import java.time.ZoneId
 
@@ -112,6 +113,15 @@ data class StepButtons(val newerOff: Boolean, val olderOff: Boolean)
 
 fun stepButtons(sel: Int, loaded: Int, hasNext: Boolean): StepButtons =
     StepButtons(newerOff = sel <= 0, olderOff = loaded == 0 || (sel >= loaded - 1 && !hasNext))
+
+// -- scrubber marks -------------------------------------------------------------------------------
+
+/** Track positions (0..1) to mark on the scrubber: the days with in-chat hits and the two ends of a tapped conversation. */
+fun scrubberMarks(tl: WaTimeline, days: List<WaTimelineDay>?, range: LongRange?): List<Double> {
+    val hitMarks = days.orEmpty().map { posOfTs(tl, it.firstTs) }
+    val ends = range?.let { listOf(posOfTs(tl, it.first), posOfTs(tl, it.last)) }.orEmpty()
+    return (hitMarks + ends).distinct()
+}
 
 // -- text helpers ---------------------------------------------------------------------------------
 

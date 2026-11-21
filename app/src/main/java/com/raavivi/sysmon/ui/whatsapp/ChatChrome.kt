@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -66,6 +67,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -80,6 +83,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -136,7 +140,7 @@ private fun Dp.sp1() = androidx.compose.ui.unit.TextUnit(this.value, androidx.co
 
 /** One of the header's round icon buttons: 44dp, press fill at 8% ink, with an optional count badge. */
 @Composable
-private fun HeaderAction(
+internal fun HeaderAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     c: ChatColors,
@@ -189,12 +193,14 @@ fun ConversationHeader(
     pinned: Boolean,
     localPin: Boolean,
     jumpingFirst: Boolean,
+    searchOn: Boolean,
     c: ChatColors,
     onBack: () -> Unit,
     onMarkRead: () -> Unit,
     onGoToDate: () -> Unit,
     onJumpFirst: () -> Unit,
     onPin: () -> Unit,
+    onSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -220,6 +226,7 @@ fun ConversationHeader(
                 Text(subtitle, style = chatSecondaryStyle(c.meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+        HeaderAction(Icons.Filled.Search, "Search in chat", c, onSearch, tint = if (searchOn) c.accent else c.ink)
         HeaderAction(Icons.Filled.DoneAll, "Mark as read", c, onMarkRead, enabled = unread > 0, badge = unread)
         HeaderAction(Icons.Filled.CalendarMonth, "Go to date", c, onGoToDate, enabled = canGoToDate)
         HeaderAction(Icons.Filled.VerticalAlignTop, "Jump to first message", c, onJumpFirst, busy = jumpingFirst)
@@ -455,7 +462,18 @@ fun ChatRecordingBar(
 
 /** Search field as a pill with a leading search icon. */
 @Composable
-fun ChatSearchField(value: String, onValueChange: (String) -> Unit, c: ChatColors, modifier: Modifier = Modifier) {
+fun ChatSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    c: ChatColors,
+    modifier: Modifier = Modifier,
+    placeholder: String = "Search chats",
+    /** The IME's Search key; null keeps the plain keyboard. */
+    onSearch: (() -> Unit)? = null,
+    autoFocus: Boolean = false,
+) {
+    val focus = remember { FocusRequester() }
+    if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
     Row(
         modifier
             .fillMaxWidth()
@@ -471,10 +489,12 @@ fun ChatSearchField(value: String, onValueChange: (String) -> Unit, c: ChatColor
             singleLine = true,
             textStyle = chatBodyStyle(c.ink),
             cursorBrush = SolidColor(c.accent),
-            modifier = Modifier.weight(1f).padding(vertical = 11.dp).padding(end = 14.dp),
+            keyboardOptions = KeyboardOptions(imeAction = if (onSearch != null) ImeAction.Search else ImeAction.Default),
+            keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
+            modifier = Modifier.weight(1f).padding(vertical = 11.dp).padding(end = 14.dp).focusRequester(focus),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) Text("Search chats", style = chatBodyStyle(c.meta))
+                    if (value.isEmpty()) Text(placeholder, style = chatBodyStyle(c.meta))
                     inner()
                 }
             },

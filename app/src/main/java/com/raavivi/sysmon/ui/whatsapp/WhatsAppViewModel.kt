@@ -223,6 +223,7 @@ class WhatsAppViewModel(
         voice.release()
         recorder.cancel()
         timeline = null
+        focusId = null
         search.onChatChanged()
         load()
         viewModelScope.launch {
