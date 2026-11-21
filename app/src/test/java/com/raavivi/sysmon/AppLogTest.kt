@@ -162,4 +162,13 @@ class AppLogTest {
         assertEquals("/api/fs/list", LogRules.redactedTarget("http://h/api/fs/list".toHttpUrl()))
         assertEquals(null, LogRules.redactQuery(null))
     }
+
+    @Test
+    fun `redaction hides a search query but keeps its filters`() {
+        val url = "http://h:1/api/whatsapp/search?q=cinema%20tonight&chat=27820000001%40s.whatsapp.net&limit=100&Q=x".toHttpUrl()
+        assertEquals(
+            "/api/whatsapp/search?q=***&chat=27820000001%40s.whatsapp.net&limit=100&Q=***",
+            LogRules.redactedTarget(url),
+        )
+    }
 }

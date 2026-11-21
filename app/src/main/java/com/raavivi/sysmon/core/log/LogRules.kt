@@ -67,7 +67,7 @@ object LogRules {
         else -> Cap.MARKER
     }
 
-    private val SENSITIVE = setOf("token", "access_token", "password", "code")
+    private val SENSITIVE = setOf("token", "access_token", "password", "code", "q")
 
     /** Replaces the values of sensitive query params with `***`; keeps everything else as-is. */
     fun redactQuery(encodedQuery: String?): String? {
