@@ -12,10 +12,14 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
 
 - **Connect & auth** — point at any `host:port`, log in (JWT), token persisted and
   verified on launch, log out / log out everywhere.
-- **Two themes** (More → This phone → Theme, per phone) — *Classic* (the original slate +
+- **Three themes** (More → This phone → Theme, per phone) — *Classic* (the original slate +
   mint look, the default) and *Instrument*, which mirrors the sys-mon web panel:
   warm graphite ramp, one identity hue per subsystem, 2px corners, band headers,
-  ticked meters and unsmoothed traces.
+  ticked meters and unsmoothed traces. *Minimal* keeps Classic's look but slims the bottom
+  bar to Health, Find me, WhatsApp and More (Stats, Procs and Files move into More, and the
+  app opens on Health). In Minimal the Health screen also gets an **Auto fix** card, shown
+  when the server has it on: it asks an agent to check what is down and fix it, shows its
+  replies, and allows one optional follow-up with extra error detail before you start over.
 - **Live dashboard** — CPU (overall + per-core bars + freq/temp), memory (+ swap),
   GPU/iGPU (usage + VRAM + temp), disks (usage + I/O), streamed over
   `WS /ws/stream` (~400 ms, slim and deflate-compressed; only while the screen is
