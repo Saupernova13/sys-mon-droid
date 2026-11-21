@@ -42,6 +42,9 @@ import com.raavivi.sysmon.ui.common.ScreenHeader
 import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import com.raavivi.sysmon.ui.theme.SysMon
+import com.raavivi.sysmon.ui.theme.LocalThemeStyle
+import com.raavivi.sysmon.ui.theme.ThemeStyle
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 
 private const val REFRESH_MS = 30_000L
@@ -49,11 +52,14 @@ private const val PAUSE_MINUTES = 30
 
 /** Watchdog targets and their recent events; refreshes every 30 s while visible. */
 @Composable
-fun HealthScreen(onBack: () -> Unit) {
+fun HealthScreen(onBack: (() -> Unit)? = null) {
     val vm = rememberContainerViewModel { HealthViewModel(it) }
     val container = LocalAppContainer.current
     val role by container.session.role.collectAsStateWithLifecycle()
     val isAdmin = role == SessionManager.ROLE_ADMIN
+    val features by container.session.features.collectAsStateWithLifecycle()
+    // Auto fix is a Minimal-theme card, only when the server has it on.
+    val showAutoFix = LocalThemeStyle.current == ThemeStyle.Minimal && isAdmin && features?.autofix == true
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     // Auto-refresh only while the screen is on top and the app is in the foreground.
@@ -62,6 +68,19 @@ fun HealthScreen(onBack: () -> Unit) {
             while (true) {
                 delay(REFRESH_MS)
                 vm.refresh()
+            }
+        }
+    }
+    // Poll Auto fix only while the screen is on top and the app is in the foreground.
+    if (showAutoFix) {
+        LaunchedEffect(lifecycle) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                vm.autoFix.attach()
+                try {
+                    awaitCancellation()
+                } finally {
+                    vm.autoFix.detach()
+                }
             }
         }
     }
@@ -77,8 +96,10 @@ fun HealthScreen(onBack: () -> Unit) {
             IconButton(onClick = { vm.refresh() }, enabled = !vm.loading) {
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
             }
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            onBack?.let { back ->
+                IconButton(onClick = back) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
             }
         })
 
@@ -92,6 +113,7 @@ fun HealthScreen(onBack: () -> Unit) {
         }
 
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (showAutoFix && !vm.autoFix.hidden) AutoFixCard(vm.autoFix)
             when {
                 status == null && vm.error != null -> Muted("The watchdog is not reachable.")
                 status == null -> Muted("Loading...")

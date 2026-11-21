@@ -6,6 +6,8 @@ import com.raavivi.sysmon.core.model.JellyfinConfigPatch
 import com.raavivi.sysmon.core.model.JellyfinStreamsResponse
 import com.raavivi.sysmon.core.model.JellyfinTestBody
 import com.raavivi.sysmon.core.model.JellyfinTestResponse
+import com.raavivi.sysmon.core.model.AutoFixReplyBody
+import com.raavivi.sysmon.core.model.AutoFixResponse
 import com.raavivi.sysmon.core.model.DroidUpdateResponse
 import com.raavivi.sysmon.core.model.WatchdogEventsResponse
 import com.raavivi.sysmon.core.model.WatchdogPauseBody
@@ -540,6 +542,15 @@ interface ApiService {
 
     @POST("api/watchdog/targets/{id}/resume")
     suspend fun watchdogResume(@Path("id") id: String): WatchdogTarget
+
+    @GET("api/autofix")
+    suspend fun autofixStatus(): AutoFixResponse
+
+    @POST("api/autofix/start")
+    suspend fun autofixStart(): AutoFixResponse
+
+    @POST("api/autofix/reply")
+    suspend fun autofixReply(@Body body: AutoFixReplyBody): AutoFixResponse
 
     @GET("api/droid/update")
     suspend fun droidUpdate(): DroidUpdateResponse

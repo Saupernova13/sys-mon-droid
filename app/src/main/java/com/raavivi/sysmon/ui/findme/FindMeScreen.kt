@@ -89,7 +89,7 @@ import java.nio.ByteBuffer
  * last fixes and the selected device's trail. Admin only, behind `features.findme`.
  */
 @Composable
-fun FindMeScreen(onBack: () -> Unit) {
+fun FindMeScreen(onBack: (() -> Unit)? = null) {
     val vm = rememberContainerViewModel { FindMeViewModel(it) }
     val container = LocalAppContainer.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -185,7 +185,9 @@ fun FindMeScreen(onBack: () -> Unit) {
             IconButton(onClick = vm::startPair, enabled = !vm.disabled) {
                 Icon(Icons.Filled.Add, contentDescription = "Add device")
             }
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            onBack?.let { back ->
+                IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            }
         })
 
         vm.message?.let {
