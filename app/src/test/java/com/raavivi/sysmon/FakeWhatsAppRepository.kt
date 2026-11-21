@@ -5,6 +5,7 @@ import com.raavivi.sysmon.core.data.whatsapp.UploadSource
 import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaCardDetail
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
@@ -79,6 +80,8 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     val searchDaysCalls = mutableListOf<Pair<String, String>>()
     val chatSearchQueries = mutableListOf<String>()
     val picks = mutableListOf<WaPickReq>()
+    var cardResult: ApiResult<WaCardDetail> = ApiResult.Ok(WaCardDetail())
+    val cardRequests = mutableListOf<Long>()
     var statusReads = 0
     var indexRequests = 0
     var cardsRuns = 0
@@ -93,6 +96,9 @@ class FakeWhatsAppRepository : WhatsAppRepository {
 
     /** When set, `chatSearchPick()` parks on it (after recording the body) until completed. */
     var pickGate: CompletableDeferred<Unit>? = null
+
+    /** When set, `chatSearchCard()` parks on it (after recording the node) until completed. */
+    var cardGate: CompletableDeferred<Unit>? = null
 
     private val live = MutableSharedFlow<WaMessage>(extraBufferCapacity = 64)
 
@@ -243,6 +249,12 @@ class FakeWhatsAppRepository : WhatsAppRepository {
         picks += body
         pickGate?.await()
         return pickResult
+    }
+
+    override suspend fun chatSearchCard(node: Long): ApiResult<WaCardDetail> {
+        cardRequests += node
+        cardGate?.await()
+        return cardResult
     }
 
     override fun mediaUrl(chat: String, id: String, thumb: Boolean): String = "https://fake.test/media/$chat/$id"

@@ -2,6 +2,7 @@ package com.raavivi.sysmon.core.data.whatsapp
 
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaCardDetail
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
@@ -81,6 +82,9 @@ interface WhatsAppRepository {
     /** Conversation search; a word-only answer (the server's 503) is Ok with `degraded` set. */
     suspend fun chatSearch(q: String, limit: Int): ApiResult<WaChatSearchResponse>
     suspend fun chatSearchPick(body: WaPickReq): ApiResult<WaPickCounts>
+
+    /** The full topic card of the result node [node]; an Err with code 404 means it has none. */
+    suspend fun chatSearchCard(node: Long): ApiResult<WaCardDetail>
 
     fun mediaUrl(chat: String, id: String, thumb: Boolean = false): String
     fun avatarUrl(jid: String): String

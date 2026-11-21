@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 
@@ -40,6 +42,8 @@ fun ChatSearchField(
     autoFocus: Boolean = false,
 ) {
     val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
     Row(
         modifier
@@ -57,7 +61,11 @@ fun ChatSearchField(
             textStyle = chatBodyStyle(c.ink),
             cursorBrush = SolidColor(c.accent),
             keyboardOptions = KeyboardOptions(imeAction = if (onSearch != null) ImeAction.Search else ImeAction.Default),
-            keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
+            // The Search key means "show me the results": put the keyboard away so they are not hidden behind it.
+            keyboardActions = KeyboardActions(onSearch = {
+                hideKeyboard(keyboard, focusManager)
+                onSearch?.invoke()
+            }),
             modifier = Modifier.weight(1f).padding(vertical = 11.dp).padding(end = 14.dp).focusRequester(focus),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {

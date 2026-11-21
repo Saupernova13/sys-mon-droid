@@ -38,6 +38,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +69,7 @@ internal fun SearchScreen(vm: WhatsAppViewModel) {
         onDispose { s.viewHidden() }
     }
     val busy = if (s.mode == SearchMode.CONVERSATIONS) s.conv.phase else s.messages.phase
+    var helpOpen by remember { mutableStateOf(false) }
     val loading = s.query.isNotBlank() && (busy == SearchPhase.LOADING || busy == SearchPhase.IDLE)
     Column(Modifier.fillMaxSize().imePadding()) {
         Row(Modifier.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -80,17 +85,21 @@ internal fun SearchScreen(vm: WhatsAppViewModel) {
                 onSearch = s::submit,
                 autoFocus = s.query.isEmpty(),
             )
+            HelpButton(c) { helpOpen = true }
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.accent, trackColor = c.inBg)
         vm.message?.let { Toast(it) }
         if (s.conv.available) ModeSwitch(s, c)
         if (s.mode == SearchMode.MESSAGES) ChipRow(s, c)
-        StatusCard(s, c)
+        // Conversations shows its status as the first item of the scrolling content; here it only
+        // appears when there is no conversation mode yet (Messages, with an index never built).
+        if (s.mode == SearchMode.MESSAGES) StatusCard(s, c)
         when (s.mode) {
             SearchMode.CONVERSATIONS -> ConversationResults(vm, c, Modifier.weight(1f))
             SearchMode.MESSAGES -> MessageResults(vm, c, Modifier.weight(1f))
         }
     }
+    if (helpOpen) SearchHelpSheet(s.mode, c, onExample = s::openFor, onDismiss = { helpOpen = false })
 }
 
 /** A rounded toggle for the filter chips: a 48 dp touch target around a 32 dp pill; accent fill when on. */
@@ -161,7 +170,7 @@ private fun ChipRow(s: WhatsAppSearch, c: ChatColors) {
 
 /** The index line and the topic-cards line in one tonal card: both belong to Conversations, or to a view with no such mode yet. */
 @Composable
-private fun StatusCard(s: WhatsAppSearch, c: ChatColors) {
+internal fun StatusCard(s: WhatsAppSearch, c: ChatColors) {
     val inConv = !s.conv.available || s.mode == SearchMode.CONVERSATIONS
     val status = s.conv.status
     val index = indexView(status, inConv)
