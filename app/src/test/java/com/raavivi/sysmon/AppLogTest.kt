@@ -164,6 +164,12 @@ class AppLogTest {
     }
 
     @Test
+    fun `redaction hides a card node id`() {
+        val url = "http://h:1/api/whatsapp/chat-search/card?node=42".toHttpUrl()
+        assertEquals("/api/whatsapp/chat-search/card?node=***", LogRules.redactedTarget(url))
+    }
+
+    @Test
     fun `redaction hides a search query but keeps its filters`() {
         val url = "http://h:1/api/whatsapp/search?q=cinema%20tonight&chat=27820000001%40s.whatsapp.net&limit=100&Q=x".toHttpUrl()
         assertEquals(

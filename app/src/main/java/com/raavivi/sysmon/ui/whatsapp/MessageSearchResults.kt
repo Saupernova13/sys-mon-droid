@@ -41,7 +41,7 @@ internal fun MessageResults(vm: WhatsAppViewModel, c: ChatColors, modifier: Modi
             SearchError(text, c, onRetry = if (isRetryableSearchError(text)) s::submit else null, modifier = modifier)
         }
         m.hits.isEmpty() -> SearchEmpty("No messages found", "Try fewer words", c, modifier)
-        else -> LazyColumn(modifier) {
+        else -> LazyColumn(modifier.hideKeyboardOnScroll()) {
             for (g in groups) {
                 val name = vm.searchChatName(g.chat, g.hits.first().chatName)
                 val window = groupWindow(g, g.chat in m.expanded)

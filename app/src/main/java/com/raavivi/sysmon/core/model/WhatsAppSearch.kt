@@ -91,6 +91,71 @@ data class WaChatSearchResponse(
     val degraded: String? = null,
 )
 
+/** One act in a topic card (a kind of speech act); [intensity] is 0..5, [resolved] whether it was settled. */
+@Serializable
+data class WaCardAct(val kind: String = "", val intensity: Int = 0, val resolved: Boolean = false)
+
+/** A facet of a topic card with the writer's [confidence] (0..1). */
+@Serializable
+data class WaCardFacet(val name: String = "", val confidence: Double = 0.0)
+
+/** A detail line of a card: who said it, of which [kinds], and the text. */
+@Serializable
+data class WaCardDetailItem(val kinds: List<String> = emptyList(), val who: String = "", val text: String = "")
+
+/** A private word of the conversation and what it meant there. */
+@Serializable
+data class WaCardLex(val term: String = "", val meaning: String = "")
+
+/** A key moment; the message reference is absent when the card cannot point at one message. */
+@Serializable
+data class WaCardMoment(
+    val kind: String = "",
+    val oneLine: String = "",
+    val said: String = "",
+    val chatJid: String? = null,
+    val msgId: String? = null,
+    val ts: Long? = null,
+)
+
+/** A sub-topic's own card. */
+@Serializable
+data class WaSubCard(
+    val title: String = "",
+    val summary: String = "",
+    val said: List<String> = emptyList(),
+    val meant: List<String> = emptyList(),
+    val acts: List<WaCardAct> = emptyList(),
+    val facets: List<WaCardFacet> = emptyList(),
+    val details: List<WaCardDetailItem> = emptyList(),
+)
+
+/** A topic's full card. */
+@Serializable
+data class WaTopicCard(
+    val title: String = "",
+    val summary: String = "",
+    val said: List<String> = emptyList(),
+    val meant: List<String> = emptyList(),
+    val topics: List<String> = emptyList(),
+    val acts: List<WaCardAct> = emptyList(),
+    val facets: List<WaCardFacet> = emptyList(),
+    val entities: List<String> = emptyList(),
+    val recallQueries: List<String> = emptyList(),
+    val details: List<WaCardDetailItem> = emptyList(),
+    val lexicon: List<WaCardLex> = emptyList(),
+)
+
+/** `GET /api/whatsapp/chat-search/card?node=`; [ofParent] when the card is the parent topic's, for a sub-topic result. */
+@Serializable
+data class WaCardDetail(
+    val id: Long = 0,
+    val ofParent: Boolean = false,
+    val card: WaTopicCard = WaTopicCard(),
+    val subtopics: List<WaSubCard> = emptyList(),
+    val moments: List<WaCardMoment> = emptyList(),
+)
+
 /** The transcriber's counts; only `pending` is shown. */
 @Serializable
 data class WaVoiceNotesStatus(val pending: Int? = null)

@@ -55,7 +55,7 @@ fun indexView(st: WaChatSearchStatus?, inConv: Boolean): LineView {
         val progress = progressText(st)
         return LineView(true, running = true, text = if (progress.isNotEmpty()) "Updating the index… $progress" else "Updating the index…")
     }
-    return LineView(true, running = false, text = "Search index ·", button = "Update")
+    return LineView(true, running = false, text = "Search index · tap Update to add new messages", button = "Update")
 }
 
 /** One poller for both lines: an index run or a topic-card run is going while the view is open. */
@@ -114,5 +114,5 @@ fun cardsView(st: WaChatSearchStatus?, inConv: Boolean, zone: ZoneId = ZoneId.sy
     if (cards.mode == "waiting_window" && next.isNotEmpty()) {
         return LineView(true, text = withCounts("Topic cards · next at $next", progress), button = "Run")
     }
-    return LineView(true, text = if (progress.isNotEmpty()) "Topic cards · $progress" else "Topic cards ·", button = "Run")
+    return LineView(true, text = if (progress.isNotEmpty()) "Topic cards · $progress" else "Topic cards · none waiting", button = "Run")
 }

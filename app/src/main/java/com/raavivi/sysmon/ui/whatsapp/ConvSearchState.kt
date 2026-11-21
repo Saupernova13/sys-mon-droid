@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
+import com.raavivi.sysmon.core.model.WaCardDetail
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaConvResult
 import com.raavivi.sysmon.core.model.WaPickReq
@@ -22,6 +23,12 @@ const val PICK_NOT_HERE = -1
  * queries marked either way.
  */
 data class PickState(val saved: Int? = null, val failed: Int? = null, val busy: Int? = null, val marked: Int? = null)
+
+/** Where the full-card sheet is: loading, showing the card, the result has no card (404), or the read failed. */
+enum class CardPhase { LOADING, DONE, MISSING, ERROR }
+
+/** The open full-card sheet: [index] is the result it shows; [detail] is set once [phase] is DONE. */
+data class CardSheet(val index: Int, val phase: CardPhase = CardPhase.LOADING, val detail: WaCardDetail? = null)
 
 /**
  * The Conversations mode of the Search view and the chat-search status behind it: the index and topic-card
@@ -58,9 +65,14 @@ class ConvSearchState(
     var cardsBusy by mutableStateOf(false)
         private set
 
+    /** The open full-card sheet, or null. Card text is private: it is only held here, never logged. */
+    var cardSheet by mutableStateOf<CardSheet?>(null)
+        private set
+
     private var viewOpen = false
     private var resultsEpoch = 0
     private var statusEpoch = 0
+    private var cardEpoch = 0
     private var pollJob: Job? = null
 
     /** Conversations mode is offered when chat search is on and has node vectors to search. */
@@ -149,6 +161,7 @@ class ConvSearchState(
     /** Forget the results (and drop any request or pick in flight). */
     fun clear() {
         resultsEpoch++
+        closeCard()
         results = emptyList()
         resultsQ = ""
         degraded = false
@@ -181,6 +194,43 @@ class ConvSearchState(
                         onStatusRead()
                     }
                 }
+            }
+        }
+    }
+
+    // -- full card ----------------------------------------------------------------------------
+
+    /** Open the full-card sheet on result [index] and read its card. */
+    fun openCard(index: Int) {
+        if (results.getOrNull(index) == null) return
+        cardSheet = CardSheet(index)
+        loadCard(index)
+    }
+
+    /** Close the sheet; a reply still in flight is dropped. */
+    fun closeCard() {
+        cardEpoch++
+        cardSheet = null
+    }
+
+    /** Try the open sheet's card again after an error. */
+    fun retryCard() {
+        val sheet = cardSheet ?: return
+        cardSheet = CardSheet(sheet.index)
+        loadCard(sheet.index)
+    }
+
+    private fun loadCard(index: Int) {
+        val node = results.getOrNull(index)?.nodeId ?: return
+        val mine = resultsEpoch
+        val mineCard = ++cardEpoch
+        scope.launch {
+            val r = repo.chatSearchCard(node)
+            // The list, or the sheet, may have changed while this was in flight.
+            if (mine != resultsEpoch || mineCard != cardEpoch) return@launch
+            cardSheet = when (r) {
+                is ApiResult.Ok -> CardSheet(index, CardPhase.DONE, r.value)
+                is ApiResult.Err -> CardSheet(index, if (r.code == 404) CardPhase.MISSING else CardPhase.ERROR)
             }
         }
     }

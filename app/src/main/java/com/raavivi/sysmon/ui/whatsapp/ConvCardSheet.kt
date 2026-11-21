@@ -1,0 +1,290 @@
+package com.raavivi.sysmon.ui.whatsapp
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import com.raavivi.sysmon.core.model.WaCardMoment
+import com.raavivi.sysmon.core.model.WaConvResult
+
+/**
+ * The full card of one conversation result in a bottom sheet: everything the topic card says, so the user can
+ * tell it is the right conversation before confirming. A scrolling body above a sticky action bar in the
+ * thumb zone ("Open chat here" and "Found it"). The result's own title and summary show at once; the rest
+ * loads (skeleton), may be missing (404: no card yet) or fail (Retry). Card text is private and never logged.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+internal fun ConvCardSheet(vm: WhatsAppViewModel, sheet: CardSheet, c: ChatColors, reduced: Boolean, nowSec: Double) {
+    val conv = vm.search.conv
+    val r = conv.results.getOrNull(sheet.index)
+    // The results this sheet belongs to are gone: nothing to show.
+    if (r == null) {
+        LaunchedEffect(Unit) { conv.closeCard() }
+        return
+    }
+    ModalBottomSheet(
+        onDismissRequest = conv::closeCard,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = c.wall,
+        contentColor = c.ink,
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                CardHeader(vm, r, sheet, c, nowSec)
+                when (sheet.phase) {
+                    CardPhase.LOADING -> SearchSkeleton(card = false, c = c, reduced = reduced, horizontal = 0.dp)
+                    CardPhase.MISSING -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("No topic card yet for this conversation", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                        Text("Cards are written in the background; the matching lines are below", style = chatSecondaryStyle(c.meta))
+                    }
+                    CardPhase.ERROR -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Could not load the card", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                        OutlinedButton(onClick = conv::retryCard, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry", color = c.accent) }
+                    }
+                    CardPhase.DONE -> CardBody(vm, r, sheet, c)
+                }
+                if (r.preview.isNotEmpty()) {
+                    Section("Matching lines", c) {
+                        for (line in r.preview.take(3)) PreviewLine(line, conv.resultsQ, c)
+                    }
+                }
+                Spacer(Modifier.size(8.dp))
+            }
+            ActionBar(vm, r, sheet, c, reduced)
+        }
+    }
+}
+
+/** Avatar, chat name, range and count; then the full title, the summary, and which topic a sub-topic result borrows. */
+@Composable
+private fun CardHeader(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet, c: ChatColors, nowSec: Double) {
+    val name = r.chatName.ifBlank { vm.searchChatName(r.chat, "") }
+    val detailCard = sheet.detail?.card
+    val title = detailCard?.title?.takeIf { it.isNotBlank() } ?: r.card?.title?.takeIf { it.isNotBlank() } ?: name
+    val summary = detailCard?.summary?.takeIf { it.isNotBlank() } ?: r.card?.summary?.takeIf { it.isNotBlank() }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(name, r.chat, vm, size = 40.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(name, style = chatSecondaryStyle(c.ink, FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${convRange(r.startTs, r.endTs, nowSec)} · ${messagesLabel(r.nMsgs)}", style = chatMetaStyle(c.meta))
+            }
+        }
+        Text(title, style = chatBodyStyle(c.ink).copy(fontWeight = FontWeight.SemiBold))
+        if (sheet.detail?.ofParent == true) {
+            Text("From the wider topic this belongs to", style = chatMetaStyle(c.meta).copy(fontStyle = FontStyle.Italic))
+        }
+        summary?.let { Text(it, style = chatBodyStyle(c.ink)) }
+    }
+}
+
+/** Every non-empty section of the loaded card, in [visibleSections] order, 24 dp apart. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CardBody(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet, c: ChatColors) {
+    val d = sheet.detail ?: return
+    val conv = vm.search.conv
+    for (section in visibleSections(d)) when (section) {
+        CardSection.MOMENTS -> Section("Key moments", c) {
+            for (m in d.moments) {
+                MomentRow(m, c) {
+                    val jid = m.chatJid ?: return@MomentRow
+                    vm.search.noteQuery(vm.search.query)
+                    conv.closeCard()
+                    vm.openChatAt(jid, vm.searchChatName(jid, r.chatName), m.ts ?: return@MomentRow, focusId = m.msgId)
+                }
+            }
+        }
+        CardSection.SAID -> Section("What was said", c) { for (t in d.card.said) Bullet(t, c) }
+        CardSection.MEANT -> Section("What it meant", c) { for (t in d.card.meant) Bullet(t, c) }
+        CardSection.DETAILS -> Section("Details", c) {
+            for (item in d.card.details) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (item.who.isNotBlank()) Text(kindLabel(item.who), style = chatMetaStyle(c.meta).copy(fontWeight = FontWeight.SemiBold))
+                        for (k in item.kinds) KindPill(k, c)
+                    }
+                    Text(item.text, style = chatSecondaryStyle(c.ink))
+                }
+            }
+        }
+        CardSection.ENTITIES -> Section("People, places and things", c) { Chips(d.card.entities, c) }
+        CardSection.TOPICS -> Section("Topics", c) { Chips(d.card.topics, c) }
+        CardSection.MOOD -> Section("Mood", c) {
+            for (act in d.card.acts) {
+                val dots = intensityDots(act)
+                Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(actText(act), style = chatSecondaryStyle(c.ink), modifier = Modifier.weight(1f))
+                    Row(
+                        Modifier.semantics { contentDescription = "Intensity $dots of $INTENSITY_DOTS" },
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        repeat(INTENSITY_DOTS) { i ->
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(if (i < dots) c.meta else c.hairline))
+                        }
+                    }
+                }
+            }
+            if (d.card.facets.isNotEmpty()) Chips(sortedFacets(d.card.facets).map { it.name }, c)
+        }
+        CardSection.SUBTOPICS -> Section("Sub-topics", c) {
+            for (sub in d.subtopics) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (sub.title.isNotBlank()) Text(sub.title, style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                    if (sub.summary.isNotBlank()) Text(sub.summary, style = chatSecondaryStyle(c.ink))
+                }
+            }
+        }
+        CardSection.LEXICON -> Section("Private words", c) {
+            for (lex in d.card.lexicon) {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(lex.term) }
+                        append(" — ")
+                        append(lex.meaning)
+                    },
+                    style = chatSecondaryStyle(c.ink),
+                )
+            }
+        }
+        CardSection.RECALL -> Section("You might remember it as", c) {
+            Text("Tap one to search for it", style = chatMetaStyle(c.meta))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (q in d.card.recallQueries) {
+                    SearchPill(q, on = false, c = c, onClick = {
+                        conv.closeCard()
+                        vm.search.openFor(q)
+                    })
+                }
+            }
+        }
+    }
+}
+
+/** A small meta-style heading and its content, 8 dp apart. */
+@Composable
+private fun Section(title: String, c: ChatColors, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = chatMetaStyle(c.meta).copy(fontWeight = FontWeight.SemiBold))
+        content()
+    }
+}
+
+@Composable
+private fun Bullet(text: String, c: ChatColors) {
+    Row {
+        Text("•", style = chatSecondaryStyle(c.meta))
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = chatSecondaryStyle(c.ink), modifier = Modifier.weight(1f))
+    }
+}
+
+/** A tiny kind label (`plan`, `idea`) on a tonal pill. */
+@Composable
+private fun KindPill(kind: String, c: ChatColors) {
+    Text(
+        kindLabel(kind),
+        style = chatMetaStyle(c.meta),
+        modifier = Modifier.clip(CircleShape).background(c.inBg).padding(horizontal = 8.dp, vertical = 2.dp),
+    )
+}
+
+/** Non-interactive chips that wrap onto as many lines as they need. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Chips(items: List<String>, c: ChatColors) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (t in items) {
+            Text(
+                t,
+                style = chatSecondaryStyle(c.ink),
+                modifier = Modifier.clip(CircleShape).background(c.inBg).heightIn(min = 32.dp).padding(horizontal = 12.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+/** A key moment: its kind and one line; a 48 dp row with a chevron that opens the chat there when it names a message. */
+@Composable
+private fun MomentRow(m: WaCardMoment, c: ChatColors, onOpen: () -> Unit) {
+    val open = momentOpenable(m)
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).let { if (open) it.clickable(onClick = onOpen) else it },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (m.kind.isNotBlank()) {
+            KindPill(m.kind, c)
+            Spacer(Modifier.width(12.dp))
+        }
+        Text(m.oneLine, style = chatSecondaryStyle(c.ink), modifier = Modifier.weight(1f))
+        if (open) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Open the chat at this moment", tint = c.meta, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+/** Sticky bottom bar: "Found it" (outlined) and the primary "Open chat here". */
+@Composable
+private fun ActionBar(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet, c: ChatColors, reduced: Boolean) {
+    val conv = vm.search.conv
+    Row(
+        Modifier.fillMaxWidth().background(c.inBg).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PickButton(pickLabel("Found it", sheet.index, conv.pick), "Found it", conv.pick.busy == null, c, reduced) { conv.pickFound(sheet.index) }
+        Spacer(Modifier.weight(1f))
+        Button(
+            onClick = {
+                conv.closeCard()
+                vm.openConversation(r)
+            },
+            modifier = Modifier.heightIn(min = 48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
+        ) {
+            Text("Open chat here", style = chatSecondaryStyle(c.onAccent, FontWeight.SemiBold))
+        }
+    }
+}

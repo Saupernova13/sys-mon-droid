@@ -95,6 +95,7 @@ import com.raavivi.sysmon.core.model.WaMessagesResponse
 import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
+import com.raavivi.sysmon.core.model.WaCardDetail
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaPickCounts
@@ -514,6 +515,10 @@ interface ApiService {
     /** A [Response], not a bare body: a 503 still carries the usable word-only results (see the repository). */
     @GET("api/whatsapp/chat-search")
     suspend fun waChatSearch(@Query("q") q: String, @Query("limit") limit: Int = 20): Response<WaChatSearchResponse>
+
+    /** A result's full topic card; 404 when it has none. */
+    @GET("api/whatsapp/chat-search/card")
+    suspend fun waChatSearchCard(@Query("node") node: Long): WaCardDetail
 
     @POST("api/whatsapp/chat-search/pick")
     suspend fun waChatSearchPick(@Body body: WaPickReq): WaPickCounts

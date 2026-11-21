@@ -3,6 +3,7 @@ package com.raavivi.sysmon.core.data.whatsapp
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaCardDetail
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
@@ -163,6 +164,9 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
 
     override suspend fun chatSearchPick(body: WaPickReq): ApiResult<WaPickCounts> =
         safeCall { api.api.waChatSearchPick(body) }
+
+    override suspend fun chatSearchCard(node: Long): ApiResult<WaCardDetail> =
+        safeCall { api.api.waChatSearchCard(node) }
 
     override fun mediaUrl(chat: String, id: String, thumb: Boolean): String =
         api.whatsappMediaUrl(chat, id, thumb)

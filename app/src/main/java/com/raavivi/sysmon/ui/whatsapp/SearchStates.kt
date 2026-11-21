@@ -23,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
@@ -44,6 +43,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** The note over results that came back word-shaped only (no embedder answered). */
@@ -93,13 +93,13 @@ internal fun InfoBanner(text: String, c: ChatColors, modifier: Modifier = Modifi
 
 /** Three tonal placeholder blocks while a query is in flight; they pulse only when reduced motion is off. */
 @Composable
-internal fun SearchSkeleton(card: Boolean, c: ChatColors, reduced: Boolean, modifier: Modifier = Modifier) {
+internal fun SearchSkeleton(card: Boolean, c: ChatColors, reduced: Boolean, modifier: Modifier = Modifier, horizontal: Dp = 16.dp) {
     val pulse = if (reduced) 0.6f else {
         val t = rememberInfiniteTransition(label = "skeleton")
         val a by t.animateFloat(0.4f, 0.8f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "alpha")
         a
     }
-    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth().padding(horizontal = horizontal, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         repeat(3) {
             Box(
                 Modifier.fillMaxWidth().height(if (card) 96.dp else 48.dp).alpha(pulse)
@@ -111,11 +111,21 @@ internal fun SearchSkeleton(card: Boolean, c: ChatColors, reduced: Boolean, modi
 
 /**
  * The view before anything is typed: this session's recent queries (tap to run again, Clear to forget) and
- * what to type for the mode in force. Recent queries are in memory only.
+ * how to search in the mode in force (the guide, with example queries that run when tapped). [header] sits
+ * above it all (the status card), so it scrolls away with the rest. Recent queries are in memory only.
  */
 @Composable
-internal fun SearchIdle(mode: SearchMode, recent: List<String>, onPick: (String) -> Unit, onClear: () -> Unit, c: ChatColors, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+internal fun SearchIdle(
+    mode: SearchMode,
+    recent: List<String>,
+    onPick: (String) -> Unit,
+    onClear: () -> Unit,
+    c: ChatColors,
+    modifier: Modifier = Modifier,
+    header: @Composable () -> Unit = {},
+) {
+    Column(modifier.fillMaxSize().hideKeyboardOnScroll().verticalScroll(rememberScrollState())) {
+        header()
         if (recent.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Recent", style = chatSecondaryStyle(c.meta), modifier = Modifier.weight(1f))
@@ -132,10 +142,18 @@ internal fun SearchIdle(mode: SearchMode, recent: List<String>, onPick: (String)
                 }
             }
         }
-        if (mode == SearchMode.CONVERSATIONS) {
-            CenteredNote(Icons.Filled.ChatBubbleOutline, "Describe a conversation the way you remember it", "e.g. when we planned the weekend away", c)
-        } else {
-            CenteredNote(Icons.Filled.Search, "Search words across every chat", "Use \"quotes\" for a phrase, -word to leave one out", c)
+        if (mode == SearchMode.MESSAGES) {
+            CenteredNote(Icons.Filled.Search, "Search words across every chat", "", c)
         }
+        SearchGuide(mode, c, onPick, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+    }
+}
+
+/** A scrollable column for the states that are not a list (empty, error, loading), with [header] above them. */
+@Composable
+internal fun ScrollingState(modifier: Modifier = Modifier, header: @Composable () -> Unit, content: @Composable () -> Unit) {
+    Column(modifier.fillMaxSize().hideKeyboardOnScroll().verticalScroll(rememberScrollState())) {
+        header()
+        content()
     }
 }

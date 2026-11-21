@@ -47,7 +47,7 @@ class WhatsAppSearchStatusTest {
 
     @Test
     fun `idle it offers the update and a run shows progress without a button`() {
-        assertEquals(LineView(true, false, "Search index ·", "Update"), indexView(manual, true))
+        assertEquals(LineView(true, false, "Search index · tap Update to add new messages", "Update"), indexView(manual, true))
         assertEquals(
             LineView(true, true, "Updating the index… 1,200 / 4,000 messages · 3 voice notes left", ""),
             indexView(indexing, true),
@@ -90,7 +90,7 @@ class WhatsAppSearchStatusTest {
     @Test
     fun `idle it offers Run with the counts and without numbers it says less`() {
         assertEquals(LineView(true, false, "Topic cards · 1,234 done · 15,113 left", "Run"), cardsView(cards(idleCards), true))
-        assertEquals("Topic cards ·", cardsView(cards(WaCardsStatus(configured = true)), true).text)
+        assertEquals("Topic cards · none waiting", cardsView(cards(WaCardsStatus(configured = true)), true).text)
         assertEquals("Topic cards · 5 done", cardsView(cards(WaCardsStatus(configured = true, done = 5)), true).text)
     }
 
