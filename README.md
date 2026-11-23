@@ -163,7 +163,10 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   filter) opens a Search view over every chat, grouped by chat with Mine / Theirs / Photos /
   Videos / Voice notes / Documents chips; where the server's conversation search is on, a
   *Conversations* mode finds a whole conversation by meaning (topic cards, *Found it* / *Not
-  here* verdicts, and the index / topic-card status lines). Opening a hit lands on the message,
+  here* verdicts, and the index / topic-card status lines) and a *Tags* mode browses and filters
+  every conversation by the tags its topic card carries (type-ahead, Must have / Any of / Exclude,
+  filters for chat, dates, intensity and unsettled, sorting, full card sheet; no model involved;
+  the mode you pick is remembered). Opening a hit lands on the message,
   and the in-chat bar (magnifier in the conversation header) steps through that chat's hits,
   highlights the words and marks the days on the timeline scrubber.
 

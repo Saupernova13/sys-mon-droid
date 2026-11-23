@@ -118,7 +118,28 @@ internal fun ConversationResults(vm: WhatsAppViewModel, c: ChatColors, modifier:
         // Not while the keyboard is up: the bar would float above it and cover results.
         if (conv.phase == SearchPhase.DONE && !WindowInsets.isImeVisible) NotHereBar(conv, c, reduced)
     }
-    conv.cardSheet?.let { sheet -> ConvCardSheet(vm, sheet, c, reduced, nowSec) }
+    conv.cardSheet?.let { sheet ->
+        val actions = CardSheetActions(
+            q = conv.resultsQ,
+            onClose = conv::closeCard,
+            onRetry = conv::retryCard,
+            onOpenChat = {
+                conv.closeCard()
+                vm.openConversation(it)
+            },
+            onOpenMoment = { jid, ts, msgId ->
+                s.noteQuery(s.query)
+                conv.closeCard()
+                vm.openChatAt(jid, vm.searchChatName(jid, conv.results.getOrNull(sheet.index)?.chatName.orEmpty()), ts, focusId = msgId)
+            },
+            onSearchFor = {
+                conv.closeCard()
+                s.openFor(it)
+            },
+            found = FoundAction(pickLabel("Found it", sheet.index, conv.pick), conv.pick.busy == null) { conv.pickFound(sheet.index) },
+        )
+        ConvCardSheet(vm, sheet, conv.results.getOrNull(sheet.index), actions, c, reduced, nowSec)
+    }
 }
 
 /** "N conversations · tap one to see its full card". */

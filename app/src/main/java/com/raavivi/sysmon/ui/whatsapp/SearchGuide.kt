@@ -17,6 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,10 +36,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 private val GuideIcons: List<ImageVector> = listOf(Icons.Filled.ChatBubbleOutline, Icons.Filled.Search, Icons.Filled.TouchApp, Icons.Filled.ThumbUp)
+private val TagsGuideIcons: List<ImageVector> = listOf(Icons.Filled.Sell, Icons.Filled.Tune, Icons.Filled.SwapVert, Icons.Filled.TouchApp)
 
 /**
  * How to search in [mode]: Conversations gets four rows (icon, a line, a hint) and example queries that run
- * when tapped through [onExample]; Messages gets its few operators. Shared by the idle view and the help sheet.
+ * when tapped through [onExample]; Tags gets four rows of its own; Messages gets its few operators. Shared by the idle view and the help sheet.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -58,6 +62,17 @@ internal fun SearchGuide(mode: SearchMode, c: ChatColors, onExample: (String) ->
                 Text("Try", style = chatMetaStyle(c.meta).copy(fontWeight = FontWeight.SemiBold))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (q in ConversationExamples) SearchPill(q, on = false, c = c, onClick = { onExample(q) })
+                }
+            }
+        } else if (mode == SearchMode.TAGS) {
+            TagsGuide.forEachIndexed { i, row ->
+                Row(verticalAlignment = Alignment.Top) {
+                    Icon(TagsGuideIcons[i], contentDescription = null, tint = c.meta, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(row.title, style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                        Text(row.hint, style = chatSecondaryStyle(c.meta))
+                    }
                 }
             }
         } else {

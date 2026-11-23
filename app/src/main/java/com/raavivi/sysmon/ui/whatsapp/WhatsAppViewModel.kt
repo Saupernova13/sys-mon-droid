@@ -30,6 +30,7 @@ class WhatsAppViewModel(
     voiceFactory: (scope: CoroutineScope, onMessage: (String) -> Unit) -> VoiceNotePlayer,
     recorderFactory: (scope: CoroutineScope, onMessage: (String) -> Unit) -> VoiceRecorder,
     private val nowSeconds: () -> Double = { System.currentTimeMillis() / 1000.0 },
+    modePrefs: SearchModePrefs = SearchModePrefs.None,
 ) : ViewModel() {
 
     var status by mutableStateOf<WaStatus?>(null)
@@ -86,7 +87,7 @@ class WhatsAppViewModel(
         private set
 
     /** The message search surfaces: the Search view, the in-chat bar, a tapped conversation's range. */
-    val search = WhatsAppSearch(repo, viewModelScope, { currentJid }, ::focusHit, { message = it })
+    val search = WhatsAppSearch(repo, viewModelScope, { currentJid }, ::focusHit, { message = it }, modePrefs)
 
     /** The message to scroll to and flash (a search hit); [focusTick] bumps for every such request. */
     var focusId by mutableStateOf<String?>(null)
@@ -848,6 +849,12 @@ class WhatsAppViewModel(
                 },
                 recorderFactory = { scope, onMessage ->
                     VoiceRecorder(context.cacheDir, { newMediaRecorder(context) }, scope, onMessage)
+                },
+                modePrefs = object : SearchModePrefs {
+                    override suspend fun load(): String? = container.settings.waSearchModeNow()
+                    override suspend fun save(key: String) { container.settings.setWaSearchMode(key) }
+                    override suspend fun tagsGuideSeen(): Boolean = container.settings.waTagsGuideSeenNow()
+                    override suspend fun markTagsGuideSeen() { container.settings.setWaTagsGuideSeen() }
                 },
             )
         }

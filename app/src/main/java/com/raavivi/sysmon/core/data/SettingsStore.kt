@@ -119,6 +119,16 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setThemeStyle(key: String) = store.edit { it[KEY_THEME_STYLE] = key }
 
+    /** The WhatsApp search mode last picked (`conv`, `msgs` or `tags`), or null before any pick. */
+    suspend fun waSearchModeNow(): String? = store.data.map { it[KEY_WA_SEARCH_MODE] }.first()
+
+    suspend fun setWaSearchMode(key: String) = store.edit { it[KEY_WA_SEARCH_MODE] = key }
+
+    /** Whether the Tags search how-to has been folded away once (it shows expanded until then). */
+    suspend fun waTagsGuideSeenNow(): Boolean = store.data.map { it[KEY_WA_TAGS_GUIDE_SEEN] ?: false }.first()
+
+    suspend fun setWaTagsGuideSeen() = store.edit { it[KEY_WA_TAGS_GUIDE_SEEN] = true }
+
     /** Whether the file-transfer progress window opens in its details view. */
     val transferDetails: Flow<Boolean> = store.data.map { it[KEY_TRANSFER_DETAILS] ?: false }
 
@@ -136,6 +146,8 @@ class SettingsStore(private val context: Context) {
 
     private companion object {
         val KEY_LOGGING = booleanPreferencesKey("logging_enabled")
+        val KEY_WA_SEARCH_MODE = stringPreferencesKey("wa_search_mode")
+        val KEY_WA_TAGS_GUIDE_SEEN = booleanPreferencesKey("wa_tags_guide_seen")
         val KEY_SERVER = stringPreferencesKey("server_url")
         val KEY_TOKEN = stringPreferencesKey("token")
         val KEY_USERNAME = stringPreferencesKey("username")

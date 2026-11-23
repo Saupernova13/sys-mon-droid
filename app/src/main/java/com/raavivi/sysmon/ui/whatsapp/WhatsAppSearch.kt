@@ -34,7 +34,7 @@ const val GROUP_PREVIEW_ROWS = 3
 const val MAX_SEEK_PAGES = 10
 
 /** Search mode of the Search view. */
-enum class SearchMode { CONVERSATIONS, MESSAGES }
+enum class SearchMode { CONVERSATIONS, MESSAGES, TAGS }
 
 // -- grouping -------------------------------------------------------------------------------------
 
