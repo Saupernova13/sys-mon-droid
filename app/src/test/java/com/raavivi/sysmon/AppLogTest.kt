@@ -177,4 +177,16 @@ class AppLogTest {
             LogRules.redactedTarget(url),
         )
     }
+
+    @Test
+    fun `redaction hides a card id, a tag value and a tag label but keeps the category and limit`() {
+        val url = "http://h:1/api/whatsapp/chat-search/card?card=7&value=holiday&Label=Holiday&cat=topic&limit=8&q=hol".toHttpUrl()
+        assertEquals(
+            "/api/whatsapp/chat-search/card?card=***&value=***&Label=***&cat=topic&limit=8&q=***",
+            LogRules.redactedTarget(url),
+        )
+        // The tag type-ahead route: the typed text is hidden, the category is not.
+        val suggest = "http://h:1/api/whatsapp/chat-search/tags?cat=entity&q=mia&limit=8".toHttpUrl()
+        assertEquals("/api/whatsapp/chat-search/tags?cat=entity&q=***&limit=8", LogRules.redactedTarget(suggest))
+    }
 }

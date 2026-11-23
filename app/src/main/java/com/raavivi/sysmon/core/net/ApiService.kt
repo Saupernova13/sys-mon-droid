@@ -100,6 +100,9 @@ import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaPickCounts
 import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaTagSuggestResponse
+import com.raavivi.sysmon.core.model.WaTagsReq
+import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaRunResponse
 import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaTimelineResponse
@@ -519,6 +522,21 @@ interface ApiService {
     /** A result's full topic card; 404 when it has none. */
     @GET("api/whatsapp/chat-search/card")
     suspend fun waChatSearchCard(@Query("node") node: Long): WaCardDetail
+
+    /** A result's full topic card by its card id (a tag result whose topic node is gone); 404 when it has none. */
+    @GET("api/whatsapp/chat-search/card")
+    suspend fun waChatSearchCardById(@Query("card") card: Long): WaCardDetail
+
+    @POST("api/whatsapp/chat-search/tags/query")
+    suspend fun waChatSearchTags(@Body body: WaTagsReq): WaTagsResponse
+
+    /** Tag type-ahead; a null [cat] or [q] is left out of the URL. */
+    @GET("api/whatsapp/chat-search/tags")
+    suspend fun waChatSearchTagSuggest(
+        @Query("cat") cat: String?,
+        @Query("q") q: String?,
+        @Query("limit") limit: Int,
+    ): WaTagSuggestResponse
 
     @POST("api/whatsapp/chat-search/pick")
     suspend fun waChatSearchPick(@Body body: WaPickReq): WaPickCounts

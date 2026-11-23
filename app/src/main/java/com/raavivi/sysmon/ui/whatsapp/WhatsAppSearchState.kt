@@ -13,13 +13,38 @@ import kotlinx.coroutines.launch
 /** Recent queries kept for the empty Search view. */
 const val MAX_RECENT = 8
 
+/** Where the chosen search mode is remembered between launches. A failure to read or write just forgets it. */
+interface SearchModePrefs {
+    suspend fun load(): String?
+    suspend fun save(key: String)
+
+    /** Whether the Tags how-to has been shown (and folded) before; a new user sees it expanded. */
+    suspend fun tagsGuideSeen(): Boolean = false
+    suspend fun markTagsGuideSeen() = Unit
+
+    object None : SearchModePrefs {
+        override suspend fun load(): String? = null
+        override suspend fun save(key: String) = Unit
+    }
+}
+
+/** The mode's saved key (shared with the web dashboard's words), and back. */
+val SearchMode.key: String get() = when (this) {
+    SearchMode.CONVERSATIONS -> "conv"
+    SearchMode.MESSAGES -> "msgs"
+    SearchMode.TAGS -> "tags"
+}
+
+fun searchModeOf(key: String?): SearchMode? = SearchMode.entries.firstOrNull { it.key == key }
+
 /**
  * Everything the WhatsApp searches keep, owned by the view model so it survives opening a hit and coming
  * back: the Search view (open flag, the query, its mode, the Messages and Conversations results), the
  * in-chat bar, and the node range a tapped conversation highlights in its chat. The query is private and
  * never logged.
  *
- * [currentChat] is the open chat's jid; [showHit] brings a hit of that chat into view; [onMessage] shows a toast.
+ * [currentChat] is the open chat's jid; [showHit] brings a hit of that chat into view; [onMessage] shows a toast;
+ * [modePrefs] remembers the mode the user picked.
  */
 class WhatsAppSearch(
     repo: WhatsAppRepository,
@@ -27,6 +52,7 @@ class WhatsAppSearch(
     currentChat: () -> String?,
     showHit: (WaSearchRow) -> Unit,
     onMessage: (String) -> Unit,
+    private val modePrefs: SearchModePrefs = SearchModePrefs.None,
 ) {
     /** The Search view is showing (or a conversation opened from it is, and Back returns to it). */
     var open by mutableStateOf(false)
@@ -45,6 +71,7 @@ class WhatsAppSearch(
     val messages = MessageSearchState(repo, scope)
     val conv = ConvSearchState(repo, scope, onMessage) { reconcile() }
     val inChat = InChatSearchState(repo, scope, currentChat, showHit)
+    val tags = TagsSearchState(repo, scope) { reconcile() }
 
     /** Queries of this session, newest first. In memory only, never persisted: query text is private and backups are on. */
     var recent by mutableStateOf<List<String>>(emptyList())
@@ -52,8 +79,33 @@ class WhatsAppSearch(
 
     private var debounce: Job? = null
 
-    /** The mode in force: Conversations needs chat search on with something indexed. */
-    val mode: SearchMode get() = if (conv.available) picked ?: SearchMode.CONVERSATIONS else SearchMode.MESSAGES
+    /** The Tags how-to is expanded: on first use, and whenever the user opens it. */
+    var tagsGuideOpen by mutableStateOf(true)
+        private set
+
+    /** Fold or open the Tags how-to; folding it is remembered, so it does not come back expanded next launch. */
+    fun showTagsGuide(open: Boolean) {
+        if (open == tagsGuideOpen) return
+        tagsGuideOpen = open
+        if (!open) scope.launch { runCatching { modePrefs.markTagsGuideSeen() } }
+    }
+
+    /** Tags mode is offered when chat search is on (the server says 404 when it is not). */
+    val tagsAvailable: Boolean get() = conv.status?.enabled == true && !tags.off
+
+    /** The modes the switch offers, in order; none while Messages is the only one. */
+    val modes: List<SearchMode> get() = buildList {
+        if (conv.available) add(SearchMode.CONVERSATIONS)
+        if (conv.available || tagsAvailable) add(SearchMode.MESSAGES)
+        if (tagsAvailable) add(SearchMode.TAGS)
+    }.let { if (it.size > 1) it else emptyList() }
+
+    /** The mode in force: Conversations needs chat search on with something indexed, Tags needs it on. */
+    val mode: SearchMode get() = when {
+        picked == SearchMode.TAGS && tagsAvailable -> SearchMode.TAGS
+        conv.available -> if (picked == SearchMode.MESSAGES) SearchMode.MESSAGES else SearchMode.CONVERSATIONS
+        else -> SearchMode.MESSAGES
+    }
 
     /** The mode the current results answer, so a mode that changed under a query re-runs it. */
     private var ranMode: SearchMode? = null
@@ -67,6 +119,8 @@ class WhatsAppSearch(
     fun openFor(text: String) {
         noteQuery(text)
         open = true
+        // A text query belongs to a text mode: leave Tags for the one that answers it.
+        if (mode == SearchMode.TAGS) picked = if (conv.available) SearchMode.CONVERSATIONS else SearchMode.MESSAGES
         query = text
         debounce?.cancel()
         if (conv.status != null) {
@@ -89,6 +143,10 @@ class WhatsAppSearch(
     fun viewHidden() = conv.close()
 
     fun onQueryChange(text: String) {
+        if (mode == SearchMode.TAGS) {
+            tags.onInput(text)
+            return
+        }
         query = text
         debounce?.cancel()
         debounce = scope.launch {
@@ -99,14 +157,19 @@ class WhatsAppSearch(
 
     /** Run the query now (the IME's Search key skips the debounce). */
     fun submit() {
+        if (mode == SearchMode.TAGS) {
+            tags.submitInput()
+            return
+        }
         noteQuery(query)
         debounce?.cancel()
         runQuery()
     }
 
     fun setMode(m: SearchMode) {
-        if (!conv.available) return
+        if (m !in modes) return
         picked = m
+        scope.launch { runCatching { modePrefs.save(m.key) } }
         debounce?.cancel()
         runQuery()
     }
@@ -140,18 +203,41 @@ class WhatsAppSearch(
         val q = query.trim()
         val m = mode
         ranMode = m
-        // Only the mode in force keeps results; the other clears so a switch never shows a stale list.
-        if (m == SearchMode.CONVERSATIONS) {
-            messages.clear()
-            conv.run(q)
-        } else {
-            conv.clear()
-            messages.run(q)
+        // Only the mode in force keeps results; the others clear so a switch never shows a stale list.
+        if (m != SearchMode.TAGS) tags.stop()
+        when (m) {
+            SearchMode.CONVERSATIONS -> {
+                messages.clear()
+                conv.run(q)
+            }
+            SearchMode.MESSAGES -> {
+                conv.clear()
+                messages.run(q)
+            }
+            SearchMode.TAGS -> {
+                conv.clear()
+                messages.clear()
+                tags.start()
+            }
         }
     }
 
     /** The status landed (or the feature turned out to be off): re-run a query whose mode is no longer the one it ran in. */
     private fun reconcile() {
-        if (query.isNotBlank() && mode != ranMode) runQuery()
+        if ((query.isNotBlank() || mode == SearchMode.TAGS) && mode != ranMode) runQuery()
+    }
+
+    init {
+        // The remembered mode takes effect once the status says which modes exist; a pick made first wins.
+        scope.launch {
+            val saved = searchModeOf(runCatching { modePrefs.load() }.getOrNull()) ?: return@launch
+            if (picked == null) {
+                picked = saved
+                reconcile()
+            }
+        }
+        scope.launch {
+            if (runCatching { modePrefs.tagsGuideSeen() }.getOrDefault(false)) tagsGuideOpen = false
+        }
     }
 }

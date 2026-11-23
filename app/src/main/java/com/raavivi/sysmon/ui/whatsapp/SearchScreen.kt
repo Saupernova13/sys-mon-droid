@@ -68,35 +68,48 @@ internal fun SearchScreen(vm: WhatsAppViewModel) {
         s.viewShown()
         onDispose { s.viewHidden() }
     }
-    val busy = if (s.mode == SearchMode.CONVERSATIONS) s.conv.phase else s.messages.phase
+    val busy = when (s.mode) {
+        SearchMode.CONVERSATIONS -> s.conv.phase
+        SearchMode.MESSAGES -> s.messages.phase
+        SearchMode.TAGS -> SearchPhase.DONE
+    }
     var helpOpen by remember { mutableStateOf(false) }
-    val loading = s.query.isNotBlank() && (busy == SearchPhase.LOADING || busy == SearchPhase.IDLE)
+    val tagsMode = s.mode == SearchMode.TAGS
+    val loading = if (tagsMode) s.tags.phase == TagsPhase.LOADING
+    else s.query.isNotBlank() && (busy == SearchPhase.LOADING || busy == SearchPhase.IDLE)
     Column(Modifier.fillMaxSize().imePadding()) {
         Row(Modifier.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { s.closeView() }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to chats", tint = c.ink)
             }
             ChatSearchField(
-                value = s.query,
+                value = if (tagsMode) s.tags.input else s.query,
                 onValueChange = s::onQueryChange,
                 c = c,
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp).padding(end = 8.dp),
-                placeholder = if (s.mode == SearchMode.CONVERSATIONS) "Search conversations" else "Search messages",
+                placeholder = when (s.mode) {
+                    SearchMode.CONVERSATIONS -> "Search conversations"
+                    SearchMode.MESSAGES -> "Search messages"
+                    SearchMode.TAGS -> "Find a tag"
+                },
                 onSearch = s::submit,
-                autoFocus = s.query.isEmpty(),
+                // Tags opens on its browse lists: the keyboard comes when the field is tapped.
+                autoFocus = !tagsMode && s.query.isEmpty(),
             )
             HelpButton(c) { helpOpen = true }
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.accent, trackColor = c.inBg)
         vm.message?.let { Toast(it) }
-        if (s.conv.available) ModeSwitch(s, c)
+        if (s.modes.isNotEmpty()) ModeSwitch(s, c)
         if (s.mode == SearchMode.MESSAGES) ChipRow(s, c)
+        if (tagsMode) TagsCategoryRow(s.tags, c)
         // Conversations shows its status as the first item of the scrolling content; here it only
         // appears when there is no conversation mode yet (Messages, with an index never built).
         if (s.mode == SearchMode.MESSAGES) StatusCard(s, c)
         when (s.mode) {
             SearchMode.CONVERSATIONS -> ConversationResults(vm, c, Modifier.weight(1f))
             SearchMode.MESSAGES -> MessageResults(vm, c, Modifier.weight(1f))
+            SearchMode.TAGS -> TagsResults(vm, c, Modifier.weight(1f))
         }
     }
     if (helpOpen) SearchHelpSheet(s.mode, c, onExample = s::openFor, onDismiss = { helpOpen = false })
@@ -133,11 +146,17 @@ private fun SearchChip.icon(): ImageVector? = when (this) {
     else -> null
 }
 
-/** Conversations | Messages as a Material3 segmented control directly under the field. */
+private fun modeLabel(m: SearchMode): String = when (m) {
+    SearchMode.CONVERSATIONS -> "Conversations"
+    SearchMode.MESSAGES -> "Messages"
+    SearchMode.TAGS -> "Tags"
+}
+
+/** Conversations | Messages | Tags (those on offer) as a Material3 segmented control directly under the field. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModeSwitch(s: WhatsAppSearch, c: ChatColors) {
-    val modes = listOf(SearchMode.CONVERSATIONS to "Conversations", SearchMode.MESSAGES to "Messages")
+    val modes = s.modes.map { it to modeLabel(it) }
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         modes.forEachIndexed { i, (mode, label) ->
             SegmentedButton(

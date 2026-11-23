@@ -9,6 +9,9 @@ import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPickCounts
 import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaTagSuggestResponse
+import com.raavivi.sysmon.core.model.WaTagsReq
+import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
@@ -85,6 +88,15 @@ interface WhatsAppRepository {
 
     /** The full topic card of the result node [node]; an Err with code 404 means it has none. */
     suspend fun chatSearchCard(node: Long): ApiResult<WaCardDetail>
+
+    /** The full topic card with card id [card] (a tag result whose topic node is gone); an Err with code 404 means none. */
+    suspend fun chatSearchCardById(card: Long): ApiResult<WaCardDetail>
+
+    /** Tag search over the topic cards; an Err with code 404 means chat search is off. */
+    suspend fun chatSearchTags(body: WaTagsReq): ApiResult<WaTagsResponse>
+
+    /** Tag type-ahead for [q] (blank = the most used), within category [cat] (blank = all). */
+    suspend fun chatSearchTagSuggest(cat: String, q: String, limit: Int): ApiResult<WaTagSuggestResponse>
 
     fun mediaUrl(chat: String, id: String, thumb: Boolean = false): String
     fun avatarUrl(jid: String): String

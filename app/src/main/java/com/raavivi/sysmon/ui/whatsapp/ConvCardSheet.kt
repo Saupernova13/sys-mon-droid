@@ -45,6 +45,25 @@ import androidx.compose.ui.unit.dp
 import com.raavivi.sysmon.core.model.WaCardMoment
 import com.raavivi.sysmon.core.model.WaConvResult
 
+/** What the card sheet needs from the screen that opened it, so Conversations and Tags share one sheet. */
+internal class CardSheetActions(
+    /** The query the result answers (marks its matching lines); blank for a tag result. */
+    val q: String,
+    val onClose: () -> Unit,
+    val onRetry: () -> Unit,
+    /** Open the chat at the whole conversation (the primary action). */
+    val onOpenChat: (WaConvResult) -> Unit,
+    /** Open the chat at one key moment. */
+    val onOpenMoment: (jid: String, ts: Long, msgId: String?) -> Unit,
+    /** A "you might remember it as" chip: search for it. */
+    val onSearchFor: (String) -> Unit,
+    /** The "Found it" verdict, or null when the result has none (tag results). */
+    val found: FoundAction? = null,
+)
+
+/** The "Found it" button's label, whether it can be pressed, and what it does. */
+internal class FoundAction(val label: String, val enabled: Boolean, val onFound: () -> Unit)
+
 /**
  * The full card of one conversation result in a bottom sheet: everything the topic card says, so the user can
  * tell it is the right conversation before confirming. A scrolling body above a sticky action bar in the
@@ -53,16 +72,14 @@ import com.raavivi.sysmon.core.model.WaConvResult
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun ConvCardSheet(vm: WhatsAppViewModel, sheet: CardSheet, c: ChatColors, reduced: Boolean, nowSec: Double) {
-    val conv = vm.search.conv
-    val r = conv.results.getOrNull(sheet.index)
+internal fun ConvCardSheet(vm: WhatsAppViewModel, sheet: CardSheet, r: WaConvResult?, a: CardSheetActions, c: ChatColors, reduced: Boolean, nowSec: Double) {
     // The results this sheet belongs to are gone: nothing to show.
     if (r == null) {
-        LaunchedEffect(Unit) { conv.closeCard() }
+        LaunchedEffect(Unit) { a.onClose() }
         return
     }
     ModalBottomSheet(
-        onDismissRequest = conv::closeCard,
+        onDismissRequest = a.onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = c.wall,
         contentColor = c.ink,
@@ -81,18 +98,18 @@ internal fun ConvCardSheet(vm: WhatsAppViewModel, sheet: CardSheet, c: ChatColor
                     }
                     CardPhase.ERROR -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Could not load the card", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
-                        OutlinedButton(onClick = conv::retryCard, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry", color = c.accent) }
+                        OutlinedButton(onClick = a.onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry", color = c.accent) }
                     }
-                    CardPhase.DONE -> CardBody(vm, r, sheet, c)
+                    CardPhase.DONE -> CardBody(r, sheet, a, c)
                 }
                 if (r.preview.isNotEmpty()) {
                     Section("Matching lines", c) {
-                        for (line in r.preview.take(3)) PreviewLine(line, conv.resultsQ, c)
+                        for (line in r.preview.take(3)) PreviewLine(line, a.q, c)
                     }
                 }
                 Spacer(Modifier.size(8.dp))
             }
-            ActionBar(vm, r, sheet, c, reduced)
+            ActionBar(r, a, c, reduced)
         }
     }
 }
@@ -124,17 +141,14 @@ private fun CardHeader(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet,
 /** Every non-empty section of the loaded card, in [visibleSections] order, 24 dp apart. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CardBody(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet, c: ChatColors) {
+private fun CardBody(r: WaConvResult, sheet: CardSheet, a: CardSheetActions, c: ChatColors) {
     val d = sheet.detail ?: return
-    val conv = vm.search.conv
     for (section in visibleSections(d)) when (section) {
         CardSection.MOMENTS -> Section("Key moments", c) {
             for (m in d.moments) {
                 MomentRow(m, c) {
                     val jid = m.chatJid ?: return@MomentRow
-                    vm.search.noteQuery(vm.search.query)
-                    conv.closeCard()
-                    vm.openChatAt(jid, vm.searchChatName(jid, r.chatName), m.ts ?: return@MomentRow, focusId = m.msgId)
+                    a.onOpenMoment(jid, m.ts ?: return@MomentRow, m.msgId)
                 }
             }
         }
@@ -194,10 +208,7 @@ private fun CardBody(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet, c
             Text("Tap one to search for it", style = chatMetaStyle(c.meta))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (q in d.card.recallQueries) {
-                    SearchPill(q, on = false, c = c, onClick = {
-                        conv.closeCard()
-                        vm.search.openFor(q)
-                    })
+                    SearchPill(q, on = false, c = c, onClick = { a.onSearchFor(q) })
                 }
             }
         }
@@ -268,19 +279,15 @@ private fun MomentRow(m: WaCardMoment, c: ChatColors, onOpen: () -> Unit) {
 
 /** Sticky bottom bar: "Found it" (outlined) and the primary "Open chat here". */
 @Composable
-private fun ActionBar(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet, c: ChatColors, reduced: Boolean) {
-    val conv = vm.search.conv
+private fun ActionBar(r: WaConvResult, a: CardSheetActions, c: ChatColors, reduced: Boolean) {
     Row(
         Modifier.fillMaxWidth().background(c.inBg).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PickButton(pickLabel("Found it", sheet.index, conv.pick), "Found it", conv.pick.busy == null, c, reduced) { conv.pickFound(sheet.index) }
+        a.found?.let { PickButton(it.label, "Found it", it.enabled, c, reduced, it.onFound) }
         Spacer(Modifier.weight(1f))
         Button(
-            onClick = {
-                conv.closeCard()
-                vm.openConversation(r)
-            },
+            onClick = { a.onOpenChat(r) },
             modifier = Modifier.heightIn(min = 48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
         ) {

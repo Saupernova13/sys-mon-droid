@@ -12,6 +12,9 @@ import com.raavivi.sysmon.core.model.WaContact
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPickCounts
 import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaTagSuggestResponse
+import com.raavivi.sysmon.core.model.WaTagsReq
+import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
@@ -82,6 +85,27 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     val picks = mutableListOf<WaPickReq>()
     var cardResult: ApiResult<WaCardDetail> = ApiResult.Ok(WaCardDetail())
     val cardRequests = mutableListOf<Long>()
+
+    /** Card ids asked for by `chatSearchCardById()`. */
+    val cardIdRequests = mutableListOf<Long>()
+
+    /** What `chatSearchTags()` answers (or a queue of answers: the first is used and removed while any remain). */
+    var tagsResult: ApiResult<WaTagsResponse> = ApiResult.Ok(WaTagsResponse())
+    val tagsResults = ArrayDeque<ApiResult<WaTagsResponse>>()
+
+    /** The bodies `chatSearchTags()` was called with. */
+    val tagsQueries = mutableListOf<WaTagsReq>()
+
+    /** When set, `chatSearchTags()` parks on it (after recording the body) until completed. */
+    var tagsGate: CompletableDeferred<Unit>? = null
+
+    var suggestResult: ApiResult<WaTagSuggestResponse> = ApiResult.Ok(WaTagSuggestResponse())
+
+    /** The (cat, q, limit) of each type-ahead call. */
+    val suggestCalls = mutableListOf<Triple<String, String, Int>>()
+
+    /** When set, `chatSearchTagSuggest()` parks on it (after recording the call) until completed. */
+    var suggestGate: CompletableDeferred<Unit>? = null
     var statusReads = 0
     var indexRequests = 0
     var cardsRuns = 0
@@ -255,6 +279,27 @@ class FakeWhatsAppRepository : WhatsAppRepository {
         cardRequests += node
         cardGate?.await()
         return cardResult
+    }
+
+    override suspend fun chatSearchCardById(card: Long): ApiResult<WaCardDetail> {
+        cardIdRequests += card
+        cardGate?.await()
+        return cardResult
+    }
+
+    override suspend fun chatSearchTags(body: WaTagsReq): ApiResult<WaTagsResponse> {
+        tagsQueries += body
+        // The answer is chosen at call time, so a parked call keeps the one it was given.
+        val answer = tagsResults.removeFirstOrNull() ?: tagsResult
+        tagsGate?.await()
+        return answer
+    }
+
+    override suspend fun chatSearchTagSuggest(cat: String, q: String, limit: Int): ApiResult<WaTagSuggestResponse> {
+        suggestCalls += Triple(cat, q, limit)
+        val answer = suggestResult
+        suggestGate?.await()
+        return answer
     }
 
     override fun mediaUrl(chat: String, id: String, thumb: Boolean): String = "https://fake.test/media/$chat/$id"
