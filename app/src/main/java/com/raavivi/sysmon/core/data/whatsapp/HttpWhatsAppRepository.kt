@@ -17,6 +17,9 @@ import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPickCounts
 import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaTagSuggestResponse
+import com.raavivi.sysmon.core.model.WaTagsReq
+import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaReact
 import com.raavivi.sysmon.core.model.WaSearchResponse
@@ -167,6 +170,15 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
 
     override suspend fun chatSearchCard(node: Long): ApiResult<WaCardDetail> =
         safeCall { api.api.waChatSearchCard(node) }
+
+    override suspend fun chatSearchCardById(card: Long): ApiResult<WaCardDetail> =
+        safeCall { api.api.waChatSearchCardById(card) }
+
+    override suspend fun chatSearchTags(body: WaTagsReq): ApiResult<WaTagsResponse> =
+        safeCall { api.api.waChatSearchTags(body) }
+
+    override suspend fun chatSearchTagSuggest(cat: String, q: String, limit: Int): ApiResult<WaTagSuggestResponse> =
+        safeCall { api.api.waChatSearchTagSuggest(cat.ifBlank { null }, q.ifBlank { null }, limit) }
 
     override fun mediaUrl(chat: String, id: String, thumb: Boolean): String =
         api.whatsappMediaUrl(chat, id, thumb)
