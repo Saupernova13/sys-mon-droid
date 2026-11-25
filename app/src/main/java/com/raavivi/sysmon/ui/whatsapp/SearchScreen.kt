@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -113,6 +114,7 @@ internal fun SearchScreen(vm: WhatsAppViewModel) {
         }
     }
     if (helpOpen) SearchHelpSheet(s.mode, c, onExample = s::openFor, onDismiss = { helpOpen = false })
+    CardSettingsSheet(vm, s.conv.cardSettings, c)
 }
 
 /** A rounded toggle for the filter chips: a 48 dp touch target around a 32 dp pill; accent fill when on. */
@@ -197,18 +199,29 @@ internal fun StatusCard(s: WhatsAppSearch, c: ChatColors) {
     if (!index.visible && !cards.visible) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp)).background(c.inBg).padding(vertical = 4.dp)) {
         if (index.visible) StatusLine(Icons.Filled.Sync, index, c, busy = s.conv.indexBusy, onClick = s.conv::requestIndex)
-        if (cards.visible) StatusLine(Icons.Filled.AutoAwesome, cards, c, busy = s.conv.cardsBusy, onClick = { s.conv.toggleCards(cards.running) })
+        if (cards.visible) {
+            StatusLine(
+                Icons.Filled.AutoAwesome, cards, c, busy = s.conv.cardsBusy,
+                onClick = { s.conv.toggleCards(cards.running) },
+                onSettings = s.conv.cardSettings::show,
+            )
+        }
     }
 }
 
 @Composable
-private fun StatusLine(icon: ImageVector, line: LineView, c: ChatColors, busy: Boolean, onClick: () -> Unit) {
+private fun StatusLine(icon: ImageVector, line: LineView, c: ChatColors, busy: Boolean, onClick: () -> Unit, onSettings: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = null, tint = c.meta, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(12.dp))
         Text(line.text, style = chatSecondaryStyle(c.ink), modifier = Modifier.weight(1f).padding(vertical = 12.dp))
         if (line.button.isNotEmpty()) {
             TextButton(onClick = onClick, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text(line.button, color = c.accent) }
+        }
+        if (onSettings != null) {
+            IconButton(onClick = onSettings, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Filled.Tune, contentDescription = "Card settings", tint = c.accent)
+            }
         }
     }
 }

@@ -3,6 +3,8 @@ package com.raavivi.sysmon.core.data.whatsapp
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
 import com.raavivi.sysmon.core.model.WaCardDetail
+import com.raavivi.sysmon.core.model.WaCardSettings
+import com.raavivi.sysmon.core.model.WaCardSettingsPatch
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
@@ -81,6 +83,12 @@ interface WhatsAppRepository {
     suspend fun chatSearchIndex(): ApiResult<Unit>
     suspend fun chatSearchCardsRun(): ApiResult<Unit>
     suspend fun chatSearchCardsStop(): ApiResult<Unit>
+
+    /** The card writer's settings; [probe] (a chat id) adds what carding that chat would take. 404: chat search is off. */
+    suspend fun cardSettings(probe: String? = null): ApiResult<WaCardSettings>
+
+    /** Saves the fields set in [patch] and answers the settings as saved. A 400's reason is the Err message. */
+    suspend fun saveCardSettings(patch: WaCardSettingsPatch): ApiResult<WaCardSettings>
 
     /** Conversation search; a word-only answer (the server's 503) is Ok with `degraded` set. */
     suspend fun chatSearch(q: String, limit: Int): ApiResult<WaChatSearchResponse>

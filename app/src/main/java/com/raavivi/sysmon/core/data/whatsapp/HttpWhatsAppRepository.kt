@@ -4,6 +4,8 @@ import com.raavivi.sysmon.core.model.WaAvatarsRefreshReq
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
 import com.raavivi.sysmon.core.model.WaCardDetail
+import com.raavivi.sysmon.core.model.WaCardSettings
+import com.raavivi.sysmon.core.model.WaCardSettingsPatch
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
@@ -159,6 +161,12 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
 
     override suspend fun chatSearchCardsStop(): ApiResult<Unit> = safeCall { api.api.waChatSearchCardsStop() }.mapOk { }
 
+    override suspend fun cardSettings(probe: String?): ApiResult<WaCardSettings> =
+        safeResponse { api.api.waCardSettings(probe?.takeIf { it.isNotBlank() }) }
+
+    override suspend fun saveCardSettings(patch: WaCardSettingsPatch): ApiResult<WaCardSettings> =
+        safeResponse { api.api.waCardSettingsSave(patch) }
+
     override suspend fun chatSearch(q: String, limit: Int): ApiResult<WaChatSearchResponse> =
         when (val r = safeCall { api.api.waChatSearch(q = q, limit = limit) }) {
             is ApiResult.Ok -> chatSearchResult(r.value)
@@ -225,4 +233,37 @@ internal fun chatSearchResult(r: RetrofitResponse<WaChatSearchResponse>): ApiRes
     val envelope = raw?.let { runCatching { SysMonJson.decodeFromString(ErrorEnvelope.serializer(), it) }.getOrNull() }
     AppLog.w("Api", "error code=${r.code()} apiCode=${envelope?.code}")
     return ApiResult.Err(parseHttpError(HttpException(r), envelope), r.code(), envelope?.code)
+}
+
+/** Runs a call that answers a [RetrofitResponse], so a failure's body is read here ([cardSettingsError]). */
+private suspend fun <T> safeResponse(block: suspend () -> RetrofitResponse<T>): ApiResult<T> =
+    when (val r = safeCall { block() }) {
+        is ApiResult.Err -> r
+        is ApiResult.Ok -> cardSettingsResult(r.value)
+    }
+
+/** A 2xx body as Ok; else Err with the HTTP status and [cardSettingsError] of the body. */
+internal fun <T> cardSettingsResult(r: RetrofitResponse<T>): ApiResult<T> {
+    if (r.isSuccessful) return r.body()?.let { ApiResult.Ok(it) } ?: ApiResult.Err("Empty response", r.code())
+    val raw = runCatching { r.errorBody()?.string() }.getOrNull()
+    AppLog.w("Api", "error code=${r.code()}")
+    return ApiResult.Err(cardSettingsError(r.code(), raw), r.code())
+}
+
+/**
+ * The words of a failed card-settings call. The server's 400 body is a plain reason string; a `{error}` envelope
+ * is read too. Anything else gets the generic text.
+ */
+internal fun cardSettingsError(code: Int, raw: String?): String {
+    val text = raw?.trim().orEmpty()
+    val envelope = text.takeIf { it.startsWith("{") }
+        ?.let { runCatching { SysMonJson.decodeFromString(ErrorEnvelope.serializer(), it) }.getOrNull() }
+    val msg = (envelope?.error ?: envelope?.detail)?.takeIf { it.isNotBlank() }
+        ?: text.takeIf { envelope == null && it.isNotEmpty() && it.length <= 200 && !it.startsWith("<") && !it.startsWith("{") }
+    return when {
+        code == 401 -> "Not authorised — please log in again"
+        code == 404 -> "Chat search is off"
+        msg != null -> msg
+        else -> "HTTP $code"
+    }
 }

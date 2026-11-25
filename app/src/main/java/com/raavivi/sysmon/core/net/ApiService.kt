@@ -96,6 +96,8 @@ import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaCardDetail
+import com.raavivi.sysmon.core.model.WaCardSettings
+import com.raavivi.sysmon.core.model.WaCardSettingsPatch
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaPickCounts
@@ -115,6 +117,7 @@ import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.PUT
 import retrofit2.http.Query
 import retrofit2.http.Streaming
 import retrofit2.http.Url
@@ -514,6 +517,13 @@ interface ApiService {
 
     @POST("api/whatsapp/chat-search/cards/stop")
     suspend fun waChatSearchCardsStop(): WaRunResponse
+
+    /** A [Response]: a 400 carries its reason as a plain string (see the repository). */
+    @GET("api/whatsapp/chat-search/cards/settings")
+    suspend fun waCardSettings(@Query("probe") probe: String? = null): Response<WaCardSettings>
+
+    @PUT("api/whatsapp/chat-search/cards/settings")
+    suspend fun waCardSettingsSave(@Body body: WaCardSettingsPatch): Response<WaCardSettings>
 
     /** A [Response], not a bare body: a 503 still carries the usable word-only results (see the repository). */
     @GET("api/whatsapp/chat-search")
