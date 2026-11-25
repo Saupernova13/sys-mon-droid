@@ -67,7 +67,7 @@ internal class FoundAction(val label: String, val enabled: Boolean, val onFound:
 /**
  * The full card of one conversation result in a bottom sheet: everything the topic card says, so the user can
  * tell it is the right conversation before confirming. A scrolling body above a sticky action bar in the
- * thumb zone ("Open chat here" and "Found it"). The result's own title and summary show at once; the rest
+ * thumb zone ("Show in chat" and "Found it"). The result's own title and summary show at once; the rest
  * loads (skeleton), may be missing (404: no card yet) or fail (Retry). Card text is private and never logged.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -277,7 +277,7 @@ private fun MomentRow(m: WaCardMoment, c: ChatColors, onOpen: () -> Unit) {
     }
 }
 
-/** Sticky bottom bar: "Found it" (outlined) and the primary "Open chat here". */
+/** Sticky bottom bar: "Found it" (outlined) and the primary "Show in chat". */
 @Composable
 private fun ActionBar(r: WaConvResult, a: CardSheetActions, c: ChatColors, reduced: Boolean) {
     Row(
@@ -291,7 +291,7 @@ private fun ActionBar(r: WaConvResult, a: CardSheetActions, c: ChatColors, reduc
             modifier = Modifier.heightIn(min = 48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
         ) {
-            Text("Open chat here", style = chatSecondaryStyle(c.onAccent, FontWeight.SemiBold))
+            Text("Show in chat", style = chatSecondaryStyle(c.onAccent, FontWeight.SemiBold))
         }
     }
 }

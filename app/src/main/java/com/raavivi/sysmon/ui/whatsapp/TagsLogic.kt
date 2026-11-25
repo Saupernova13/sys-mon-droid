@@ -214,6 +214,6 @@ fun WaTagResult.asConv(): WaConvResult = WaConvResult(
 val TagsGuide = listOf(
     GuideRow("Pick tags to narrow it down", "Type a tag or tap one below; each one you add must be on the conversation"),
     GuideRow("Choose what a tap does", "The Tap adds row sets Must have, Any of or Exclude for the next tag you pick"),
-    GuideRow("Change your mind in Selected", "Tap a chip to move it between the groups, or its x to drop it"),
-    GuideRow("Open a result for its full card", "Check it's the right one, then open the conversation"),
+    GuideRow("Change your mind under the field", "Tap a chip to drop it; Filters moves it between the groups"),
+    GuideRow("Open a result for its full card", "Check it's the right one, then Show in chat"),
 )

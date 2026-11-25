@@ -57,7 +57,7 @@ data class GuideRow(val title: String, val hint: String)
 val ConversationGuide = listOf(
     GuideRow("Describe it like you'd tell a friend", "e.g. the night we planned the trip, not just “trip”"),
     GuideRow("Know the exact words? Use Messages", "Messages matches words; Conversations matches meaning"),
-    GuideRow("Tap a result to read its full card", "Check it's the right one, then Open chat here"),
+    GuideRow("Tap a result to read its full card", "Check it's the right one, then Show in chat"),
     GuideRow("Teach it with Found it / Not here", "Marking the right result (or none) improves future searches"),
 )
 

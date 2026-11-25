@@ -116,3 +116,49 @@ fun cardsView(st: WaChatSearchStatus?, inConv: Boolean, zone: ZoneId = ZoneId.sy
     }
     return LineView(true, text = if (progress.isNotEmpty()) "Topic cards · $progress" else "Topic cards · none waiting", button = "Run")
 }
+
+// -- the slim status chip -------------------------------------------------------------------------
+
+/** The dot of the status chip: [BUSY] a run is going, [OK] nothing to do, [ATTENTION] the user may act, [IDLE] neutral. */
+enum class StatusTone { BUSY, OK, ATTENTION, IDLE }
+
+/** The one-line chip under the mode switch; it opens the sheet with the two full lines. */
+data class StatusChip(val visible: Boolean, val text: String = "", val tone: StatusTone = StatusTone.IDLE) {
+    companion object { val Hidden = StatusChip(visible = false) }
+}
+
+private fun hasError(err: JsonElement?): Boolean = err != null && err != JsonNull
+
+private fun cardsChip(cards: WaCardsStatus?): StatusChip = when (cards?.mode) {
+    "break" -> StatusChip(true, "Cards on a break", StatusTone.IDLE)
+    "paused_game" -> StatusChip(true, "Cards paused", StatusTone.IDLE)
+    "waiting_gpu" -> StatusChip(true, "Cards waiting for the GPU", StatusTone.IDLE)
+    else -> if (hasError(cards?.lastError)) StatusChip(true, "Cards waiting", StatusTone.ATTENTION)
+    else StatusChip(true, "Cards writing", StatusTone.BUSY)
+}
+
+/** Messages the index still lacks: true when it is known to be behind, or when the status cannot say. */
+private fun indexBehind(st: WaChatSearchStatus): Boolean {
+    val done = st.messagesIndexed
+    val total = st.messagesTotal
+    return done == null || total == null || done < total
+}
+
+/**
+ * The status chip: what is going on in one short phrase, most urgent first (a run, then an index that wants an
+ * update, then "up to date"). Hidden when neither line would show. The full lines stay in [indexView] and
+ * [cardsView]; this is only their summary. Counts and times are not shown here, so nothing private leaks.
+ */
+fun statusChip(st: WaChatSearchStatus?, inConv: Boolean, zone: ZoneId = ZoneId.systemDefault()): StatusChip {
+    val index = indexView(st, inConv)
+    val cards = cardsView(st, inConv, zone)
+    if (st == null || (!index.visible && !cards.visible)) return StatusChip.Hidden
+    if (index.running) return StatusChip(true, "Updating index", StatusTone.BUSY)
+    if (cards.running) return cardsChip(st.cards)
+    if (index.visible) {
+        if (indexBehind(st)) return StatusChip(true, "Index needs update", StatusTone.ATTENTION)
+        val idleCards = cards.visible && cards.button.isNotEmpty()
+        return StatusChip(true, if (idleCards) "Index up to date · cards idle" else "Index up to date", StatusTone.OK)
+    }
+    return if (cards.button.isEmpty()) StatusChip(true, "Cards all done", StatusTone.OK) else StatusChip(true, "Cards idle", StatusTone.IDLE)
+}

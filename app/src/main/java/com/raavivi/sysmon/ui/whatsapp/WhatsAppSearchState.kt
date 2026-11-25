@@ -68,6 +68,25 @@ class WhatsAppSearch(
     /** Message-time range of a tapped conversation, tinted in its chat; null otherwise. */
     var rangeHighlight by mutableStateOf<LongRange?>(null)
 
+    /** The chat a result opened from this view, while it is still the one on screen; drives "Back to results". */
+    var originChat by mutableStateOf<String?>(null)
+        private set
+
+    /** The search guide sheet is open (the field's help button, or the empty state's link). */
+    var guideOpen by mutableStateOf(false)
+        private set
+
+    fun openGuide() {
+        guideOpen = true
+    }
+
+    fun closeGuide() {
+        guideOpen = false
+    }
+
+    /** Where each mode's list was scrolled to, so coming back lands on the same result. */
+    val scroll = SearchScrollMemory()
+
     val messages = MessageSearchState(repo, scope)
     val conv = ConvSearchState(repo, scope, onMessage) { reconcile() }
     val inChat = InChatSearchState(repo, scope, currentChat, showHit)
@@ -134,6 +153,32 @@ class WhatsAppSearch(
     fun closeView() {
         open = false
         debounce?.cancel()
+        conv.closeCard()
+        tags.closeCard()
+    }
+
+    /** A result opened [jid] from this view: the chat shows "Back to results" until it is left another way. */
+    fun noteOpenedFromSearch(jid: String) {
+        if (open) originChat = jid
+    }
+
+    /** Whether the "Back to results" pill shows over [currentChat]. */
+    fun backToResultsShown(currentChat: String?): Boolean = backToResultsVisible(open, originChat, currentChat)
+
+    /** How many filters the mode in force has set, for the "Filters" pill's badge. */
+    val activeFilters: Int get() = activeFilterCount(mode, messages.chips, tags.filters, tags.cat)
+
+    /** "Clear all" in the Filters sheet: the mode's filters, and in Tags the category and the picked tags too. */
+    fun clearAllFilters() {
+        when (mode) {
+            SearchMode.MESSAGES -> if (!messages.chips.none) pressChip(null)
+            SearchMode.TAGS -> {
+                tags.resetFilters()
+                tags.chooseCat("")
+                tags.clearSelection()
+            }
+            SearchMode.CONVERSATIONS -> Unit
+        }
     }
 
     /** The Search view is on screen: read the status now and keep reading while a run goes. */
@@ -197,12 +242,14 @@ class WhatsAppSearch(
     fun onChatChanged() {
         inChat.close()
         rangeHighlight = null
+        originChat = null
     }
 
     private fun runQuery() {
         val q = query.trim()
         val m = mode
         ranMode = m
+        scroll.clear()
         // Only the mode in force keeps results; the others clear so a switch never shows a stale list.
         if (m != SearchMode.TAGS) tags.stop()
         when (m) {

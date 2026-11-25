@@ -10,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,10 +21,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
@@ -35,6 +40,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,10 +118,11 @@ internal fun SearchSkeleton(card: Boolean, c: ChatColors, reduced: Boolean, modi
 }
 
 /**
- * The view before anything is typed: this session's recent queries (tap to run again, Clear to forget) and
- * how to search in the mode in force (the guide, with example queries that run when tapped). [header] sits
- * above it all (the status card), so it scrolls away with the rest. Recent queries are in memory only.
+ * The view before anything is typed, never blank: what this mode does, this session's recent queries (tap to
+ * run again, Clear to forget), example queries that run when tapped (Conversations) and a link to the full
+ * search guide. Recent queries are in memory only.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SearchIdle(
     mode: SearchMode,
@@ -122,10 +131,14 @@ internal fun SearchIdle(
     onClear: () -> Unit,
     c: ChatColors,
     modifier: Modifier = Modifier,
-    header: @Composable () -> Unit = {},
+    onGuide: () -> Unit,
 ) {
     Column(modifier.fillMaxSize().hideKeyboardOnScroll().verticalScroll(rememberScrollState())) {
-        header()
+        if (mode == SearchMode.MESSAGES) {
+            CenteredNote(Icons.Filled.Search, "Search words across every chat", "Use quotes for a phrase", c)
+        } else {
+            CenteredNote(Icons.Filled.Search, "Describe the conversation you remember", "Search finds it by meaning, not exact words", c)
+        }
         if (recent.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Recent", style = chatSecondaryStyle(c.meta), modifier = Modifier.weight(1f))
@@ -142,18 +155,42 @@ internal fun SearchIdle(
                 }
             }
         }
-        if (mode == SearchMode.MESSAGES) {
-            CenteredNote(Icons.Filled.Search, "Search words across every chat", "", c)
+        if (mode == SearchMode.CONVERSATIONS) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("Try", style = chatMetaStyle(c.meta).copy(fontWeight = FontWeight.SemiBold))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (q in ConversationExamples) SearchPill(q, on = false, c = c, onClick = { onPick(q) })
+                }
+            }
         }
-        SearchGuide(mode, c, onPick, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        TextButton(onClick = onGuide, modifier = Modifier.padding(horizontal = 8.dp).heightIn(min = 48.dp)) {
+            Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = null, tint = c.accent, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("How search works", style = chatSecondaryStyle(c.accent, FontWeight.SemiBold))
+        }
     }
 }
 
-/** A scrollable column for the states that are not a list (empty, error, loading), with [header] above them. */
+/** A scrollable column for the states that are not a list (empty, error, loading). */
 @Composable
-internal fun ScrollingState(modifier: Modifier = Modifier, header: @Composable () -> Unit, content: @Composable () -> Unit) {
+internal fun ScrollingState(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier.fillMaxSize().hideKeyboardOnScroll().verticalScroll(rememberScrollState())) {
-        header()
         content()
     }
+}
+
+/**
+ * A result list's scroll state for [mode]: it starts where the list was left (coming back from a chat) and
+ * keeps the search state's memory up to date while it is on screen. A new query clears the memory, so a fresh
+ * list starts at the top.
+ */
+@Composable
+internal fun rememberSearchListState(s: WhatsAppSearch, mode: SearchMode): LazyListState {
+    val start = remember { s.scroll.restore(mode) }
+    val state = rememberLazyListState(start.index, start.offset)
+    LaunchedEffect(state) {
+        snapshotFlow { state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset }
+            .collect { (index, offset) -> s.scroll.save(mode, index, offset) }
+    }
+    return state
 }
