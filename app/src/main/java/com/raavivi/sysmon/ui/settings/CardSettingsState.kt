@@ -1,4 +1,4 @@
-package com.raavivi.sysmon.ui.whatsapp
+package com.raavivi.sysmon.ui.settings
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -6,29 +6,33 @@ import androidx.compose.runtime.setValue
 import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.model.WaCardChat
 import com.raavivi.sysmon.core.model.WaCardSettings
+import com.raavivi.sysmon.core.model.WaChat
 import com.raavivi.sysmon.core.net.ApiResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** Where the Card settings sheet is: reading the settings, editing them, or the read failed. */
-enum class CardSettingsPhase { LOADING, READY, ERROR }
+/** Where the Topic cards screen is: reading, editing, the read failed, or chat search is off on the server. */
+enum class CardSettingsPhase { LOADING, READY, ERROR, OFF }
+
+/** How many chats the picker reads: the whole list, not just the recent ones the chat screen shows. */
+const val PICKER_CHAT_LIMIT = 500
+
+/** The picker's chat list: not asked for yet, being read, read, or failed. */
+enum class PickerChatsPhase { IDLE, LOADING, READY, ERROR }
 
 /** What carding one picked chat would take: reading it ([chat] null, [failed] false), read, or failed. */
 data class AddProbe(val jid: String, val name: String, val chat: WaCardChat? = null, val failed: Boolean = false)
 
 /**
- * The Card settings sheet's state: the saved settings, the draft being edited, the chat picker and its probe,
- * and the save. [onSaved] runs after a successful save (the status line reads the new numbers); [onMessage]
- * shows the toast. Chat names are private and never logged.
+ * The Topic cards screen's state: the saved settings, the draft being edited, the chat picker (its chat list is
+ * read here, on first use) and its probe, and the save. [onMessage] shows the snackbar. Chat names are private
+ * and never logged.
  */
 class CardSettingsState(
     private val repo: WhatsAppRepository,
     private val scope: CoroutineScope,
-    private val onSaved: () -> Unit,
     private val onMessage: (String) -> Unit,
 ) {
-    var open by mutableStateOf(false)
-        private set
     var phase by mutableStateOf(CardSettingsPhase.LOADING)
         private set
     var loadError by mutableStateOf("")
@@ -54,8 +58,15 @@ class CardSettingsState(
     var probe by mutableStateOf<AddProbe?>(null)
         private set
 
+    /** The chats the picker lists, read from the WhatsApp chat list the first time the picker opens. */
+    var chats by mutableStateOf<List<WaChat>>(emptyList())
+        private set
+    var chatsPhase by mutableStateOf(PickerChatsPhase.IDLE)
+        private set
+
     private var epoch = 0
     private var probeEpoch = 0
+    private var chatsEpoch = 0
 
     /** The Save button: something changed and the draft is valid. */
     val canSave: Boolean
@@ -65,28 +76,19 @@ class CardSettingsState(
             return !saving && canSave(s, d)
         }
 
+    /** Something was edited and not saved yet (leaving asks first). */
+    val dirty: Boolean
+        get() {
+            val s = saved ?: return false
+            val d = draft ?: return false
+            return !patchOf(s, d).isEmpty()
+        }
+
     /** The problem with the draft as it stands, shown above Save; the server's refusal comes first. */
     val problem: String?
         get() = saveError ?: draft?.let(::draftProblem)
 
-    fun show() {
-        open = true
-        load()
-    }
-
-    fun close() {
-        epoch++
-        probeEpoch++
-        open = false
-        picking = false
-        probe = null
-        saving = false
-        saveError = null
-    }
-
-    fun retry() = load()
-
-    private fun load() {
+    fun load() {
         val mine = ++epoch
         phase = CardSettingsPhase.LOADING
         loadError = ""
@@ -102,11 +104,13 @@ class CardSettingsState(
                 }
                 is ApiResult.Err -> {
                     loadError = r.message
-                    phase = CardSettingsPhase.ERROR
+                    phase = if (isSearchOff(r.code)) CardSettingsPhase.OFF else CardSettingsPhase.ERROR
                 }
             }
         }
     }
+
+    fun retry() = load()
 
     private fun edit(f: (CardDraft) -> CardDraft) {
         val d = draft ?: return
@@ -125,6 +129,23 @@ class CardSettingsState(
     fun openPicker() {
         picking = true
         probe = null
+        if (chatsPhase == PickerChatsPhase.IDLE || chatsPhase == PickerChatsPhase.ERROR) loadChats()
+    }
+
+    fun loadChats() {
+        val mine = ++chatsEpoch
+        chatsPhase = PickerChatsPhase.LOADING
+        scope.launch {
+            val r = repo.chats(limit = PICKER_CHAT_LIMIT)
+            if (mine != chatsEpoch) return@launch
+            when (r) {
+                is ApiResult.Ok -> {
+                    chats = r.value.sortedByDescending { it.lastTs }
+                    chatsPhase = PickerChatsPhase.READY
+                }
+                is ApiResult.Err -> chatsPhase = PickerChatsPhase.ERROR
+            }
+        }
     }
 
     fun closePicker() {
@@ -180,9 +201,7 @@ class CardSettingsState(
                 is ApiResult.Ok -> {
                     saved = r.value
                     draft = draftOf(r.value)
-                    close()
                     onMessage("Card settings saved")
-                    onSaved()
                 }
                 is ApiResult.Err -> saveError = r.message
             }

@@ -7,24 +7,26 @@ import com.raavivi.sysmon.core.model.WaCardSettingsPatch
 import com.raavivi.sysmon.core.model.WaChat
 import com.raavivi.sysmon.core.net.ApiResult
 import com.raavivi.sysmon.core.net.SysMonJson
-import com.raavivi.sysmon.ui.whatsapp.CARD_MAX_CHATS
-import com.raavivi.sysmon.ui.whatsapp.CardSettingsPhase
-import com.raavivi.sysmon.ui.whatsapp.CardSettingsState
-import com.raavivi.sysmon.ui.whatsapp.addChat
-import com.raavivi.sysmon.ui.whatsapp.addEstimate
-import com.raavivi.sysmon.ui.whatsapp.canSave
-import com.raavivi.sysmon.ui.whatsapp.chatProgress
-import com.raavivi.sysmon.ui.whatsapp.clockText
-import com.raavivi.sysmon.ui.whatsapp.draftOf
-import com.raavivi.sysmon.ui.whatsapp.draftProblem
-import com.raavivi.sysmon.ui.whatsapp.isEmpty
-import com.raavivi.sysmon.ui.whatsapp.nightHint
-import com.raavivi.sysmon.ui.whatsapp.parseWindow
-import com.raavivi.sysmon.ui.whatsapp.patchOf
-import com.raavivi.sysmon.ui.whatsapp.pickerChats
-import com.raavivi.sysmon.ui.whatsapp.removeChat
-import com.raavivi.sysmon.ui.whatsapp.stepMinMsgs
-import com.raavivi.sysmon.ui.whatsapp.writingHours
+import com.raavivi.sysmon.ui.settings.CARD_MAX_CHATS
+import com.raavivi.sysmon.ui.settings.CardSettingsPhase
+import com.raavivi.sysmon.ui.settings.PickerChatsPhase
+import com.raavivi.sysmon.ui.settings.isSearchOff
+import com.raavivi.sysmon.ui.settings.CardSettingsState
+import com.raavivi.sysmon.ui.settings.addChat
+import com.raavivi.sysmon.ui.settings.addEstimate
+import com.raavivi.sysmon.ui.settings.canSave
+import com.raavivi.sysmon.ui.settings.chatProgress
+import com.raavivi.sysmon.ui.settings.clockText
+import com.raavivi.sysmon.ui.settings.draftOf
+import com.raavivi.sysmon.ui.settings.draftProblem
+import com.raavivi.sysmon.ui.settings.isEmpty
+import com.raavivi.sysmon.ui.settings.nightHint
+import com.raavivi.sysmon.ui.settings.parseWindow
+import com.raavivi.sysmon.ui.settings.patchOf
+import com.raavivi.sysmon.ui.settings.pickerChats
+import com.raavivi.sysmon.ui.settings.removeChat
+import com.raavivi.sysmon.ui.settings.stepMinMsgs
+import com.raavivi.sysmon.ui.settings.writingHours
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,8 +49,7 @@ class CardSettingsTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private val repo = FakeWhatsAppRepository()
     private val toasts = mutableListOf<String>()
-    private var savedCount = 0
-    private val alice = WaCardChat("27820000001@s.whatsapp.net", "Chat One", topics = 14, carded = 9)
+        private val alice = WaCardChat("27820000001@s.whatsapp.net", "Chat One", topics = 14, carded = 9)
     private val bob = "27820000002@s.whatsapp.net"
     private val base = WaCardSettings(window = "03:00-06:00", minMsgs = 10, chats = listOf(alice))
     private lateinit var st: CardSettingsState
@@ -57,7 +58,7 @@ class CardSettingsTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         repo.cardSettingsResult = ApiResult.Ok(base)
-        st = CardSettingsState(repo, CoroutineScope(dispatcher), { savedCount++ }, { toasts += it })
+        st = CardSettingsState(repo, CoroutineScope(dispatcher)) { toasts += it }
     }
 
     @After
@@ -153,10 +154,10 @@ class CardSettingsTest {
     }
 
     @Test
-    fun `the hint names the next start`() {
+    fun `the hint names the window`() {
         val d = draftOf(base)
-        assertEquals("Indexes new messages first, then writes cards. Next start 03:00.", nightHint(d))
-        assertEquals("Indexes new messages first, then writes cards. Next start 22:15.", nightHint(d.copy(from = 22 * 60 + 15)))
+        assertEquals("Writes each night from 03:00 to 06:00", nightHint(d))
+        assertEquals("Writes each night from 22:15 to 06:00", nightHint(d.copy(from = 22 * 60 + 15)))
         assertEquals("Cards are only written when you tap Run.", nightHint(d.copy(night = false)))
     }
 
@@ -174,15 +175,54 @@ class CardSettingsTest {
         assertEquals("None: nothing to card yet", addEstimate("None", WaCardChat("n")))
     }
 
+    private val pickable = listOf(
+        WaChat("27821234567@s.whatsapp.net", "Chat One", 0.0, 0, false),
+        WaChat("27829999999@s.whatsapp.net", "Other Person", 0.0, 0, false),
+        WaChat("120363000000000001@g.us", "Group Name", 0.0, 0, false),
+    )
+
     @Test
-    fun `the picker filters by name in any case`() {
-        val chats = listOf(
-            WaChat("a", "Chat One", 0.0, 0, false),
-            WaChat("b", "Other", 0.0, 0, false),
-        )
-        assertEquals(chats, pickerChats(chats, "  "))
-        assertEquals(listOf("a"), pickerChats(chats, "chat").map { it.jid })
-        assertTrue(pickerChats(chats, "zzz").isEmpty())
+    fun `the picker filters by every word of the name in any case`() {
+        assertEquals(listOf("Other Person"), pickerChats(pickable, "per OTHER").map { it.name })
+        assertEquals(listOf("Chat One"), pickerChats(pickable, "chat").map { it.name })
+        assertTrue(pickerChats(pickable, "zzz").isEmpty())
+        assertTrue(pickerChats(pickable, "chat zzz").isEmpty())
+    }
+
+    @Test
+    fun `a blank query lists every unlisted chat`() {
+        assertEquals(pickable, pickerChats(pickable, "  "))
+        val listed = setOf(pickable[0].jid)
+        assertEquals(pickable.drop(1), pickerChats(pickable, "", listed))
+    }
+
+    @Test
+    fun `already listed chats are left out even when they match`() {
+        assertTrue(pickerChats(pickable, "chat", setOf(pickable[0].jid)).isEmpty())
+        assertTrue(pickerChats(pickable, "27821234567", setOf(pickable[0].jid)).isEmpty())
+    }
+
+    @Test
+    fun `a phone number finds the chat with or without the country code and zeros`() {
+        val want = listOf("Chat One")
+        assertEquals(want, pickerChats(pickable, "+27 82 123 4567").map { it.name })
+        assertEquals(want, pickerChats(pickable, "082 123 4567").map { it.name })
+        assertEquals(want, pickerChats(pickable, "27821234567").map { it.name })
+        assertEquals(want, pickerChats(pickable, "123 4567").map { it.name })
+    }
+
+    @Test
+    fun `fewer than four digits does not search the numbers`() {
+        assertTrue(pickerChats(pickable, "123").isEmpty())
+        assertTrue(pickerChats(pickable, "000").isEmpty())
+    }
+
+    @Test
+    fun `only a 404 means chat search is off`() {
+        assertTrue(isSearchOff(404))
+        assertFalse(isSearchOff(500))
+        assertFalse(isSearchOff(400))
+        assertFalse(isSearchOff(null))
     }
 
     @Test
@@ -198,8 +238,7 @@ class CardSettingsTest {
 
     @Test
     fun `opening reads the settings into a draft`() {
-        st.show()
-        assertTrue(st.open)
+        st.load()
         assertEquals(CardSettingsPhase.READY, st.phase)
         assertEquals(draftOf(base), st.draft)
         assertFalse(st.canSave)
@@ -208,7 +247,7 @@ class CardSettingsTest {
     @Test
     fun `a failed read shows an error and Retry reads again`() {
         repo.cardSettingsResult = ApiResult.Err("Network error: down")
-        st.show()
+        st.load()
         assertEquals(CardSettingsPhase.ERROR, st.phase)
         assertEquals("Network error: down", st.loadError)
         repo.cardSettingsResult = ApiResult.Ok(base)
@@ -220,31 +259,32 @@ class CardSettingsTest {
     fun `loading shows until the read answers`() {
         val gate = CompletableDeferred<Unit>()
         repo.cardSettingsGate = gate
-        st.show()
+        st.load()
         assertEquals(CardSettingsPhase.LOADING, st.phase)
         gate.complete(Unit)
         assertEquals(CardSettingsPhase.READY, st.phase)
     }
 
     @Test
-    fun `saving sends only the change, closes, toasts and tells the status line`() {
-        st.show()
+    fun `saving sends only the change, toasts and re-bases the draft`() {
+        st.load()
         st.stepMin(1)
         assertTrue(st.canSave)
         st.save()
         assertEquals(listOf(WaCardSettingsPatch(minMsgs = 11)), repo.cardSettingsSaves)
-        assertFalse(st.open)
         assertEquals(listOf("Card settings saved"), toasts)
-        assertEquals(1, savedCount)
+        assertFalse(st.dirty)
+        assertFalse(st.canSave)
+        assertEquals(11, st.saved!!.minMsgs)
     }
 
     @Test
-    fun `a refused save keeps the sheet open with the reason until the next edit`() {
-        st.show()
+    fun `a refused save keeps the draft with the reason until the next edit`() {
+        st.load()
         st.setNight(false)
         repo.saveCardSettingsResult = ApiResult.Err("at most 50 chats may be listed", 400)
         st.save()
-        assertTrue(st.open)
+        assertTrue(st.dirty)
         assertFalse(st.saving)
         assertEquals("at most 50 chats may be listed", st.problem)
         assertTrue(toasts.isEmpty())
@@ -254,7 +294,7 @@ class CardSettingsTest {
 
     @Test
     fun `save waits while saving and is single flight`() {
-        st.show()
+        st.load()
         st.stepMin(1)
         val gate = CompletableDeferred<Unit>()
         repo.cardSettingsGate = gate
@@ -269,7 +309,7 @@ class CardSettingsTest {
     @Test
     fun `picking a chat probes it, then Add puts it in the draft`() {
         repo.probeChats = mapOf(bob to WaCardChat(bob, "", topics = 40, carded = 0))
-        st.show()
+        st.load()
         st.openPicker()
         st.pick(bob, "Chat Two")
         assertEquals(listOf<String?>(null, bob), repo.cardSettingsReads)
@@ -283,7 +323,7 @@ class CardSettingsTest {
 
     @Test
     fun `Back from the confirm card leaves the draft alone and a failed probe cannot be added`() {
-        st.show()
+        st.load()
         st.openPicker()
         repo.probeFails = true
         st.pick(bob, "Chat Two")
@@ -297,7 +337,7 @@ class CardSettingsTest {
 
     @Test
     fun `a listed chat cannot be picked again`() {
-        st.show()
+        st.load()
         st.openPicker()
         st.pick(alice.jid, "Chat One")
         assertNull(st.probe)
@@ -305,12 +345,47 @@ class CardSettingsTest {
     }
 
     @Test
-    fun `cancel drops the draft`() {
-        st.show()
-        st.stepMin(5)
-        st.close()
-        assertFalse(st.open)
-        st.show()
-        assertEquals(10, st.draft!!.minMsgs)
+    fun `a 404 on the read shows the off state, not an error`() {
+        repo.cardSettingsResult = ApiResult.Err("Chat search is off", 404)
+        st.load()
+        assertEquals(CardSettingsPhase.OFF, st.phase)
+        assertNull(st.draft)
+        repo.cardSettingsResult = ApiResult.Err("HTTP 500", 500)
+        st.retry()
+        assertEquals(CardSettingsPhase.ERROR, st.phase)
+    }
+
+    @Test
+    fun `dirty follows the edits and clears when they are undone`() {
+        st.load()
+        assertFalse(st.dirty)
+        st.stepMin(1)
+        assertTrue(st.dirty)
+        st.stepMin(-1)
+        assertFalse(st.dirty)
+    }
+
+    @Test
+    fun `the picker reads the chat list once, on first use`() {
+        repo.chatsResult = ApiResult.Ok(pickable)
+        st.load()
+        assertEquals(PickerChatsPhase.IDLE, st.chatsPhase)
+        st.openPicker()
+        assertEquals(PickerChatsPhase.READY, st.chatsPhase)
+        assertEquals(3, st.chats.size)
+        st.closePicker()
+        st.openPicker()
+        assertEquals(1, repo.chatsCalls.size)
+    }
+
+    @Test
+    fun `a failed chat list can be retried`() {
+        repo.chatsResult = ApiResult.Err("Network error: down")
+        st.load()
+        st.openPicker()
+        assertEquals(PickerChatsPhase.ERROR, st.chatsPhase)
+        repo.chatsResult = ApiResult.Ok(pickable)
+        st.loadChats()
+        assertEquals(PickerChatsPhase.READY, st.chatsPhase)
     }
 }

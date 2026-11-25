@@ -60,7 +60,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
+fun WhatsAppScreen(onBack: (() -> Unit)? = null, onOpenCardSettings: () -> Unit = {}) {
     val vm = rememberContainerViewModel { WhatsAppViewModel.from(it) }
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(2500); vm.message = null } }
 
@@ -76,7 +76,7 @@ fun WhatsAppScreen(onBack: (() -> Unit)? = null) {
 
     when {
         vm.currentJid != null -> ConversationView(vm)
-        vm.search.open -> SearchScreen(vm)
+        vm.search.open -> SearchScreen(vm, onOpenCardSettings)
         else -> ChatListView(vm, onBack)
     }
 }
