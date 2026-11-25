@@ -137,7 +137,7 @@ class FakeWhatsAppRepository : WhatsAppRepository {
         return statusResult
     }
 
-    override suspend fun chats(): ApiResult<List<WaChat>> {
+    override suspend fun chats(limit: Int): ApiResult<List<WaChat>> {
         chatsCalls += Unit
         chatsGate?.await()
         return chatsResult

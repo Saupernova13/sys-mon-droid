@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.dp
  * [WhatsAppSearch], so it survives opening a hit and coming back.
  */
 @Composable
-internal fun SearchScreen(vm: WhatsAppViewModel) {
+internal fun SearchScreen(vm: WhatsAppViewModel, onOpenCardSettings: () -> Unit = {}) {
     val s = vm.search
     val c = rememberChatColors()
     // The status is read when the view appears and polled only while it is on screen.
@@ -99,9 +99,8 @@ internal fun SearchScreen(vm: WhatsAppViewModel) {
         }
     }
     if (filtersOpen) SearchFiltersSheet(s, c) { filtersOpen = false }
-    if (statusOpen) SearchStatusSheet(s, c) { statusOpen = false }
+    if (statusOpen) SearchStatusSheet(s, c, onOpenCardSettings) { statusOpen = false }
     if (s.guideOpen) SearchHelpSheet(s.mode, c, onExample = s::openFor, onDismiss = s::closeGuide)
-    CardSettingsSheet(vm, s.conv.cardSettings, c)
 }
 
 /** A rounded toggle for the filter chips: a 48 dp touch target around a 32 dp pill; accent fill when on. */

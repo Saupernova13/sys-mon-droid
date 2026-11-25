@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MonitorHeart
@@ -89,6 +90,7 @@ fun MoreScreen(
     onOpenFindMe: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenJellyfin: () -> Unit = {},
+    onOpenCardSettings: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
     onOpenHealth: () -> Unit = {},
@@ -251,6 +253,13 @@ fun MoreScreen(
                             title = "Jellyfin",
                             subtitle = "Stream detection and alerts",
                             onClick = onOpenJellyfin,
+                            trailing = { Chevron() },
+                        )
+                        SettingsRow(
+                            icon = Icons.Filled.AutoAwesome,
+                            title = "Topic cards",
+                            subtitle = "Night window and chats to card",
+                            onClick = onOpenCardSettings,
                             trailing = { Chevron() },
                         )
                     }

@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SearchStatusSheet(s: WhatsAppSearch, c: ChatColors, onDismiss: () -> Unit) {
+internal fun SearchStatusSheet(s: WhatsAppSearch, c: ChatColors, onOpenCardSettings: () -> Unit, onDismiss: () -> Unit) {
     val inConv = !s.conv.available || s.mode == SearchMode.CONVERSATIONS
     val status = s.conv.status
     val index = indexView(status, inConv)
@@ -61,10 +61,10 @@ internal fun SearchStatusSheet(s: WhatsAppSearch, c: ChatColors, onDismiss: () -
                 StatusLine(
                     Icons.Filled.AutoAwesome, cards, c, busy = s.conv.cardsBusy,
                     onClick = { s.conv.toggleCards(cards.running) },
-                    // The settings sheet is its own sheet: this one steps aside first.
+                    // The settings are their own screen: this sheet steps aside first.
                     onSettings = {
                         onDismiss()
-                        s.conv.cardSettings.show()
+                        onOpenCardSettings()
                     },
                 )
             }

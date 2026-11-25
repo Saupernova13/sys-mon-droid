@@ -67,8 +67,8 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
 
     override suspend fun status(): ApiResult<WaStatus> = safeCall { api.api.waStatus() }
 
-    override suspend fun chats(): ApiResult<List<WaChat>> =
-        safeCall { api.api.waChats() }.mapOk { r -> r.chats.map { it.toWaChat() } }
+    override suspend fun chats(limit: Int): ApiResult<List<WaChat>> =
+        safeCall { api.api.waChats(limit) }.mapOk { r -> r.chats.map { it.toWaChat() } }
 
     override suspend fun messages(
         chat: String,

@@ -42,6 +42,7 @@ object Routes {
     const val NOTIFICATIONS = "notifications"
     const val LOGS = "logs"
     const val JELLYFIN = "jellyfin-settings"
+    const val CARD_SETTINGS = "card-settings"
     const val HEALTH = "health"
     const val UPDATE = "app-update"
 }

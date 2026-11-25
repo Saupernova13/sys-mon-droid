@@ -26,7 +26,7 @@ interface WhatsAppRepository {
     suspend fun status(): ApiResult<WaStatus>
 
     /** Chats in server order; the caller sorts them. */
-    suspend fun chats(): ApiResult<List<WaChat>>
+    suspend fun chats(limit: Int = 100): ApiResult<List<WaChat>>
 
     /** One page of [chat]; [before] / [after] are the server's timestamp cursors, [asc] flips the order. */
     suspend fun messages(

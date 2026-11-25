@@ -1,4 +1,4 @@
-package com.raavivi.sysmon.ui.whatsapp
+package com.raavivi.sysmon.ui.settings
 
 import com.raavivi.sysmon.core.model.WaCardChat
 import com.raavivi.sysmon.core.model.WaCardSettings
@@ -99,9 +99,9 @@ fun draftProblem(draft: CardDraft): String? = when {
 /** Save is offered once something changed and the draft is valid. */
 fun canSave(saved: WaCardSettings, draft: CardDraft): Boolean = !patchOf(saved, draft).isEmpty() && draftProblem(draft) == null
 
-/** The line under the night switch: what the window does and when it next starts. */
+/** The line under the night switch: when the window runs, or that cards only come from a manual run. */
 fun nightHint(draft: CardDraft): String =
-    if (draft.night) "Indexes new messages first, then writes cards. Next start ${clockText(draft.from)}."
+    if (draft.night) "Writes each night from ${clockText(draft.from)} to ${clockText(draft.to)}"
     else "Cards are only written when you tap Run."
 
 fun addChat(draft: CardDraft, chat: WaCardChat): CardDraft =
@@ -129,8 +129,29 @@ fun addEstimate(name: String, chat: WaCardChat): String {
     return "$name: ~$n ${if (n == 1) "topic" else "topics"} to card, about ${hoursText(writingHours(n))} h of overnight writing"
 }
 
-/** The chats the picker offers for [query] (a name fragment, any case), in the order given. */
-fun pickerChats(chats: List<WaChat>, query: String): List<WaChat> {
+/** The digits of [text]; the jid's user part is the phone number. */
+private fun digitsOf(text: String): String = text.filter(Char::isDigit)
+
+/**
+ * The chats the picker offers for [query], in the order given, leaving out the [listed] jids. A chat matches when
+ * its name holds every word of the query (any case), or, when the query has at least 4 digits, when the digits of
+ * its jid hold the query's digits (or those without leading zeros, so "082 123 4567" finds 27821234567).
+ */
+fun pickerChats(chats: List<WaChat>, query: String, listed: Set<String> = emptySet()): List<WaChat> {
+    val open = chats.filter { it.jid !in listed }
     val q = query.trim()
-    return if (q.isEmpty()) chats else chats.filter { it.name.contains(q, ignoreCase = true) }
+    if (q.isEmpty()) return open
+    val words = q.split(Regex("""\s+""")).filter { it.isNotEmpty() }
+    val digits = digitsOf(q)
+    val stripped = digits.trimStart('0')
+    val byPhone = digits.length >= 4
+    return open.filter { chat ->
+        words.all { chat.name.contains(it, ignoreCase = true) } ||
+            (byPhone && digitsOf(chat.jid.substringBefore('@')).let { d ->
+                d.contains(digits) || (stripped.isNotEmpty() && d.contains(stripped))
+            })
+    }
 }
+
+/** What the screen shows for a failed read: a 404 means chat search is off on the server, not an error. */
+fun isSearchOff(code: Int?): Boolean = code == 404

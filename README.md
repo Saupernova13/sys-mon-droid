@@ -170,8 +170,9 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   chat, dates, intensity, unsettled, sorting and the Must have / Any of / Exclude groups for Tags,
   with Clear all and Done), the picked tags as chips (tap to drop) and a slim status chip ("Cards
   writing", "Index up to date") that opens the index and topic-card lines (Update, Run / Stop)
-  and the Card settings sheet: the night window, the chats to card (with an estimate of the
-  writing time before one is added) and the smallest topic that gets a card. Results are
+  and a shortcut to **More > Server > Topic cards** (admin): the night window, the chats to card
+  (added by name or phone number, with an estimate of the writing time before one is added) and
+  the smallest topic that gets a card. Results are
   spacious cards with *Show in chat* and the full card sheet; the chat opens at that point with
   a floating *Back to results* pill, and Back returns to the search with its query, mode,
   filters, scroll position and open card as they were. Opening a hit lands on the message,
