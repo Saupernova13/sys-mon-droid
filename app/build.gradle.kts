@@ -14,8 +14,8 @@ android {
         applicationId = "com.raavivi.sysmon"
         minSdk = 26
         targetSdk = 35
-        versionCode = 30
-        versionName = "0.24.0"
+        versionCode = 31
+        versionName = "0.25.0"
         vectorDrawables { useSupportLibrary = true }
     }
 

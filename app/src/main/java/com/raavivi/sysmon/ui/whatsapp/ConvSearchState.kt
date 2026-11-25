@@ -69,6 +69,9 @@ class ConvSearchState(
     var cardSheet by mutableStateOf<CardSheet?>(null)
         private set
 
+    /** The Card settings sheet, opened from the topic-cards line; a save re-reads the status. */
+    val cardSettings = CardSettingsState(repo, scope, onSaved = { refresh() }, onMessage = onMessage)
+
     private var viewOpen = false
     private var resultsEpoch = 0
     private var statusEpoch = 0

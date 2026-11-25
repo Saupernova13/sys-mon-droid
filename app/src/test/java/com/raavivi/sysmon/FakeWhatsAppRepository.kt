@@ -6,6 +6,9 @@ import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.model.WaAvatarsRefreshResponse
 import com.raavivi.sysmon.core.model.WaChat
 import com.raavivi.sysmon.core.model.WaCardDetail
+import com.raavivi.sysmon.core.model.WaCardChat
+import com.raavivi.sysmon.core.model.WaCardSettings
+import com.raavivi.sysmon.core.model.WaCardSettingsPatch
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
@@ -252,6 +255,44 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     override suspend fun chatSearchIndex(): ApiResult<Unit> {
         indexRequests++
         return actionResult
+    }
+
+    /** What `cardSettings()` answers (the probe, when asked for, is looked up in [probeChats]). */
+    var cardSettingsResult: ApiResult<WaCardSettings> = ApiResult.Ok(WaCardSettings())
+    var probeChats: Map<String, WaCardChat> = emptyMap()
+    var probeFails = false
+
+    /** The probe jid of each `cardSettings()` call (null for a plain read). */
+    val cardSettingsReads = mutableListOf<String?>()
+
+    /** What `saveCardSettings()` answers; null answers the saved settings with the patch applied. */
+    var saveCardSettingsResult: ApiResult<WaCardSettings>? = null
+    val cardSettingsSaves = mutableListOf<WaCardSettingsPatch>()
+
+    /** When set, `cardSettings()` and `saveCardSettings()` park on it (after recording the call) until completed. */
+    var cardSettingsGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun cardSettings(probe: String?): ApiResult<WaCardSettings> {
+        cardSettingsReads += probe
+        cardSettingsGate?.await()
+        if (probe == null) return cardSettingsResult
+        if (probeFails) return ApiResult.Err("HTTP 400", 400)
+        val base = (cardSettingsResult as? ApiResult.Ok)?.value ?: WaCardSettings()
+        return ApiResult.Ok(base.copy(probe = probeChats[probe] ?: WaCardChat(jid = probe)))
+    }
+
+    override suspend fun saveCardSettings(patch: WaCardSettingsPatch): ApiResult<WaCardSettings> {
+        cardSettingsSaves += patch
+        cardSettingsGate?.await()
+        saveCardSettingsResult?.let { return it }
+        val base = (cardSettingsResult as? ApiResult.Ok)?.value ?: WaCardSettings()
+        return ApiResult.Ok(
+            base.copy(
+                window = patch.window ?: base.window,
+                minMsgs = patch.minMsgs ?: base.minMsgs,
+                chats = patch.chats?.map { jid -> WaCardChat(jid = jid) } ?: base.chats,
+            ),
+        )
     }
 
     override suspend fun chatSearchCardsRun(): ApiResult<Unit> {

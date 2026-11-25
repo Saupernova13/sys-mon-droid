@@ -214,3 +214,28 @@ data class WaPickReq(
 /** How many queries are marked each way. */
 @Serializable
 data class WaPickCounts(val found: Int = 0, val notHere: Int = 0)
+
+/** A chat the topic-card writer works on: its [topics] big enough to card and how many of them are [carded]. Names are private. */
+@Serializable
+data class WaCardChat(val jid: String = "", val name: String = "", val topics: Int = 0, val carded: Int = 0)
+
+/** Where each card setting's value comes from: `"settings"` (saved) or `"env"` (the server's environment). */
+@Serializable
+data class WaCardSettingsSource(val window: String = "", val chats: String = "", val minMsgs: String = "")
+
+/**
+ * `GET`/`PUT /api/whatsapp/chat-search/cards/settings`. [window] is `HH:MM-HH:MM` or empty (no window);
+ * [probe] is only there when the read asked for one chat.
+ */
+@Serializable
+data class WaCardSettings(
+    val window: String = "",
+    val minMsgs: Int = 10,
+    val chats: List<WaCardChat> = emptyList(),
+    val source: WaCardSettingsSource? = null,
+    val probe: WaCardChat? = null,
+)
+
+/** The `PUT` body: only the fields that changed (a null one is left out of the JSON). */
+@Serializable
+data class WaCardSettingsPatch(val window: String? = null, val chats: List<String>? = null, val minMsgs: Int? = null)

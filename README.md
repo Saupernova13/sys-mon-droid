@@ -166,7 +166,9 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   here* verdicts, and the index / topic-card status lines) and a *Tags* mode browses and filters
   every conversation by the tags its topic card carries (type-ahead, Must have / Any of / Exclude,
   filters for chat, dates, intensity and unsettled, sorting, full card sheet; no model involved;
-  the mode you pick is remembered). Opening a hit lands on the message,
+  the mode you pick is remembered). The topic-cards line has a Card settings sheet: the night
+  window, the chats to card (with an estimate of the writing time before one is added) and the
+  smallest topic that gets a card. Opening a hit lands on the message,
   and the in-chat bar (magnifier in the conversation header) steps through that chat's hits,
   highlights the words and marks the days on the timeline scrubber.
 
