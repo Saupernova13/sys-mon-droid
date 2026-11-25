@@ -2,12 +2,17 @@ package com.raavivi.sysmon
 
 import coil.ImageLoader
 import com.raavivi.sysmon.core.model.WaChat
+import com.raavivi.sysmon.core.model.WaChatSearchResponse
+import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaConvResult
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaSearchRow
 import com.raavivi.sysmon.core.model.WaTimelineDay
 import com.raavivi.sysmon.core.net.ApiResult
+import com.raavivi.sysmon.ui.whatsapp.ScrollPos
+import com.raavivi.sysmon.ui.whatsapp.SearchChip
+import com.raavivi.sysmon.ui.whatsapp.SearchMode
 import com.raavivi.sysmon.ui.whatsapp.VoiceNotePlayer
 import com.raavivi.sysmon.ui.whatsapp.VoiceRecorder
 import com.raavivi.sysmon.ui.whatsapp.WA_PAGE_LIMIT
@@ -235,4 +240,109 @@ class WhatsAppViewModelSearchTest {
         assertEquals("old2", vm.focusId)
         assertFalse(vm.jumpingDate)
     }
+
+    // -- back to results -------------------------------------------------------------------------
+
+    private val trip = WaConvResult(nodeId = 11, chat = alice, chatName = "Invented", startTs = 1000, endTs = 1600, nMsgs = 3)
+
+    /** The Search view open on a Conversations query with one result, as a user would have it before tapping Show in chat. */
+    private fun searchWithResult(): WhatsAppViewModel {
+        repo.messagesResponder = { ApiResult.Ok(listOf(msg("m1", 1000.0))) }
+        repo.chatSearchStatusResult = ApiResult.Ok(WaChatSearchStatus(enabled = true, nodeVectors = 5))
+        repo.chatSearchResult = ApiResult.Ok(WaChatSearchResponse(results = listOf(trip)))
+        val vm = newViewModel()
+        vm.search.openView()
+        vm.search.viewShown()
+        vm.search.openFor("trip")
+        return vm
+    }
+
+    @Test
+    fun `a chat opened from a result shows Back to results, and coming back restores the whole view`() {
+        val vm = searchWithResult()
+        vm.search.conv.openCard(0)
+        vm.search.scroll.save(SearchMode.CONVERSATIONS, 4, 30)
+        assertFalse(vm.search.backToResultsShown(vm.currentJid))
+
+        vm.openConversation(trip)
+        assertEquals(alice, vm.currentJid)
+        assertTrue(vm.search.backToResultsShown(vm.currentJid))
+
+        vm.backToResults()
+
+        assertNull(vm.currentJid)
+        assertFalse(vm.search.backToResultsShown(vm.currentJid))
+        assertTrue(vm.search.open)
+        assertEquals("trip", vm.search.query)
+        assertEquals(SearchMode.CONVERSATIONS, vm.search.mode)
+        assertEquals(listOf(trip), vm.search.conv.results)
+        assertEquals(0, vm.search.conv.cardSheet?.index)          // the open card is still open
+        assertEquals(ScrollPos(4, 30), vm.search.scroll.restore(SearchMode.CONVERSATIONS))
+    }
+
+    @Test
+    fun `a Messages hit and a card moment open from search too`() {
+        val vm = searchWithResult()
+        vm.openChatAt(alice, "Invented", 1100, focusId = "m1")
+        assertTrue(vm.search.backToResultsShown(vm.currentJid))
+        vm.backToResults()
+        assertNull(vm.currentJid)
+
+        vm.openSearchHit(hit("m1", 1000))
+        assertTrue(vm.search.backToResultsShown(vm.currentJid))
+    }
+
+    @Test
+    fun `the pill goes when the chat is left another way`() {
+        val vm = searchWithResult()
+        vm.openConversation(trip)
+        assertTrue(vm.search.backToResultsShown(vm.currentJid))
+
+        vm.openChat(bob, "Bob")
+        assertFalse(vm.search.backToResultsShown(vm.currentJid))
+        assertNull(vm.search.originChat)
+
+        vm.openConversation(trip)
+        vm.closeChat()
+        assertNull(vm.search.originChat)
+        assertTrue(vm.search.open)                 // the header's back also lands on the results, as before
+    }
+
+    @Test
+    fun `a chat opened with the Search view closed has no pill`() {
+        repo.messagesResponder = { ApiResult.Ok(listOf(msg("m1", 1000.0))) }
+        val vm = newViewModel()
+        vm.openChatAt(alice, "Test Chat", 1000, "m1")
+        assertFalse(vm.search.backToResultsShown(vm.currentJid))
+        vm.backToResults()
+        assertEquals(alice, vm.currentJid)         // nothing to go back to: the call does nothing
+    }
+
+    @Test
+    fun `a new query starts the list at the top, closing the view drops the open card`() {
+        val vm = searchWithResult()
+        vm.search.scroll.save(SearchMode.CONVERSATIONS, 6, 0)
+        vm.search.submit()
+        assertEquals(ScrollPos(), vm.search.scroll.restore(SearchMode.CONVERSATIONS))
+
+        vm.search.conv.openCard(0)
+        vm.search.closeView()
+        assertNull(vm.search.conv.cardSheet)
+    }
+
+    @Test
+    fun `clearing all Messages filters turns the chips off and re-runs the query`() {
+        repo.searchResponder = { ApiResult.Ok(WaSearchResponse(results = listOf(hit("m1", 1000)), total = 1)) }
+        val vm = newViewModel()
+        vm.search.openFor("hello")
+        vm.search.pressChip(SearchChip.PHOTOS)
+        vm.search.pressChip(SearchChip.MINE)
+        assertEquals(2, vm.search.activeFilters)
+
+        vm.search.clearAllFilters()
+
+        assertEquals(0, vm.search.activeFilters)
+        assertTrue(vm.search.messages.chips.none)
+    }
 }
+

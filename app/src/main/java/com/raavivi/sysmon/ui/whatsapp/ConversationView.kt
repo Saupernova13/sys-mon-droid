@@ -122,34 +122,40 @@ internal fun ConversationView(vm: WhatsAppViewModel) {
         if (vm.search.inChat.open) InChatSearchTopBar(vm.search.inChat, c)
         else ConversationHeaderHost(vm, c, onGoToDate = { showDatePicker = true })
         vm.message?.let { Toast(it) }
-        Column(Modifier.weight(1f).fillMaxWidth().chatWallpaper(c)) {
-            MessageArea(
-                vm = vm, data = data, scroll = scroll, listState = listState, c = c, reduced = reduced,
-                flashId = flashId, menuMsg = menuMsg,
-                onOpenImage = { viewing = it },
-                onQuoteTap = scrollToMessage,
-                onMenuMsgChange = { menuMsg = it },
-                onMenuAction = { m, act ->
-                    when (act) {
-                        WaMenuAction.REPLY -> vm.setReply(m)
-                        WaMenuAction.COPY -> clipboard.setText(AnnotatedString(waCaptionOf(m)))
-                        WaMenuAction.FORWARD -> forwardMsg = m
-                        WaMenuAction.EDIT -> { vm.startEdit(m); composerText = m.text }
-                        WaMenuAction.SAVE -> vm.saveImage(m)
-                        WaMenuAction.INFO -> infoMsg = m
-                        WaMenuAction.DELETE -> Unit
-                    }
-                },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
-            if (vm.search.inChat.open) {
-                InChatSearchBottomBar(vm.search.inChat, c)
-            } else {
-                vm.uploading?.let { UploadingRow(it, c) }
-                ComposerHost(
-                    vm = vm, names = data.names, c = c, reduced = reduced,
-                    text = composerText, onTextChange = { composerText = it },
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.fillMaxSize().chatWallpaper(c)) {
+                MessageArea(
+                    vm = vm, data = data, scroll = scroll, listState = listState, c = c, reduced = reduced,
+                    flashId = flashId, menuMsg = menuMsg,
+                    onOpenImage = { viewing = it },
+                    onQuoteTap = scrollToMessage,
+                    onMenuMsgChange = { menuMsg = it },
+                    onMenuAction = { m, act ->
+                        when (act) {
+                            WaMenuAction.REPLY -> vm.setReply(m)
+                            WaMenuAction.COPY -> clipboard.setText(AnnotatedString(waCaptionOf(m)))
+                            WaMenuAction.FORWARD -> forwardMsg = m
+                            WaMenuAction.EDIT -> { vm.startEdit(m); composerText = m.text }
+                            WaMenuAction.SAVE -> vm.saveImage(m)
+                            WaMenuAction.INFO -> infoMsg = m
+                            WaMenuAction.DELETE -> Unit
+                        }
+                    },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
+                if (vm.search.inChat.open) {
+                    InChatSearchBottomBar(vm.search.inChat, c)
+                } else {
+                    vm.uploading?.let { UploadingRow(it, c) }
+                    ComposerHost(
+                        vm = vm, names = data.names, c = c, reduced = reduced,
+                        text = composerText, onTextChange = { composerText = it },
+                    )
+                }
+            }
+            // A chat opened from a search result: one tap (or system back) returns to the results.
+            if (vm.search.backToResultsShown(vm.currentJid)) {
+                BackToResultsPill(c, onClick = vm::backToResults, modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 8.dp))
             }
         }
     }

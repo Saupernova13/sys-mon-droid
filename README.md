@@ -160,15 +160,21 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   contact search, and pairing-status guidance including why the sync daemon
   stopped. Reading a chat leaves it unread; *Mark as read* clears it on WhatsApp too.
   Two searches: the magnifier in the chat list (or "Search messages for ..." under the chat
-  filter) opens a Search view over every chat, grouped by chat with Mine / Theirs / Photos /
-  Videos / Voice notes / Documents chips; where the server's conversation search is on, a
-  *Conversations* mode finds a whole conversation by meaning (topic cards, *Found it* / *Not
-  here* verdicts, and the index / topic-card status lines) and a *Tags* mode browses and filters
-  every conversation by the tags its topic card carries (type-ahead, Must have / Any of / Exclude,
-  filters for chat, dates, intensity and unsettled, sorting, full card sheet; no model involved;
-  the mode you pick is remembered). The topic-cards line has a Card settings sheet: the night
-  window, the chats to card (with an estimate of the writing time before one is added) and the
-  smallest topic that gets a card. Opening a hit lands on the message,
+  filter) opens a Search view over every chat, grouped by chat; where the server's conversation
+  search is on, a *Conversations* mode finds a whole conversation by meaning (topic cards,
+  *Found it* / *Not here* verdicts) and a *Tags* mode browses and filters every conversation by
+  the tags its topic card carries (type-ahead, Must have / Any of / Exclude, no model involved;
+  the mode you pick is remembered). The view is kept roomy: one header (back, field, help) and
+  the mode switch, then one row with a *Filters* pill (a count of what is set; it opens a sheet
+  with Mine / Theirs / Photos / Videos / Voice notes / Documents for Messages, or the category,
+  chat, dates, intensity, unsettled, sorting and the Must have / Any of / Exclude groups for Tags,
+  with Clear all and Done), the picked tags as chips (tap to drop) and a slim status chip ("Cards
+  writing", "Index up to date") that opens the index and topic-card lines (Update, Run / Stop)
+  and the Card settings sheet: the night window, the chats to card (with an estimate of the
+  writing time before one is added) and the smallest topic that gets a card. Results are
+  spacious cards with *Show in chat* and the full card sheet; the chat opens at that point with
+  a floating *Back to results* pill, and Back returns to the search with its query, mode,
+  filters, scroll position and open card as they were. Opening a hit lands on the message,
   and the in-chat bar (magnifier in the conversation header) steps through that chat's hits,
   highlights the words and marks the days on the timeline scrubber.
 

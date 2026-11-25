@@ -249,6 +249,7 @@ class WhatsAppViewModel(
             }
         }
         search.rangeHighlight = range
+        search.noteOpenedFromSearch(jid)
     }
 
     /** A Search-view message hit: open its chat at that message, then carry the query on in the in-chat bar. */
@@ -326,6 +327,11 @@ class WhatsAppViewModel(
             message = runCatching { "Saved to ${mediaTools.saveImage(msg)}" }
                 .getOrElse { "Save failed: ${it.message ?: "unknown error"}" }
         }
+    }
+
+    /** "Back to results": leave the chat a result opened; the Search view is still open behind it, state intact. */
+    fun backToResults() {
+        if (search.backToResultsShown(currentJid)) closeChat()
     }
 
     fun closeChat() {
