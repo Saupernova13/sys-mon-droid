@@ -111,8 +111,10 @@ import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaRunResponse
 import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaTimelineResponse
+import com.raavivi.sysmon.core.model.CiCardEdit
 import com.raavivi.sysmon.core.model.CiCardFull
 import com.raavivi.sysmon.core.model.CiCardsPage
+import com.raavivi.sysmon.core.model.CiEditOptions
 import com.raavivi.sysmon.core.model.CiFamiliesPage
 import com.raavivi.sysmon.core.model.CiMessagesWire
 import com.raavivi.sysmon.core.model.CiNodeDetail
@@ -569,6 +571,14 @@ interface ApiService {
     /** Delete a manual card with its words and vectors: 204. */
     @DELETE("api/whatsapp/chat-search/cards/{id}")
     suspend fun waCardDelete(@Path("id") id: Long): Response<Unit>
+
+    /** What a card edit may name (facets, detail kinds, the recall query range). */
+    @GET("api/whatsapp/chat-search/cards/edit-options")
+    suspend fun waCardEditOptions(): CiEditOptions
+
+    /** Edit a card in place; 200 answers the card as the explore read does. 409 `stale` / `not_done`. */
+    @PUT("api/whatsapp/chat-search/cards/{id}")
+    suspend fun waCardEdit(@Path("id") id: Long, @Body body: CiCardEdit): CiCardFull
 
     @POST("api/whatsapp/chat-search/tags/query")
     suspend fun waChatSearchTags(@Body body: WaTagsReq): WaTagsResponse

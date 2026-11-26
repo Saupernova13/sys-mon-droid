@@ -73,6 +73,8 @@ data class CiCardRow(
     val state: String = "done",
     val updatedAt: Long = 0,
     val origin: String = "auto",
+    /** Unix seconds of the owner's last edit; null for a card never edited. */
+    val editedAt: Long? = null,
 ) {
     val isManual: Boolean get() = origin == "manual"
 }
@@ -108,6 +110,8 @@ data class CiCardFull(
     val promptVersion: Long? = null,
     val failReason: String? = null,
     val updatedAt: Long = 0,
+    /** Unix seconds of the owner's last edit; null for a card never edited. */
+    val editedAt: Long? = null,
     val nodeId: Long? = null,
     val origin: String = "auto",
     val instruction: String? = null,
@@ -211,3 +215,71 @@ data class LexEntryPutReq(val terms: List<String>, val meaning: String, val vers
 
 @Serializable
 data class LexTermReq(val term: String)
+
+// -- card edit ---------------------------------------------------------------------------------------
+
+/** How many recall queries a card must have. */
+@Serializable
+data class CiRange(val min: Int = 3, val max: Int = 5)
+
+/** `GET .../cards/edit-options`: what a card edit may name, for the editor's pickers. */
+@Serializable
+data class CiEditOptions(
+    val facets: List<String> = emptyList(),
+    val detailKinds: List<String> = emptyList(),
+    val detailKindsMax: Int = 3,
+    val recallQueries: CiRange = CiRange(),
+)
+
+// The PUT body. Its parts have no defaults on purpose: the app's JSON leaves default values out, and the server
+// wants every field of an edited card (an empty list or a false flag included).
+
+@Serializable
+data class CiEditAct(val kind: String, val intensity: Int, val resolved: Boolean)
+
+@Serializable
+data class CiEditFacet(val name: String, val confidence: Double)
+
+@Serializable
+data class CiEditDetail(val kinds: List<String>, val who: String, val text: String)
+
+@Serializable
+data class CiEditLex(val term: String, val meaning: String)
+
+@Serializable
+data class CiEditSub(
+    val title: String,
+    val summary: String,
+    val said: List<String>,
+    val meant: List<String>,
+    val acts: List<CiEditAct>,
+    val facets: List<CiEditFacet>,
+    val details: List<CiEditDetail>,
+)
+
+@Serializable
+data class CiEditTopic(
+    val title: String,
+    val summary: String,
+    val said: List<String>,
+    val meant: List<String>,
+    val topics: List<String>,
+    val acts: List<CiEditAct>,
+    val facets: List<CiEditFacet>,
+    val entities: List<String>,
+    val recallQueries: List<String>,
+    val details: List<CiEditDetail>,
+    val lexicon: List<CiEditLex>,
+)
+
+/**
+ * `PUT .../cards/{id}`: the edited card, its sub-topic cards, the indexes of the moments to keep (each once, in
+ * order; moments can only be removed) and the [updatedAt] of the card as it was read.
+ */
+@Serializable
+data class CiCardEdit(
+    val card: CiEditTopic,
+    val subtopics: List<CiEditSub>,
+    val keepMoments: List<Int>,
+    val updatedAt: Long,
+)

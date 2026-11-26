@@ -58,11 +58,15 @@ internal fun CardView(data: CiCardFull, chatLabel: String, onOpenChat: (ChatOpen
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                cardFacts(data.nMsgs, data.state, data.model, data.promptVersion),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    cardFacts(data.nMsgs, data.state, data.model, data.promptVersion),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (data.editedAt != null) EditedChip(data.editedAt)
+            }
             if (data.isManual && !data.instruction.isNullOrBlank()) {
                 Text(
                     "You asked: ${data.instruction}",

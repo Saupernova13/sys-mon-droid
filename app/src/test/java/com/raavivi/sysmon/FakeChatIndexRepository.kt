@@ -1,8 +1,10 @@
 package com.raavivi.sysmon
 
 import com.raavivi.sysmon.core.data.chatindex.ChatIndexRepository
+import com.raavivi.sysmon.core.model.CiCardEdit
 import com.raavivi.sysmon.core.model.CiCardFull
 import com.raavivi.sysmon.core.model.CiCardsPage
+import com.raavivi.sysmon.core.model.CiEditOptions
 import com.raavivi.sysmon.core.model.CiFamiliesPage
 import com.raavivi.sysmon.core.model.CiMessagesPage
 import com.raavivi.sysmon.core.model.CiNodeDetail
@@ -36,6 +38,12 @@ class FakeChatIndexRepository : ChatIndexRepository {
     val cardResults = HashMap<Long, ApiResult<CiCardFull>>()
     var storageResult: ApiResult<CiStorage> = ApiResult.Ok(CiStorage())
     var deleteCardResult: ApiResult<Unit> = ApiResult.Ok(Unit)
+    var editOptionsResult: ApiResult<CiEditOptions> = ApiResult.Ok(CiEditOptions())
+
+    /** Answers a save; the default hands back the card held in [cardResults], as the server answers its stored card. */
+    var editResponder: (Long, CiCardEdit) -> ApiResult<CiCardFull> = { id, _ -> cardResults[id] ?: ApiResult.Err("no such card", 404) }
+    val edits = mutableListOf<Pair<Long, CiCardEdit>>()
+    var editOptionsCalls = 0
 
     val familiesCalls = mutableListOf<Int>()
     val sessionsCalls = mutableListOf<Pair<Long, Int>>()
@@ -130,6 +138,16 @@ class FakeChatIndexRepository : ChatIndexRepository {
     override suspend fun deleteCard(id: Long): ApiResult<Unit> {
         deletedCards += id
         return deleteCardResult
+    }
+
+    override suspend fun editOptions(): ApiResult<CiEditOptions> {
+        editOptionsCalls++
+        return editOptionsResult
+    }
+
+    override suspend fun editCard(id: Long, edit: CiCardEdit): ApiResult<CiCardFull> {
+        edits += id to edit
+        return editResponder(id, edit)
     }
 
     override suspend fun lexicon(): ApiResult<Lexicon> {

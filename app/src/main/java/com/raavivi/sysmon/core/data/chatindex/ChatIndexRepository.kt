@@ -1,7 +1,9 @@
 package com.raavivi.sysmon.core.data.chatindex
 
+import com.raavivi.sysmon.core.model.CiCardEdit
 import com.raavivi.sysmon.core.model.CiCardFull
 import com.raavivi.sysmon.core.model.CiCardsPage
+import com.raavivi.sysmon.core.model.CiEditOptions
 import com.raavivi.sysmon.core.model.CiFamiliesPage
 import com.raavivi.sysmon.core.model.CiMessagesPage
 import com.raavivi.sysmon.core.model.CiNodeDetail
@@ -41,6 +43,12 @@ interface ChatIndexRepository {
 
     /** Delete a card the owner asked for. 409 `not_manual`: a topic card cannot be deleted; 404: already gone. */
     suspend fun deleteCard(id: Long): ApiResult<Unit>
+
+    /** What a card edit may name; 404 when chat search is off. */
+    suspend fun editOptions(): ApiResult<CiEditOptions>
+
+    /** Replace a card with [edit]; 200 answers the saved card. 409 `stale` (changed since read) or `not_done` (failed card). */
+    suspend fun editCard(id: Long, edit: CiCardEdit): ApiResult<CiCardFull>
 
     suspend fun lexicon(): ApiResult<Lexicon>
     suspend fun addEntry(terms: List<String>, meaning: String): ApiResult<LexEntry>

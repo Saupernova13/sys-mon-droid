@@ -22,6 +22,12 @@ sealed interface ChatIndexError {
     /** 409 `not_manual`: only a card the owner asked for can be deleted. */
     data object NotManual : ChatIndexError
 
+    /** 409 `not_done`: a failed card has nothing to edit. */
+    data object NotDone : ChatIndexError
+
+    /** 500 "the edited card could not be read back": the edit was saved, the reply could not be built. */
+    data object ReadBack : ChatIndexError
+
     /** 400, with the server's reason. */
     data class Refused(val reason: String) : ChatIndexError
 
@@ -43,8 +49,29 @@ fun chatIndexErrorOf(err: ApiResult.Err): ChatIndexError = when (err.code) {
         "stale" -> ChatIndexError.Stale
         "duplicate" -> ChatIndexError.Duplicate
         "not_manual" -> ChatIndexError.NotManual
+        "not_done" -> ChatIndexError.NotDone
         else -> ChatIndexError.Other(err.message)
     }
     503 -> ChatIndexError.Unavailable
+    500 -> if (err.message.contains("read back", ignoreCase = true)) ChatIndexError.ReadBack else ChatIndexError.Other(err.message)
     else -> ChatIndexError.Other(err.message)
 }
+
+/** What a failed card edit says, in one sentence (the server's reasons are fixed sentences, never the text). */
+fun editErrorText(err: ApiResult.Err): String = when (val e = chatIndexErrorOf(err)) {
+    ChatIndexError.Stale -> "This card changed since you opened it. Reload it to see the latest, then edit again."
+    ChatIndexError.NotDone -> "A failed card has nothing to edit."
+    ChatIndexError.Missing -> "This card is no longer there."
+    ChatIndexError.Off -> "Chat search is off on the server."
+    ChatIndexError.ReadBack ->
+        "The edit was saved, but the card could not be read back. Reload the card to see it; do not save again."
+    ChatIndexError.Unavailable -> "The card store cannot be used right now. Try again in a moment."
+    is ChatIndexError.Refused -> e.reason.trim().replaceFirstChar { it.uppercase() }.let { if (it.endsWith(".")) it else "$it." }
+    else -> when {
+        err.code == null -> "Could not reach the server. Check the connection and try again."
+        else -> "The card could not be saved. Try again."
+    }
+}
+
+/** Whether a failed edit should offer Reload card (the card moved on, or the edit landed without a reply). */
+fun editNeedsReload(err: ApiResult.Err): Boolean = chatIndexErrorOf(err).let { it == ChatIndexError.Stale || it == ChatIndexError.ReadBack }

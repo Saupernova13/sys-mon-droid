@@ -1,5 +1,10 @@
 package com.raavivi.sysmon.ui.chatindex
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -11,12 +16,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -150,4 +159,29 @@ fun RowCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
         tonalElevation = 2.dp,
         content = content,
     )
+}
+
+/**
+ * The Edited assist chip of a card the owner has edited, with its date. It fades and scales in (200 ms) when the
+ * card appears, so a saved card shows the change.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditedChip(editedAt: Long?, modifier: Modifier = Modifier) {
+    val visible = remember { MutableTransitionState(false).apply { targetState = true } }
+    AnimatedVisibility(
+        visibleState = visible,
+        modifier = modifier,
+        enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.9f),
+    ) {
+        AssistChip(
+            onClick = {},
+            label = { Text(editedLabel(editedAt), style = MaterialTheme.typography.bodySmall) },
+            colors = AssistChipDefaults.assistChipColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ),
+            border = null,
+        )
+    }
 }
