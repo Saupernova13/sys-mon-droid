@@ -31,8 +31,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,6 +56,10 @@ import com.raavivi.sysmon.ui.common.SectionCard
 import com.raavivi.sysmon.ui.common.SettingsRow
 import com.raavivi.sysmon.ui.common.SwitchRow
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** How long "Removed · Undo" waits. */
+private const val UNDO_MS = 5_000L
 
 /**
  * Settings > Topic cards (admin): the night window, the chats to card and the smallest topic that gets a card.
@@ -72,6 +78,15 @@ fun CardSettingsScreen(onBack: () -> Unit) {
             snackbar.showSnackbar(msg)
             vm.message = null
         }
+    }
+
+    // A removed theme shows "Removed · Undo", as the card editor does.
+    LaunchedEffect(st.removalSeq) {
+        if (st.removalSeq == 0) return@LaunchedEffect
+        val r = withTimeoutOrNull(UNDO_MS) {
+            snackbar.showSnackbar("Removed", actionLabel = "Undo", duration = SnackbarDuration.Indefinite)
+        }
+        if (r == SnackbarResult.ActionPerformed) st.undoRemoveTheme()
     }
 
     val leave = { if (st.dirty) confirmDiscard = true else onBack() }
@@ -112,6 +127,7 @@ fun CardSettingsScreen(onBack: () -> Unit) {
                             NightSection(st, draft)
                             ChatsSection(st, draft)
                             TopicSizeSection(st, draft)
+                            if (draft.hasThemes) ThemesSection(st, draft)
                         }
                     }
                 }

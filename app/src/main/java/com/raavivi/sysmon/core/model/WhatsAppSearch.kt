@@ -47,6 +47,8 @@ data class WaConvCard(
     val ofParent: Boolean = false,
     /** Unix seconds of the owner's last edit; null for a card never edited. */
     val editedAt: Long? = null,
+    /** The card's themes (names, writer's order); empty for a card written before themes. */
+    val facets: List<String> = emptyList(),
 )
 
 /** A sub-topic result's parent topic. */
@@ -98,7 +100,13 @@ data class WaChatSearchResponse(
     val degraded: String? = null,
     /** The owner's own cards that matched, beside [results] and never among them (best first, at most 5). */
     val yourCards: List<WaYourCard> = emptyList(),
+    /** How many cards of the pool carry each theme, most first; counts what the filter left. */
+    val facetCounts: List<WaFacetCount> = emptyList(),
 )
+
+/** One theme of [WaChatSearchResponse.facetCounts] and how many conversations carry it. */
+@Serializable
+data class WaFacetCount(val name: String = "", val count: Int = 0)
 
 /** One act in a topic card (a kind of speech act); [intensity] is 0..5, [resolved] whether it was settled. */
 @Serializable
@@ -238,7 +246,13 @@ data class WaCardChat(val jid: String = "", val name: String = "", val topics: I
 
 /** Where each card setting's value comes from: `"settings"` (saved) or `"env"` (the server's environment). */
 @Serializable
-data class WaCardSettingsSource(val window: String = "", val chats: String = "", val minMsgs: String = "")
+data class WaCardSettingsSource(
+    val window: String = "",
+    val chats: String = "",
+    val minMsgs: String = "",
+    /** `"settings"`, `"env"` or `"default"`. */
+    val facets: String = "",
+)
 
 /**
  * `GET`/`PUT /api/whatsapp/chat-search/cards/settings`. [window] is `HH:MM-HH:MM` or empty (no window);
@@ -249,10 +263,18 @@ data class WaCardSettings(
     val window: String = "",
     val minMsgs: Int = 10,
     val chats: List<WaCardChat> = emptyList(),
+    /** The themes in force, and the built-in list (what "Use the built-in list" restores). */
+    val facets: List<String> = emptyList(),
+    val defaultFacets: List<String> = emptyList(),
     val source: WaCardSettingsSource? = null,
     val probe: WaCardChat? = null,
 )
 
 /** The `PUT` body: only the fields that changed (a null one is left out of the JSON). */
 @Serializable
-data class WaCardSettingsPatch(val window: String? = null, val chats: List<String>? = null, val minMsgs: Int? = null)
+data class WaCardSettingsPatch(
+    val window: String? = null,
+    val chats: List<String>? = null,
+    val minMsgs: Int? = null,
+    val facets: List<String>? = null,
+)

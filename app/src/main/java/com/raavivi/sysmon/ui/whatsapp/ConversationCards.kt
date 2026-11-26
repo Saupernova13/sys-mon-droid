@@ -77,6 +77,8 @@ internal fun ConversationResults(vm: WhatsAppViewModel, c: ChatColors, modifier:
     val reduced = rememberReducedMotion()
     val hideKeyboard = rememberHideKeyboard()
     Column(modifier) {
+        // Directly above the results: the theme chips (the list below stays while a filtered search runs).
+        if (s.query.isNotBlank() && themeRowShown(conv)) ThemeChipsRow(conv, c)
         Box(Modifier.weight(1f)) {
             when {
                 s.query.isBlank() -> SearchIdle(SearchMode.CONVERSATIONS, s.recent, s::openFor, s::clearRecent, c, onGuide = s::openGuide)
@@ -85,6 +87,14 @@ internal fun ConversationResults(vm: WhatsAppViewModel, c: ChatColors, modifier:
                 conv.phase == SearchPhase.ERROR -> {
                     val text = conv.error ?: SEARCH_FAILED
                     ScrollingState { SearchError(text, c, onRetry = if (isRetryableSearchError(text)) s::submit else null) }
+                }
+                conv.results.isEmpty() && conv.yourCards.isEmpty() && conv.selectedThemes.isNotEmpty() -> ScrollingState {
+                    // The next step, not a dead end: with a filter on, an empty answer offers to take it off.
+                    SearchEmpty("No conversations with these themes", "", c) {
+                        TextButton(onClick = conv::clearThemes, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text("Clear themes", style = chatSecondaryStyle(c.accent, FontWeight.SemiBold))
+                        }
+                    }
                 }
                 conv.results.isEmpty() && conv.yourCards.isEmpty() -> ScrollingState { SearchEmpty("No conversations found", "Try describing it differently", c) }
                 else -> ConvList(vm, nowSec, c, reduced, hideKeyboard)
@@ -202,6 +212,7 @@ private fun YourCardItem(
                 }
                 YourCardChip(c)
                 Text("$name · ${convRange(y.start.ts, y.end.ts, nowSec)}", style = chatSecondaryStyle(c.meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                ThemesLine(y.facets, c)
                 if (summary != null) Text(summary, style = chatSecondaryStyle(c.ink), maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -264,6 +275,7 @@ private fun ConvCard(
                     CountBadge(r.nMsgs, c, Modifier.clearAndSetSemantics { contentDescription = messagesLabel(r.nMsgs) })
                 }
                 Text(if (card != null) "$name · $range" else range, style = chatSecondaryStyle(c.meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                ThemesLine(card?.facets.orEmpty(), c)
                 r.breadcrumb?.let {
                     Text(convCrumb(it.startTs, it.endTs, it.nMsgs), style = chatMetaStyle(c.meta).copy(fontStyle = FontStyle.Italic))
                 }
@@ -280,6 +292,13 @@ private fun ConvCard(
             PickButton(foundLabel, "Found it", foundEnabled, c, reduced, onFound)
         }
     }
+}
+
+/** A result's own themes (up to 3) as one muted line under its time range; nothing when it has none. */
+@Composable
+private fun ThemesLine(facets: List<String>, c: ChatColors) {
+    val line = themesLine(facets) ?: return
+    Text(line, style = chatSecondaryStyle(c.meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 /** A result's "Show in chat": opens the chat at that point; "Back to results" there returns to the Search view. */

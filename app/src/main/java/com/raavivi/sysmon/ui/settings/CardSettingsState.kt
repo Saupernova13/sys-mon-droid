@@ -64,6 +64,15 @@ class CardSettingsState(
     var chatsPhase by mutableStateOf(PickerChatsPhase.IDLE)
         private set
 
+    /** Why the last theme add was refused, or null; cleared by the next add or by typing. */
+    var themeError by mutableStateOf<String?>(null)
+        private set
+
+    /** The latest removed theme (index and name, for "Removed · Undo") and a counter that moves with each removal. */
+    private var removedTheme: Pair<Int, String>? = null
+    var removalSeq by mutableStateOf(0)
+        private set
+
     private var epoch = 0
     private var probeEpoch = 0
     private var chatsEpoch = 0
@@ -75,6 +84,10 @@ class CardSettingsState(
             val d = draft ?: return false
             return !saving && canSave(s, d)
         }
+
+    /** "Use the built-in list" is on offer: the draft's themes differ from a non-empty built-in list. */
+    val offersBuiltIn: Boolean
+        get() = draft?.let { offersBuiltIn(it.facets, saved?.defaultFacets.orEmpty()) } == true
 
     /** Something was edited and not saved yet (leaving asks first). */
     val dirty: Boolean
@@ -123,6 +136,48 @@ class CardSettingsState(
     fun setTo(minutes: Int) = edit { it.copy(to = minutes) }
     fun stepMin(delta: Int) = edit { it.copy(minMsgs = stepMinMsgs(it.minMsgs, delta)) }
     fun removeChat(jid: String) = edit { removeChat(it, jid) }
+
+    // -- themes --------------------------------------------------------------------------------
+
+    /** Add [raw] to the draft's themes; false (with [themeError] set) when the server's rules refuse it. */
+    fun addTheme(raw: String): Boolean {
+        val d = draft ?: return false
+        val (list, error) = addTheme(d.facets, raw)
+        themeError = error
+        if (error != null) return false
+        edit { it.copy(facets = list) }
+        return true
+    }
+
+    fun clearThemeError() {
+        themeError = null
+    }
+
+    /** Take [name] out of the draft; [undoRemoveTheme] puts it back where it was. */
+    fun removeTheme(name: String) {
+        val d = draft ?: return
+        val at = d.facets.indexOfFirst { it.equals(name, ignoreCase = true) }
+        if (at < 0) return
+        removedTheme = at to d.facets[at]
+        removalSeq++
+        edit { it.copy(facets = removeTheme(it.facets, name)) }
+    }
+
+    fun undoRemoveTheme() {
+        val (at, name) = removedTheme ?: return
+        removedTheme = null
+        edit { d ->
+            if (d.facets.any { it.equals(name, ignoreCase = true) }) d
+            else d.copy(facets = d.facets.toMutableList().also { it.add(at.coerceAtMost(it.size), name) })
+        }
+    }
+
+    /** "Use the built-in list": the draft's themes become the server's built-in ones. */
+    fun useBuiltInThemes() {
+        val defaults = saved?.defaultFacets.orEmpty()
+        themeError = null
+        edit { useBuiltIn(it, defaults) }
+    }
 
     // -- chat picker ---------------------------------------------------------------------------
 

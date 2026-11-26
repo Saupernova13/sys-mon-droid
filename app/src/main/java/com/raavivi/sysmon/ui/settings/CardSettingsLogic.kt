@@ -20,6 +20,10 @@ const val CARD_MIN_MSGS_HIGH = 100_000
 /** The server lists at most this many chats. */
 const val CARD_MAX_CHATS = 50
 
+/** The server lists at most this many themes, each 1 to this many characters. */
+const val CARD_MAX_THEMES = 40
+const val CARD_THEME_MAX_CHARS = 40
+
 /** Seconds one card takes to write, as measured on the card server; the estimate is built on it. */
 const val CARD_SECONDS_EACH = 16
 
@@ -54,6 +58,10 @@ data class CardDraft(
     val to: Int,
     val chats: List<WaCardChat>,
     val minMsgs: Int,
+    /** The themes the card writer may tag a topic with. */
+    val facets: List<String> = emptyList(),
+    /** The server speaks themes (an older one sends none, and then the section and its rule stay out). */
+    val hasThemes: Boolean = false,
 ) {
     /** The window as the server stores it: `HH:MM-HH:MM`, or empty with the switch off. */
     val window: String get() = if (night) "${clockText(from)}-${clockText(to)}" else ""
@@ -68,6 +76,8 @@ fun draftOf(s: WaCardSettings): CardDraft {
         to = w?.second ?: DEFAULT_TO,
         chats = s.chats,
         minMsgs = clampMinMsgs(s.minMsgs),
+        facets = s.facets,
+        hasThemes = s.facets.isNotEmpty() || s.defaultFacets.isNotEmpty(),
     )
 }
 
@@ -83,16 +93,19 @@ fun patchOf(saved: WaCardSettings, draft: CardDraft): WaCardSettingsPatch {
         window = draft.window.takeIf { it != savedWindow },
         chats = draft.chats.map { it.jid }.takeIf { it != saved.chats.map { c -> c.jid } },
         minMsgs = draft.minMsgs.takeIf { it != saved.minMsgs },
+        facets = draft.facets.takeIf { it != saved.facets },
     )
 }
 
-fun WaCardSettingsPatch.isEmpty(): Boolean = window == null && chats == null && minMsgs == null
+fun WaCardSettingsPatch.isEmpty(): Boolean = window == null && chats == null && minMsgs == null && facets == null
 
 /** Why [draft] cannot be saved, or null when it can. */
 fun draftProblem(draft: CardDraft): String? = when {
     draft.night && draft.from == draft.to -> "From and To must be different times"
     draft.chats.size > CARD_MAX_CHATS -> "At most $CARD_MAX_CHATS chats may be carded"
     draft.minMsgs !in CARD_MIN_MSGS_LOW..CARD_MIN_MSGS_HIGH -> "Minimum messages must be $CARD_MIN_MSGS_LOW to $CARD_MIN_MSGS_HIGH"
+    draft.hasThemes && draft.facets.isEmpty() -> "Keep at least one theme, or use the built-in list"
+    draft.facets.size > CARD_MAX_THEMES -> "At most $CARD_MAX_THEMES themes may be listed"
     else -> null
 }
 
@@ -108,6 +121,37 @@ fun addChat(draft: CardDraft, chat: WaCardChat): CardDraft =
     if (draft.chats.any { it.jid == chat.jid }) draft else draft.copy(chats = draft.chats + chat)
 
 fun removeChat(draft: CardDraft, jid: String): CardDraft = draft.copy(chats = draft.chats.filter { it.jid != jid })
+
+// -- themes ---------------------------------------------------------------------------------------
+
+/**
+ * [raw] added to [list] by the server's rules: trimmed, inner whitespace collapsed to single spaces, 1 to
+ * [CARD_THEME_MAX_CHARS] characters, no comma or control character, not already listed (any case), at most
+ * [CARD_MAX_THEMES] in all. Returns the new list and null, or the same list and the reason it was refused.
+ * Theme names are private: nothing here logs.
+ */
+fun addTheme(list: List<String>, raw: String): Pair<List<String>, String?> {
+    val name = raw.trim().replace(Regex("""\s+"""), " ")
+    val problem = when {
+        name.isEmpty() -> "Type a theme name"
+        name.length > CARD_THEME_MAX_CHARS -> "A theme is at most $CARD_THEME_MAX_CHARS characters"
+        name.any { it == ',' || it.isISOControl() } -> "A theme cannot hold a comma"
+        list.any { it.equals(name, ignoreCase = true) } -> "That theme is already listed"
+        list.size >= CARD_MAX_THEMES -> "At most $CARD_MAX_THEMES themes may be listed"
+        else -> null
+    }
+    return if (problem == null) (list + name) to null else list to problem
+}
+
+/** [list] without [name] (any case). */
+fun removeTheme(list: List<String>, name: String): List<String> = list.filterNot { it.equals(name, ignoreCase = true) }
+
+/** The draft with the built-in list in place of its own. */
+fun useBuiltIn(draft: CardDraft, defaults: List<String>): CardDraft =
+    if (defaults.isEmpty()) draft else draft.copy(facets = defaults)
+
+/** "Use the built-in list" is offered when the list differs from a non-empty built-in one. */
+fun offersBuiltIn(list: List<String>, defaults: List<String>): Boolean = defaults.isNotEmpty() && list != defaults
 
 /** "9 / 14 topics carded". */
 fun chatProgress(chat: WaCardChat): String =

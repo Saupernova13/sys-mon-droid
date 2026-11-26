@@ -7,6 +7,7 @@ import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.model.WaCardDetail
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaConvResult
+import com.raavivi.sysmon.core.model.WaFacetCount
 import com.raavivi.sysmon.core.model.WaPickReq
 import com.raavivi.sysmon.core.model.WaYourCard
 import com.raavivi.sysmon.core.net.ApiResult
@@ -59,6 +60,23 @@ class ConvSearchState(
         private set
     var degraded by mutableStateOf(false)
         private set
+    /** The themes the results are filtered to (at most [MAX_THEMES]); they belong to [themeQuery]. */
+    var selectedThemes by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** How many conversations carry each theme, as the last answer counted them (most first). */
+    var themeCounts by mutableStateOf<List<WaFacetCount>>(emptyList())
+        private set
+
+    /** A filtered search is running: the chips and the list stay on screen meanwhile. */
+    var filtering by mutableStateOf(false)
+        private set
+
+    /** The "Up to 5 themes at once" note is showing; [capNoteSeq] moves with each refused press. */
+    var capNote by mutableStateOf(false)
+        private set
+    var capNoteSeq by mutableStateOf(0)
+        private set
     var phase by mutableStateOf(SearchPhase.IDLE)
         private set
     var error by mutableStateOf<String?>(null)
@@ -74,6 +92,7 @@ class ConvSearchState(
     var cardSheet by mutableStateOf<CardSheet?>(null)
         private set
 
+    private var themeQuery = ""
     private var viewOpen = false
     private var resultsEpoch = 0
     private var statusEpoch = 0
@@ -186,6 +205,11 @@ class ConvSearchState(
         closeCard()
         results = emptyList()
         yourCards = emptyList()
+        selectedThemes = emptyList()
+        themeCounts = emptyList()
+        themeQuery = ""
+        filtering = false
+        capNote = false
         resultsQ = ""
         degraded = false
         phase = SearchPhase.IDLE
@@ -193,30 +217,76 @@ class ConvSearchState(
         pick = PickState()
     }
 
+    /** Search [q]; the same query as the last one keeps its selected themes, a new one starts without. */
     fun run(q: String) {
+        val keep = if (q == themeQuery) selectedThemes else emptyList()
         clear()
         if (q.isBlank()) return
+        selectedThemes = keep
+        themeQuery = q
         val mine = resultsEpoch
         phase = SearchPhase.LOADING
-        scope.launch {
-            val r = repo.chatSearch(q, CONV_LIMIT)
-            if (mine != resultsEpoch) return@launch
-            when (r) {
-                is ApiResult.Ok -> {
-                    results = r.value.results
-                    yourCards = r.value.yourCards
-                    resultsQ = q
-                    degraded = r.value.degraded == "keyword"
-                    phase = SearchPhase.DONE
-                }
-                is ApiResult.Err -> {
-                    phase = SearchPhase.ERROR
-                    error = searchErrorText(r)
-                    // 404: the feature is off. Hide the mode; the Search view falls back to Messages.
-                    if (r.code == 404) {
-                        status = WaChatSearchStatus()
-                        onStatusRead()
-                    }
+        scope.launch { fetch(q, keep, mine) }
+    }
+
+    /** A chip was pressed: the theme joins or leaves the selection and the same query runs again with it. */
+    fun pressTheme(name: String) {
+        if (themeQuery.isBlank()) return
+        capNote = false
+        val t = toggleTheme(selectedThemes, name)
+        if (t.capped) {
+            capNote = true
+            capNoteSeq++
+            return
+        }
+        selectedThemes = t.selected
+        rerun()
+    }
+
+    /** "Clear" on the chips: no theme selected, the same query runs again. */
+    fun clearThemes() {
+        if (themeQuery.isBlank() || selectedThemes.isEmpty()) return
+        capNote = false
+        selectedThemes = emptyList()
+        rerun()
+    }
+
+    fun dismissCapNote() {
+        capNote = false
+    }
+
+    /** The same query with the selection as it is now; the list stays on screen until the answer lands. */
+    private fun rerun() {
+        val q = themeQuery
+        val mine = ++resultsEpoch
+        closeCard()
+        pick = PickState()
+        filtering = true
+        val themes = selectedThemes
+        scope.launch { fetch(q, themes, mine) }
+    }
+
+    private suspend fun fetch(q: String, themes: List<String>, mine: Int) {
+        val r = repo.chatSearch(q, CONV_LIMIT, themes)
+        if (mine != resultsEpoch) return
+        filtering = false
+        when (r) {
+            is ApiResult.Ok -> {
+                results = r.value.results
+                yourCards = r.value.yourCards
+                themeCounts = cleanThemeCounts(r.value.facetCounts)
+                resultsQ = q
+                degraded = r.value.degraded == "keyword"
+                error = null
+                phase = SearchPhase.DONE
+            }
+            is ApiResult.Err -> {
+                phase = SearchPhase.ERROR
+                error = searchErrorText(r)
+                // 404: the feature is off. Hide the mode; the Search view falls back to Messages.
+                if (r.code == 404) {
+                    status = WaChatSearchStatus()
+                    onStatusRead()
                 }
             }
         }

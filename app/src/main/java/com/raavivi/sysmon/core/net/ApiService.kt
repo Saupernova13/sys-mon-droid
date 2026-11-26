@@ -547,7 +547,12 @@ interface ApiService {
 
     /** A [Response], not a bare body: a 503 still carries the usable word-only results (see the repository). */
     @GET("api/whatsapp/chat-search")
-    suspend fun waChatSearch(@Query("q") q: String, @Query("limit") limit: Int = 20): Response<WaChatSearchResponse>
+    suspend fun waChatSearch(
+        @Query("q") q: String,
+        @Query("limit") limit: Int = 20,
+        /** Up to 5 theme names, comma-separated; null (no theme picked) leaves the URL unchanged. */
+        @Query("facets") facets: String? = null,
+    ): Response<WaChatSearchResponse>
 
     /** A result's full topic card; 404 when it has none. */
     @GET("api/whatsapp/chat-search/card")

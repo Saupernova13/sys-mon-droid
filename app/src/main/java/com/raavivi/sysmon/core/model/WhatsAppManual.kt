@@ -52,6 +52,8 @@ data class WaYourCard(
     val score: Double = 0.0,
     /** Unix seconds of the owner's last edit; null for a card never edited. */
     val editedAt: Long? = null,
+    /** The card's themes (names, writer's order). */
+    val facets: List<String> = emptyList(),
 )
 
 /** Why a request about a manual card was refused, from the status and the server's code (see [manualErrorOf]). */
