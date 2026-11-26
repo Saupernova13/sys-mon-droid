@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -98,6 +99,7 @@ fun MessageMenuOverlay(
     onAction: (WaMessage, WaMenuAction) -> Unit,
     onDelete: (WaMessage, Boolean) -> Unit,
     onDismiss: () -> Unit,
+    canSelect: Boolean = false,
 ) {
     val m = row.msg
     val mine = m.fromMe
@@ -149,7 +151,7 @@ fun MessageMenuOverlay(
             BubbleClone(row, env)
         }
 
-        val actions = remember(m, env.nowSec) { waMenuActions(m, env.nowSec) }
+        val actions = remember(m, env.nowSec, canSelect) { waMenuActions(m, env.nowSec, canSelect) }
         val pad8 = with(density) { 8.dp.toPx() }
         val barH = with(density) { 56.dp.toPx() }
         val cardH = with(density) {
@@ -241,6 +243,7 @@ private fun menuIcon(act: WaMenuAction): ImageVector = when (act) {
     WaMenuAction.FORWARD -> Icons.Filled.Shortcut
     WaMenuAction.EDIT -> Icons.Filled.Edit
     WaMenuAction.SAVE -> Icons.Filled.Save
+    WaMenuAction.SELECT -> Icons.Filled.CheckCircle
     WaMenuAction.INFO -> Icons.Filled.Info
     WaMenuAction.DELETE -> Icons.Filled.Delete
 }
@@ -251,6 +254,7 @@ private fun menuLabel(act: WaMenuAction): String = when (act) {
     WaMenuAction.FORWARD -> "Forward"
     WaMenuAction.EDIT -> "Edit"
     WaMenuAction.SAVE -> "Save"
+    WaMenuAction.SELECT -> "Select messages"
     WaMenuAction.INFO -> "Info"
     WaMenuAction.DELETE -> "Delete"
 }

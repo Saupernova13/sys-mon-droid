@@ -46,12 +46,15 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.raavivi.sysmon.core.model.WaConvLine
 import com.raavivi.sysmon.core.model.WaConvResult
+import com.raavivi.sysmon.core.model.WaYourCard
 
 /** What a pick button reads: "Saved" once saved, "Not saved" after a failed save, else its own [base] label. */
 fun pickLabel(base: String, key: Int, pick: PickState): String = when {
@@ -83,7 +86,7 @@ internal fun ConversationResults(vm: WhatsAppViewModel, c: ChatColors, modifier:
                     val text = conv.error ?: SEARCH_FAILED
                     ScrollingState { SearchError(text, c, onRetry = if (isRetryableSearchError(text)) s::submit else null) }
                 }
-                conv.results.isEmpty() -> ScrollingState { SearchEmpty("No conversations found", "Try describing it differently", c) }
+                conv.results.isEmpty() && conv.yourCards.isEmpty() -> ScrollingState { SearchEmpty("No conversations found", "Try describing it differently", c) }
                 else -> ConvList(vm, nowSec, c, reduced, hideKeyboard)
             }
         }
@@ -123,7 +126,28 @@ private fun ConvList(vm: WhatsAppViewModel, nowSec: Double, c: ChatColors, reduc
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (conv.degraded) item(key = "degraded") { InfoBanner(DEGRADED_NOTE, c, Modifier.padding(horizontal = 16.dp)) }
-        item(key = "count") {
+        // The owner's own cards head the list, above the topic results and not part of them.
+        if (conv.yourCards.isNotEmpty()) {
+            item(key = "yours-head") {
+                Text(
+                    "Your cards",
+                    style = chatMetaStyle(c.meta).copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() },
+                )
+            }
+            itemsIndexed(conv.yourCards, key = { _, y -> "y:${y.cardId}" }) { _, y ->
+                YourCardItem(
+                    vm, y, nowSec, c,
+                    onOpenCard = {
+                        hideKeyboard()
+                        vm.manual.openCard(y.toRef())
+                    },
+                    onShowInChat = { vm.showYourCard(y.toRef()) },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        }
+        if (conv.results.isNotEmpty()) item(key = "count") {
             Text(resultsHeader(conv.results.size), style = chatMetaStyle(c.meta), modifier = Modifier.padding(horizontal = 16.dp))
         }
         itemsIndexed(conv.results, key = { _, r -> "c:${r.nodeId}:${r.startRowid}:${r.endRowid}" }) { i, r ->
@@ -139,6 +163,58 @@ private fun ConvList(vm: WhatsAppViewModel, nowSec: Double, c: ChatColors, reduc
                 onShowInChat = { vm.openConversation(r) },
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
+        }
+    }
+}
+
+/**
+ * One of the owner's own cards that matched: its title, the "Your card" chip, the summary (3 lines), the chat,
+ * range and message count; "Show in chat" and "Full card" under it. 16 dp inside, 8 dp between its parts.
+ */
+@Composable
+private fun YourCardItem(
+    vm: WhatsAppViewModel,
+    y: WaYourCard,
+    nowSec: Double,
+    c: ChatColors,
+    onOpenCard: () -> Unit,
+    onShowInChat: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val name = y.chatName.ifBlank { vm.searchChatName(y.chat, "") }
+    val title = y.title.trim().ifBlank { name }
+    val summary = y.summary.trim().takeIf { it.isNotEmpty() }
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.inBg).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Open the full card", onClick = onOpenCard)) {
+            Avatar(name, y.chat, vm, size = 40.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        title,
+                        style = chatBodyStyle(c.ink).copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    CountBadge(y.nMsgs, c, Modifier.clearAndSetSemantics { contentDescription = messagesLabel(y.nMsgs) })
+                }
+                YourCardChip(c)
+                Text("$name · ${convRange(y.start.ts, y.end.ts, nowSec)}", style = chatSecondaryStyle(c.meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (summary != null) Text(summary, style = chatSecondaryStyle(c.ink), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            ShowInChatButton(c, onShowInChat)
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(
+                onClick = onOpenCard,
+                modifier = Modifier.heightIn(min = 48.dp),
+                border = BorderStroke(1.dp, c.accent.copy(alpha = 0.5f)),
+            ) {
+                Text("Full card", style = chatSecondaryStyle(c.accent, FontWeight.SemiBold))
+            }
         }
     }
 }

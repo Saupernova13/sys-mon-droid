@@ -12,6 +12,7 @@ import com.raavivi.sysmon.core.model.WaCardSettingsPatch
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
+import com.raavivi.sysmon.core.model.WaManualJob
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPickCounts
 import com.raavivi.sysmon.core.model.WaPickReq
@@ -326,6 +327,41 @@ class FakeWhatsAppRepository : WhatsAppRepository {
         cardIdRequests += card
         cardGate?.await()
         return cardResult
+    }
+
+    // -- your own cards ---------------------------------------------------------------------------
+
+    var createManualResult: ApiResult<WaManualJob> = ApiResult.Ok(WaManualJob(id = 1, state = "queued", chat = "", nMsgs = 0))
+
+    /** Answers each `manualJob()` read; defaults to the created job, still queued. */
+    var manualJobResponder: (Long) -> ApiResult<WaManualJob> = { ApiResult.Ok(WaManualJob(id = it, state = "queued")) }
+    var cancelManualResult: ApiResult<Unit> = ApiResult.Ok(Unit)
+    var deleteCardResult: ApiResult<Unit> = ApiResult.Ok(Unit)
+
+    /** (chat, ids, instruction) of each `createManualCard()` call. */
+    val manualRequests = mutableListOf<Triple<String, List<String>, String?>>()
+    val manualJobReads = mutableListOf<Long>()
+    val manualCancels = mutableListOf<Long>()
+    val cardDeletes = mutableListOf<Long>()
+
+    override suspend fun createManualCard(chat: String, msgIds: List<String>, instruction: String?): ApiResult<WaManualJob> {
+        manualRequests += Triple(chat, msgIds, instruction)
+        return createManualResult
+    }
+
+    override suspend fun manualJob(id: Long): ApiResult<WaManualJob> {
+        manualJobReads += id
+        return manualJobResponder(id)
+    }
+
+    override suspend fun cancelManualJob(id: Long): ApiResult<Unit> {
+        manualCancels += id
+        return cancelManualResult
+    }
+
+    override suspend fun deleteCard(id: Long): ApiResult<Unit> {
+        cardDeletes += id
+        return deleteCardResult
     }
 
     override suspend fun chatSearchTags(body: WaTagsReq): ApiResult<WaTagsResponse> {

@@ -74,10 +74,14 @@ fun WhatsAppScreen(onBack: (() -> Unit)? = null, onOpenCardSettings: () -> Unit 
     // An open in-chat search bar closes before the chat does.
     BackHandler(enabled = vm.currentJid != null && vm.search.inChat.open) { vm.search.inChat.close() }
 
-    when {
-        vm.currentJid != null -> ConversationView(vm)
-        vm.search.open -> SearchScreen(vm, onOpenCardSettings)
-        else -> ChatListView(vm, onBack)
+    Box(Modifier.fillMaxSize()) {
+        when {
+            vm.currentJid != null -> ConversationView(vm)
+            vm.search.open -> SearchScreen(vm, onOpenCardSettings)
+            else -> ChatListView(vm, onBack)
+        }
+        // Over every view: the "your card is ready" snackbar, the Make card sheet and the card view.
+        ManualCardOverlays(vm, Modifier.align(Alignment.BottomCenter))
     }
 }
 

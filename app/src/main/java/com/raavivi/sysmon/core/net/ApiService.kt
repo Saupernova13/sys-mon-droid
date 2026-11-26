@@ -98,6 +98,9 @@ import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaCardDetail
 import com.raavivi.sysmon.core.model.WaCardSettings
 import com.raavivi.sysmon.core.model.WaCardSettingsPatch
+import com.raavivi.sysmon.core.model.WaManualCardReq
+import com.raavivi.sysmon.core.model.WaManualJob
+import com.raavivi.sysmon.core.model.WaManualJobResponse
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaPickCounts
@@ -536,6 +539,21 @@ interface ApiService {
     /** A result's full topic card by its card id (a tag result whose topic node is gone); 404 when it has none. */
     @GET("api/whatsapp/chat-search/card")
     suspend fun waChatSearchCardById(@Query("card") card: Long): WaCardDetail
+
+    /** Ask for a card over picked messages; 202 with the job. Failures carry a status and the envelope's `code`. */
+    @POST("api/whatsapp/chat-search/cards/manual")
+    suspend fun waManualCardCreate(@Body body: WaManualCardReq): WaManualJobResponse
+
+    @GET("api/whatsapp/chat-search/cards/manual/jobs/{id}")
+    suspend fun waManualCardJob(@Path("id") id: Long): WaManualJob
+
+    /** Cancel a job: 204. */
+    @DELETE("api/whatsapp/chat-search/cards/manual/jobs/{id}")
+    suspend fun waManualCardCancel(@Path("id") id: Long): Response<Unit>
+
+    /** Delete a manual card with its words and vectors: 204. */
+    @DELETE("api/whatsapp/chat-search/cards/{id}")
+    suspend fun waCardDelete(@Path("id") id: Long): Response<Unit>
 
     @POST("api/whatsapp/chat-search/tags/query")
     suspend fun waChatSearchTags(@Body body: WaTagsReq): WaTagsResponse

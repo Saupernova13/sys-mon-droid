@@ -398,7 +398,7 @@ val WA_EMOJI_GRID = listOf(
     "🌸", "🌈", "⚡", "⚽", "🏆", "🚀", "🤞", "👀", "🫡", "🫠",
 )
 
-enum class WaMenuAction { REPLY, COPY, FORWARD, EDIT, SAVE, INFO, DELETE }
+enum class WaMenuAction { REPLY, COPY, FORWARD, EDIT, SAVE, SELECT, INFO, DELETE }
 
 /** My own, not-yet-revoked text message: the only thing "Edit" applies to (web parity). */
 fun waCanEdit(m: WaMessage, nowSec: Double): Boolean =
@@ -411,9 +411,10 @@ fun waCanRevoke(m: WaMessage, nowSec: Double): Boolean =
 
 /**
  * Which actions a message's menu offers. A revoked message keeps only Info and Delete (for me);
- * Copy appears when there is text, Edit only inside its window, Save for any media.
+ * Copy appears when there is text, Edit only inside its window, Save for any media, and Select messages only
+ * when [select] (chat search is live) and the message can be picked ([waCanSelect]).
  */
-fun waMenuActions(m: WaMessage, nowSec: Double): List<WaMenuAction> {
+fun waMenuActions(m: WaMessage, nowSec: Double, select: Boolean = false): List<WaMenuAction> {
     if (m.revoked) return listOf(WaMenuAction.INFO, WaMenuAction.DELETE)
     val out = ArrayList<WaMenuAction>(7)
     out.add(WaMenuAction.REPLY)
@@ -421,6 +422,7 @@ fun waMenuActions(m: WaMessage, nowSec: Double): List<WaMenuAction> {
     out.add(WaMenuAction.FORWARD)
     if (waCanEdit(m, nowSec)) out.add(WaMenuAction.EDIT)
     if (m.mediaKind() != null) out.add(WaMenuAction.SAVE)
+    if (selectOffered(select, m)) out.add(WaMenuAction.SELECT)
     out.add(WaMenuAction.INFO)
     out.add(WaMenuAction.DELETE)
     return out

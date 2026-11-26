@@ -8,6 +8,7 @@ import com.raavivi.sysmon.core.model.WaCardSettingsPatch
 import com.raavivi.sysmon.core.model.WaChatSearchResponse
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaContact
+import com.raavivi.sysmon.core.model.WaManualJob
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPickCounts
 import com.raavivi.sysmon.core.model.WaPickReq
@@ -99,6 +100,20 @@ interface WhatsAppRepository {
 
     /** The full topic card with card id [card] (a tag result whose topic node is gone); an Err with code 404 means none. */
     suspend fun chatSearchCardById(card: Long): ApiResult<WaCardDetail>
+
+    // -- your own cards (#392). Failures carry the status and the envelope's code: see [manualErrorOf]. ----
+
+    /** Ask for a card over [msgIds] of [chat]; [instruction] (at most 500 characters, null for none) steers it. */
+    suspend fun createManualCard(chat: String, msgIds: List<String>, instruction: String?): ApiResult<WaManualJob>
+
+    /** One job; an Err with code 404 means it is gone (finished jobs are kept 50 deep). */
+    suspend fun manualJob(id: Long): ApiResult<WaManualJob>
+
+    /** Cancel a job. 409 `finished`: it already ended. */
+    suspend fun cancelManualJob(id: Long): ApiResult<Unit>
+
+    /** Delete a card the owner asked for. 409 `not_manual`: a topic card cannot be deleted. */
+    suspend fun deleteCard(id: Long): ApiResult<Unit>
 
     /** Tag search over the topic cards; an Err with code 404 means chat search is off. */
     suspend fun chatSearchTags(body: WaTagsReq): ApiResult<WaTagsResponse>

@@ -89,6 +89,12 @@ class WhatsAppViewModel(
     /** The message search surfaces: the Search view, the in-chat bar, a tapped conversation's range. */
     val search = WhatsAppSearch(repo, viewModelScope, { currentJid }, ::focusHit, { message = it }, modePrefs)
 
+    /** "Your own cards" (#392): selection mode, the Make card sheet and its job, the card view, the tinted messages. */
+    val manual = ManualCardsState(
+        repo, viewModelScope, { currentJid }, { searchChatName(it, "") }, { message = it },
+        onDeleted = { search.conv.removeYourCard(it) },
+    )
+
     /** The message to scroll to and flash (a search hit); [focusTick] bumps for every such request. */
     var focusId by mutableStateOf<String?>(null)
         private set
@@ -226,6 +232,8 @@ class WhatsAppViewModel(
         timeline = null
         focusId = null
         search.onChatChanged()
+        manual.onChatChanged()
+        search.conv.checkAvailable()
         load()
         viewModelScope.launch {
             val r = repo.timeline(jid)
@@ -265,6 +273,28 @@ class WhatsAppViewModel(
         search.noteQuery(search.query)
         openChatAt(conv.chat, searchChatName(conv.chat, conv.chatName), conv.startTs, range = conv.startTs..conv.endTs)
     }
+
+    /**
+     * "Show in chat" on one of the owner's own cards: open its chat at the first picked message and tint exactly
+     * the picked messages (by id). The tint is cleared when another chat opens.
+     */
+    fun showYourCard(ref: YourCardRef) {
+        val ids = ref.msgIds.ifEmpty { manual.cardView?.takeIf { it.ref.cardId == ref.cardId }?.detail?.msgIds.orEmpty() }
+        search.noteQuery(search.query)
+        openChatAt(ref.chat, searchChatName(ref.chat, ref.chatName), ref.firstTs)
+        manual.setPicked(ids)
+    }
+
+    /** Chat search is live (on, with something indexed): the message menu offers "Select messages". */
+    val canSelect: Boolean get() = search.conv.available
+
+    /** "Select messages" from [m]'s menu. */
+    fun selectMessage(m: WaMessage) {
+        if (selectOffered(canSelect, m)) manual.selection.enter(m)
+    }
+
+    /** A long-press in selection mode: pick the range from the last message toggled to [m]. */
+    fun selectRange(m: WaMessage) = manual.selection.range(m, pickOrder(messages))
 
     /** The name a search result shows for [jid]: the chat list's, else the hit's own, else the jid. */
     fun searchChatName(jid: String, fallback: String): String =
@@ -342,6 +372,7 @@ class WhatsAppViewModel(
         timeline = null
         resetWindow()
         search.onChatChanged()
+        manual.onChatChanged()
     }
 
     /** Back to "newest page, nothing in flight" when a conversation opens or closes. */

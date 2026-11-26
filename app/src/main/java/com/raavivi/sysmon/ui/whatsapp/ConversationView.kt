@@ -1,5 +1,6 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
@@ -114,6 +115,9 @@ internal fun ConversationView(vm: WhatsAppViewModel) {
         }
     }
 
+    // System back leaves selection mode before it leaves the chat.
+    BackHandler(enabled = vm.manual.selection.active) { vm.manual.selection.leave() }
+
     // A search hit (or an in-chat step) asked to bring a message into view; tick 0 is "never asked".
     LaunchedEffect(vm.focusTick) { if (vm.focusTick > 0) vm.focusId?.let(scrollToMessage) }
 
@@ -137,13 +141,17 @@ internal fun ConversationView(vm: WhatsAppViewModel) {
                             WaMenuAction.FORWARD -> forwardMsg = m
                             WaMenuAction.EDIT -> { vm.startEdit(m); composerText = m.text }
                             WaMenuAction.SAVE -> vm.saveImage(m)
+                            WaMenuAction.SELECT -> vm.selectMessage(m)
                             WaMenuAction.INFO -> infoMsg = m
                             WaMenuAction.DELETE -> Unit
                         }
                     },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
-                if (vm.search.inChat.open) {
+                if (vm.manual.selection.active) {
+                    // Picking messages for a card: the composer becomes the count, Cancel and Make card.
+                    SelectionBar(vm.manual.selection.count, c, onCancel = vm.manual.selection::leave, onMake = vm.manual::makeCard)
+                } else if (vm.search.inChat.open) {
                     InChatSearchBottomBar(vm.search.inChat, c)
                 } else {
                     vm.uploading?.let { UploadingRow(it, c) }
@@ -253,6 +261,7 @@ private fun MessageArea(
                     onAction = onMenuAction,
                     onDelete = { m, everyone -> vm.removeMessage(m, everyone) },
                     onDismiss = { onMenuMsgChange(null) },
+                    canSelect = vm.canSelect,
                 )
             }
         }
@@ -277,7 +286,13 @@ private fun rememberChatEnv(
     val group = waIsGroup(vm.currentJid)
     val marks = vm.search.inChat.terms
     val range = vm.search.rangeHighlight
-    return remember(c, group, data.nowSec, reduced, data.byId, data.names, vm.reactions, maxBubble, popEnabled, vm.imageLoader, rowBounds, marks, range) {
+    // Selection mode and the messages a card was written for (#392).
+    val selection = vm.manual.selection
+    val select = remember(selection.active, selection.state) {
+        if (selection.active) SelectUi(selection.state.picks, selection::tap, vm::selectRange) else null
+    }
+    val picked = vm.manual.picked
+    return remember(c, group, data.nowSec, reduced, data.byId, data.names, vm.reactions, maxBubble, popEnabled, vm.imageLoader, rowBounds, marks, range, select, picked) {
         ChatEnv(
             colors = c,
             group = group,
@@ -303,6 +318,8 @@ private fun rememberChatEnv(
             reactionSeen = reactionSeen,
             marks = marks,
             range = range,
+            select = select,
+            picked = picked,
         )
     }
 }
