@@ -79,11 +79,16 @@ internal fun ConversationResults(vm: WhatsAppViewModel, c: ChatColors, modifier:
     Column(modifier) {
         // Directly above the results: the theme chips (the list below stays while a filtered search runs).
         if (s.query.isNotBlank() && themeRowShown(conv)) ThemeChipsRow(conv, c)
+        // Pinned like the chips (not in the list): what Deep read from the query stays in view while the results scroll.
+        if (s.query.isNotBlank() && conv.deepReply) ReadAsBlock(conv, c)
         Box(Modifier.weight(1f)) {
             when {
                 s.query.isBlank() -> SearchIdle(SearchMode.CONVERSATIONS, s.recent, s::openFor, s::clearRecent, c, onGuide = s::openGuide)
                 conv.phase == SearchPhase.IDLE || conv.phase == SearchPhase.LOADING ->
-                    ScrollingState { SearchSkeleton(card = true, c = c, reduced = reduced) }
+                    ScrollingState {
+                        if (conv.deep) DeepSearchingLine(c)
+                        SearchSkeleton(card = true, c = c, reduced = reduced)
+                    }
                 conv.phase == SearchPhase.ERROR -> {
                     val text = conv.error ?: SEARCH_FAILED
                     ScrollingState { SearchError(text, c, onRetry = if (isRetryableSearchError(text)) s::submit else null) }
@@ -96,7 +101,13 @@ internal fun ConversationResults(vm: WhatsAppViewModel, c: ChatColors, modifier:
                         }
                     }
                 }
-                conv.results.isEmpty() && conv.yourCards.isEmpty() -> ScrollingState { SearchEmpty("No conversations found", "Try describing it differently", c) }
+                conv.results.isEmpty() && conv.yourCards.isEmpty() -> ScrollingState {
+                    SearchEmpty("No conversations found", "Try describing it differently", c) {
+                        if (!conv.deep) TextButton(onClick = { conv.setDeep(true) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text("Try a deep search", style = chatSecondaryStyle(c.accent, FontWeight.SemiBold))
+                        }
+                    }
+                }
                 else -> ConvList(vm, nowSec, c, reduced, hideKeyboard)
             }
         }
@@ -171,6 +182,7 @@ private fun ConvList(vm: WhatsAppViewModel, nowSec: Double, c: ChatColors, reduc
                     conv.openCard(i)
                 },
                 onShowInChat = { vm.openConversation(r) },
+                deepReply = conv.deepReply,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
@@ -251,6 +263,7 @@ private fun ConvCard(
     onFound: () -> Unit,
     onOpenCard: () -> Unit,
     onShowInChat: () -> Unit,
+    deepReply: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val name = r.chatName.ifBlank { vm.searchChatName(r.chat, "") }
@@ -275,6 +288,7 @@ private fun ConvCard(
                     CountBadge(r.nMsgs, c, Modifier.clearAndSetSemantics { contentDescription = messagesLabel(r.nMsgs) })
                 }
                 Text(if (card != null) "$name · $range" else range, style = chatSecondaryStyle(c.meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (deepReply) matchedLine(r.matched)?.let { Text(it, style = chatMetaStyle(c.meta), maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 ThemesLine(card?.facets.orEmpty(), c)
                 r.breadcrumb?.let {
                     Text(convCrumb(it.startTs, it.endTs, it.nMsgs), style = chatMetaStyle(c.meta).copy(fontStyle = FontStyle.Italic))

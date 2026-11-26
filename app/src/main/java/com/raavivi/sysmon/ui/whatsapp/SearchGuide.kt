@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.SwapVert
@@ -56,6 +57,14 @@ internal fun SearchGuide(mode: SearchMode, c: ChatColors, onExample: (String) ->
                         Text(row.title, style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
                         Text(row.hint, style = chatSecondaryStyle(c.meta))
                     }
+                }
+            }
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(Icons.AutoMirrored.Filled.ManageSearch, contentDescription = null, tint = c.meta, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Deep", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                    Text(DEEP_DESCRIPTION, style = chatSecondaryStyle(c.meta))
                 }
             }
             Column {

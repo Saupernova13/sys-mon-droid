@@ -22,6 +22,10 @@ interface SearchModePrefs {
     suspend fun tagsGuideSeen(): Boolean = false
     suspend fun markTagsGuideSeen() = Unit
 
+    /** Whether Deep is on for Conversations; off when nothing was saved. */
+    suspend fun deep(): Boolean = false
+    suspend fun saveDeep(on: Boolean) = Unit
+
     object None : SearchModePrefs {
         override suspend fun load(): String? = null
         override suspend fun save(key: String) = Unit
@@ -88,7 +92,7 @@ class WhatsAppSearch(
     val scroll = SearchScrollMemory()
 
     val messages = MessageSearchState(repo, scope)
-    val conv = ConvSearchState(repo, scope, onMessage) { reconcile() }
+    val conv = ConvSearchState(repo, scope, onMessage, onStatusRead = { reconcile() }, prefs = modePrefs)
     val inChat = InChatSearchState(repo, scope, currentChat, showHit)
     val tags = TagsSearchState(repo, scope) { reconcile() }
 

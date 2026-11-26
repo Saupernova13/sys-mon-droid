@@ -890,6 +890,8 @@ class WhatsAppViewModel(
                 modePrefs = object : SearchModePrefs {
                     override suspend fun load(): String? = container.settings.waSearchModeNow()
                     override suspend fun save(key: String) { container.settings.setWaSearchMode(key) }
+                    override suspend fun deep(): Boolean = container.settings.waSearchDeepNow()
+                    override suspend fun saveDeep(on: Boolean) { container.settings.setWaSearchDeep(on) }
                     override suspend fun tagsGuideSeen(): Boolean = container.settings.waTagsGuideSeenNow()
                     override suspend fun markTagsGuideSeen() { container.settings.setWaTagsGuideSeen() }
                 },

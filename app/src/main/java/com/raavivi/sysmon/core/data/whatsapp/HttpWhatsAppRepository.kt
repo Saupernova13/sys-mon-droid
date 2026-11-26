@@ -169,8 +169,10 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
     override suspend fun saveCardSettings(patch: WaCardSettingsPatch): ApiResult<WaCardSettings> =
         safeResponse { api.api.waCardSettingsSave(patch) }
 
-    override suspend fun chatSearch(q: String, limit: Int, themes: List<String>): ApiResult<WaChatSearchResponse> =
-        when (val r = safeCall { api.api.waChatSearch(q = q, limit = limit, facets = themes.takeIf { it.isNotEmpty() }?.joinToString(",")) }) {
+    override suspend fun chatSearch(q: String, limit: Int, themes: List<String>, deep: Boolean): ApiResult<WaChatSearchResponse> =
+        when (val r = safeCall {
+            api.api.waChatSearch(q = q, limit = limit, facets = themes.takeIf { it.isNotEmpty() }?.joinToString(","), mode = "deep".takeIf { deep })
+        }) {
             is ApiResult.Ok -> chatSearchResult(r.value)
             is ApiResult.Err -> r
         }

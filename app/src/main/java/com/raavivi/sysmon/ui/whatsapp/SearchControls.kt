@@ -45,12 +45,14 @@ internal fun SearchControls(s: WhatsAppSearch, c: ChatColors, onFilters: () -> U
     val chip = statusChip(s.conv.status, inConv)
     val hasFilters = modeHasFilters(s.mode)
     val tagChips = if (s.mode == SearchMode.TAGS) selectedTagChips(s.tags.selection) else emptyList()
-    if (!hasFilters && !chip.visible) return
+    val deepShown = s.mode == SearchMode.CONVERSATIONS && s.conv.available
+    if (!hasFilters && !chip.visible && !deepShown) return
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (deepShown) DeepPill(s.conv, c)
         if (hasFilters) {
             val n = s.activeFilters
             SearchPill(

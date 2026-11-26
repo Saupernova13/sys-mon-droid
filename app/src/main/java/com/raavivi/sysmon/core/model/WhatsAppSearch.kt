@@ -89,7 +89,27 @@ data class WaConvResult(
     val score: Double = 0.0,
     val preview: List<WaConvLine> = emptyList(),
     val card: WaConvCard? = null,
+    /** In a deep search, which readings of the query this result met: any of "time", "acts", "people". */
+    val matched: List<String> = emptyList(),
 )
+
+/** What a deep search read from the query: [time] a range in unix seconds (inclusive), [acts] stems like "argu". */
+@Serializable
+data class WaRewrite(
+    val source: String = "",
+    val topic: String? = null,
+    val acts: List<String> = emptyList(),
+    val people: List<WaRewritePerson> = emptyList(),
+    val time: WaRewriteTime? = null,
+    val expansions: List<String> = emptyList(),
+    val imagined: String? = null,
+)
+
+@Serializable
+data class WaRewritePerson(val name: String = "", val chats: Int = 0)
+
+@Serializable
+data class WaRewriteTime(val phrase: String = "", val from: Long = 0L, val to: Long = 0L)
 
 /** `GET /api/whatsapp/chat-search`; [degraded] is `"keyword"` when no embedder answered (served with a 503). */
 @Serializable
@@ -102,6 +122,9 @@ data class WaChatSearchResponse(
     val yourCards: List<WaYourCard> = emptyList(),
     /** How many cards of the pool carry each theme, most first; counts what the filter left. */
     val facetCounts: List<WaFacetCount> = emptyList(),
+    /** "deep" when the careful reading ran; then [rewrite] says what was read. */
+    val mode: String? = null,
+    val rewrite: WaRewrite? = null,
 )
 
 /** One theme of [WaChatSearchResponse.facetCounts] and how many conversations carry it. */

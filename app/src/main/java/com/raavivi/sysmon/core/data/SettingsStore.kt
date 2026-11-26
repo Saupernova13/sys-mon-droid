@@ -124,6 +124,11 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setWaSearchMode(key: String) = store.edit { it[KEY_WA_SEARCH_MODE] = key }
 
+    /** Whether the Conversations search was last left on Deep (default off). */
+    suspend fun waSearchDeepNow(): Boolean = store.data.map { it[KEY_WA_SEARCH_DEEP] ?: false }.first()
+
+    suspend fun setWaSearchDeep(on: Boolean) = store.edit { it[KEY_WA_SEARCH_DEEP] = on }
+
     /** Whether the Tags search how-to has been folded away once (it shows expanded until then). */
     suspend fun waTagsGuideSeenNow(): Boolean = store.data.map { it[KEY_WA_TAGS_GUIDE_SEEN] ?: false }.first()
 
@@ -147,6 +152,7 @@ class SettingsStore(private val context: Context) {
     private companion object {
         val KEY_LOGGING = booleanPreferencesKey("logging_enabled")
         val KEY_WA_SEARCH_MODE = stringPreferencesKey("wa_search_mode")
+        val KEY_WA_SEARCH_DEEP = booleanPreferencesKey("wa_search_deep")
         val KEY_WA_TAGS_GUIDE_SEEN = booleanPreferencesKey("wa_tags_guide_seen")
         val KEY_SERVER = stringPreferencesKey("server_url")
         val KEY_TOKEN = stringPreferencesKey("token")

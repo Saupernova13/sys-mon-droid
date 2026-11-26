@@ -91,8 +91,8 @@ interface WhatsAppRepository {
     /** Saves the fields set in [patch] and answers the settings as saved. A 400's reason is the Err message. */
     suspend fun saveCardSettings(patch: WaCardSettingsPatch): ApiResult<WaCardSettings>
 
-    /** Conversation search; a word-only answer (the server's 503) is Ok with `degraded` set. */
-    suspend fun chatSearch(q: String, limit: Int, themes: List<String> = emptyList()): ApiResult<WaChatSearchResponse>
+    /** Conversation search; a word-only answer (the server's 503) is Ok with `degraded` set. [deep] reads the query more carefully (slower). */
+    suspend fun chatSearch(q: String, limit: Int, themes: List<String> = emptyList(), deep: Boolean = false): ApiResult<WaChatSearchResponse>
     suspend fun chatSearchPick(body: WaPickReq): ApiResult<WaPickCounts>
 
     /** The full topic card of the result node [node]; an Err with code 404 means it has none. */
