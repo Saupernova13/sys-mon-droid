@@ -103,6 +103,8 @@ data class WaRewrite(
     val time: WaRewriteTime? = null,
     val expansions: List<String> = emptyList(),
     val imagined: String? = null,
+    /** With a rewrite model set up on the server: "used", "loading" or "failed"; null without one. */
+    val model: String? = null,
 )
 
 @Serializable

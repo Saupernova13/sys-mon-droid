@@ -89,7 +89,17 @@ fun readAsTags(r: WaRewrite, zone: ZoneId = ZoneId.systemDefault()): List<String
 /** The imagined text of a model reading, trimmed; null when there is none. */
 fun readAsImagined(r: WaRewrite): String? = r.imagined?.trim()?.takeIf { it.isNotEmpty() }
 
-/** The whole "Read as" block as one sentence for TalkBack. */
+/**
+ * Why a deep search read the query by rules alone although the server has a rewrite model: it was still
+ * starting ("loading") or did not answer ("failed"). Null otherwise, also when the server has no model.
+ */
+fun modelNote(model: String?): String? = when (model) {
+    "loading" -> "Rules only: the model is still starting"
+    "failed" -> "Rules only: the model did not answer"
+    else -> null
+}
+
+/** The whole "Read as" block as one sentence for TalkBack, the model note last. */
 fun readAsDescription(r: WaRewrite, zone: ZoneId = ZoneId.systemDefault()): String {
     val parts = buildList {
         timeReading(r, zone, ", ")?.let { add(it) }
@@ -98,7 +108,8 @@ fun readAsDescription(r: WaRewrite, zone: ZoneId = ZoneId.systemDefault()): Stri
         expansionsOf(r).takeIf { it.isNotEmpty() }?.let { add("also: ${it.joinToString(", ")}") }
         readAsImagined(r)?.let { add("imagined: $it") }
     }
-    return if (parts.isEmpty()) READ_AS_NOTHING else "Read as: ${parts.joinToString("; ")}"
+    val read = if (parts.isEmpty()) READ_AS_NOTHING else "Read as: ${parts.joinToString("; ")}"
+    return modelNote(r.model)?.let { "$read. $it" } ?: read
 }
 
 /** "Matches: when · who · what happened" for the readings a result met, in that order; null when none. */
