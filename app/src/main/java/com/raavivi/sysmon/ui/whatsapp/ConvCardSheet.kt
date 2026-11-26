@@ -165,6 +165,7 @@ private fun CardHeader(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet,
             }
         }
         if (mine != null) YourCardChip(c, Modifier.align(Alignment.Start))
+        if (sheet.detail?.editedAt != null || r.card?.editedAt != null) EditedCardChip(c, Modifier.align(Alignment.Start))
         Text(title, style = chatBodyStyle(c.ink).copy(fontWeight = FontWeight.SemiBold))
         if (mine != null && mine.instruction.isNotBlank()) {
             Text("You asked: ${mine.instruction}", style = chatSecondaryStyle(c.meta).copy(fontStyle = FontStyle.Italic))

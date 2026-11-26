@@ -30,6 +30,9 @@ class DetailState(
     val cardId: Long?,
     onOff: () -> Unit,
     private val onDeleted: (cardId: Long) -> Unit,
+    private val onMessage: (String) -> Unit,
+    /** A card was saved from its editor: the saved card, so lists that show it can follow. */
+    private val onCardSaved: (CiCardFull) -> Unit,
 ) {
     val card = Loadable<CiCardFull>(scope, onOff, onLoaded = { openMessagesOfCard() }) { repo.card(cardId ?: 0) }
 
@@ -50,6 +53,11 @@ class DetailState(
         private set
     var deleteError by mutableStateOf<String?>(null)
         private set
+    /** The open card editor (a full-screen view over this one), else null. */
+    var editor by mutableStateOf<CardEditLogic?>(null)
+        private set
+    var openingEditor by mutableStateOf(false)
+        private set
     private var closed = false
 
     init {
@@ -69,6 +77,36 @@ class DetailState(
     }
 
     fun reloadMessages() = messages.reload()
+
+    /** Edit card is offered for a card that has a body (a failed card has nothing to edit). */
+    val canEdit: Boolean get() = card.value?.let { it.state == "done" && it.card != null } == true
+
+    /** Read what an edit may name, then open the editor; on a failure stay on the card and say so. */
+    fun openEditor() {
+        val c = card.value ?: return
+        if (!canEdit || openingEditor || editor != null) return
+        openingEditor = true
+        scope.launch {
+            val r = repo.editOptions()
+            if (closed) return@launch
+            openingEditor = false
+            when (r) {
+                is ApiResult.Ok -> editor = CardEditLogic(repo, scope, c, r.value, ::editSaved, ::editClosed)
+                is ApiResult.Err -> onMessage("Could not open the editor")
+            }
+        }
+    }
+
+    private fun editSaved(saved: CiCardFull) {
+        editor = null
+        card.set(saved)
+        onCardSaved(saved)
+        onMessage("Card saved")
+    }
+
+    private fun editClosed() {
+        editor = null
+    }
 
     /** Delete card is offered only for a card the owner asked for. */
     val canDelete: Boolean get() = card.value?.let { canDeleteCard(it.origin) } == true
@@ -108,6 +146,8 @@ class DetailState(
     /** The detail was left: replies still in flight are dropped. */
     fun close() {
         closed = true
+        editor?.close()
+        editor = null
         card.reset()
         messages.cancel()
     }
@@ -201,8 +241,19 @@ class BrowseState(
     }
 
     private fun makeDetail(d: BrowseDetail): DetailState = when (d) {
-        is BrowseDetail.Node -> DetailState(repo, scope, d.node, d.node.card?.id, onOff, ::cardDeleted)
-        is BrowseDetail.Card -> DetailState(repo, scope, null, d.id, onOff, ::cardDeleted)
+        is BrowseDetail.Node -> DetailState(repo, scope, d.node, d.node.card?.id, onOff, ::cardDeleted, onMessage, ::cardSaved)
+        is BrowseDetail.Card -> DetailState(repo, scope, null, d.id, onOff, ::cardDeleted, onMessage, ::cardSaved)
+    }
+
+    /** A card was saved: the rows that show it (the card list, a node row naming it) follow its new title and date. */
+    private fun cardSaved(c: CiCardFull) {
+        val title = c.card?.title.orEmpty()
+        cardLists.values.forEach { l ->
+            l.update { if (it.id == c.id) it.copy(title = title, updatedAt = c.updatedAt, editedAt = c.editedAt) else it }
+        }
+        nodeLists.values.forEach { l ->
+            l.update { n -> if (n.card?.id == c.id) n.copy(card = n.card.copy(title = title)) else n }
+        }
     }
 
     /** A card the owner asked for is gone: leave its view and read the lists again (their counts changed). */

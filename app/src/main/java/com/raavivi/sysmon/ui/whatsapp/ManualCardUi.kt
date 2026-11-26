@@ -266,3 +266,13 @@ internal fun YourCardChip(c: ChatColors, modifier: Modifier = Modifier) {
         modifier = modifier.clip(CircleShape).background(c.accent.copy(alpha = 0.3f)).padding(horizontal = 8.dp, vertical = 2.dp),
     )
 }
+
+/** The small "Edited" chip on the card view of a card the owner has edited. */
+@Composable
+internal fun EditedCardChip(c: ChatColors, modifier: Modifier = Modifier) {
+    Text(
+        "Edited",
+        style = chatMetaStyle(c.ink).copy(fontWeight = FontWeight.SemiBold),
+        modifier = modifier.clip(CircleShape).background(c.accent.copy(alpha = 0.3f)).padding(horizontal = 8.dp, vertical = 2.dp),
+    )
+}

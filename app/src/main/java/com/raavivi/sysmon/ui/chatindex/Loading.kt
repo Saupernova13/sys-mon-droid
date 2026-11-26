@@ -51,6 +51,14 @@ class Loadable<T>(
         }
     }
 
+    /** Show [v] as what was read (a saved edit answers with the card itself); a read in flight is dropped. */
+    fun set(v: T) {
+        epoch++
+        value = v
+        phase = LoadPhase.READY
+        error = ""
+    }
+
     /** Drop whatever is in flight and forget what was read. */
     fun reset() {
         epoch++
@@ -134,6 +142,11 @@ class PagedList<T>(
                 }
             }
         }
+    }
+
+    /** Change the rows already read (a saved edit moved a title), keeping their place and the paging. */
+    fun update(f: (T) -> T) {
+        items = items.map(f)
     }
 
     /** Drop whatever is in flight. */

@@ -40,7 +40,14 @@ data class WaSearchResponse(
 
 /** The cards the server wrote for a topic; [ofParent] when it is the parent topic's card on a sub-topic result. */
 @Serializable
-data class WaConvCard(val id: Long = 0, val title: String = "", val summary: String = "", val ofParent: Boolean = false)
+data class WaConvCard(
+    val id: Long = 0,
+    val title: String = "",
+    val summary: String = "",
+    val ofParent: Boolean = false,
+    /** Unix seconds of the owner's last edit; null for a card never edited. */
+    val editedAt: Long? = null,
+)
 
 /** A sub-topic result's parent topic. */
 @Serializable
@@ -162,6 +169,8 @@ data class WaCardDetail(
     val instruction: String? = null,
     /** The picked messages' ids; empty for a topic card. */
     val msgIds: List<String> = emptyList(),
+    /** Unix seconds of the owner's last edit; null for a card never edited. */
+    val editedAt: Long? = null,
 )
 
 /** The transcriber's counts; only `pending` is shown. */

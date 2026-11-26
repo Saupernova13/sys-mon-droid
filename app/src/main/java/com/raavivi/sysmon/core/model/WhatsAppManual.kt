@@ -50,6 +50,8 @@ data class WaYourCard(
     val nMsgs: Int = 0,
     val msgIds: List<String> = emptyList(),
     val score: Double = 0.0,
+    /** Unix seconds of the owner's last edit; null for a card never edited. */
+    val editedAt: Long? = null,
 )
 
 /** Why a request about a manual card was refused, from the status and the server's code (see [manualErrorOf]). */

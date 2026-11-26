@@ -1,8 +1,10 @@
 package com.raavivi.sysmon.core.data.chatindex
 
 import com.raavivi.sysmon.core.data.whatsapp.emptyResult
+import com.raavivi.sysmon.core.model.CiCardEdit
 import com.raavivi.sysmon.core.model.CiCardFull
 import com.raavivi.sysmon.core.model.CiCardsPage
+import com.raavivi.sysmon.core.model.CiEditOptions
 import com.raavivi.sysmon.core.model.CiFamiliesPage
 import com.raavivi.sysmon.core.model.CiMessage
 import com.raavivi.sysmon.core.model.CiMessagesPage
@@ -58,6 +60,11 @@ class HttpChatIndexRepository(private val api: ApiProvider) : ChatIndexRepositor
             is ApiResult.Ok -> emptyResult(r.value)
             is ApiResult.Err -> r
         }
+
+    override suspend fun editOptions(): ApiResult<CiEditOptions> = safeCall { api.api.waCardEditOptions() }
+
+    override suspend fun editCard(id: Long, edit: CiCardEdit): ApiResult<CiCardFull> =
+        safeCall { api.api.waCardEdit(id, edit) }
 
     override suspend fun lexicon(): ApiResult<Lexicon> = safeCall { api.api.lexicon() }
 

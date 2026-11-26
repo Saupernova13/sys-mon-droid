@@ -52,6 +52,13 @@ fun ChatIndexScreen(onBack: () -> Unit, onOpenChat: (ChatOpenRequest) -> Unit) {
 
     BackHandler(enabled = st.handlesBack) { st.back() }
 
+    // The card editor is its own full-screen view over the card; Close and Back inside it leave it.
+    val editor = st.browse.detail?.editor
+    if (editor != null) {
+        CardEditScreen(editor)
+        return
+    }
+
     Column(Modifier.fillMaxSize().imePadding()) {
         ScreenHeader(title = "Chat index", actions = {
             IconButton(onClick = st::refresh) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }

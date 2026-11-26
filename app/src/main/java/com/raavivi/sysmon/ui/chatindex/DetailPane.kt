@@ -3,6 +3,10 @@ package com.raavivi.sysmon.ui.chatindex
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -10,7 +14,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.raavivi.sysmon.core.model.ChatOpenRequest
@@ -27,7 +36,7 @@ import com.raavivi.sysmon.ui.common.SettingsRow
 
 /**
  * One node or card in full: its facts, the way down to its children, its card, and its messages (paged). A card
- * the owner asked for has Delete card in a bar at the bottom, in reach of the thumb. [chatLabel] names the chat
+ * the owner asked for has Delete card, and every done card Edit card, in a bar at the bottom, in reach of the thumb. [chatLabel] names the chat
  * for "Open in chat". Card and message text is private and never logged.
  */
 @Composable
@@ -89,7 +98,7 @@ internal fun DetailPane(
                 messageItems(d)
             }
         }
-        if (d.canDelete) DeleteBar(d)
+        if (d.canDelete || d.canEdit) CardBar(d)
     }
     if (d.confirming) {
         AlertDialog(
@@ -145,19 +154,38 @@ private fun androidx.compose.foundation.lazy.LazyListScope.messageItems(d: Detai
     }
 }
 
-/** Delete card: a bar at the bottom (the thumb zone) with the reason when a delete failed. */
+/**
+ * The bar at the bottom (the thumb zone): Edit card, the primary action, for every done card, and Delete card for
+ * one the owner asked for. Shows the reason when a delete failed.
+ */
 @Composable
-private fun DeleteBar(d: DetailState) {
+private fun CardBar(d: DetailState) {
     Surface(tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
             d.deleteError?.let { CiLiveLine(it) }
-            TextButton(
-                onClick = d::askDelete,
-                enabled = !d.deleting,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            ) {
-                if (d.deleting) CircularProgressIndicator(Modifier.padding(4.dp).heightIn(max = 20.dp), strokeWidth = 2.dp)
-                else Text("Delete card", color = MaterialTheme.colorScheme.error)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (d.canDelete) {
+                    TextButton(onClick = d::askDelete, enabled = !d.deleting, modifier = Modifier.heightIn(min = 48.dp)) {
+                        if (d.deleting) CircularProgressIndicator(Modifier.padding(4.dp).heightIn(max = 20.dp), strokeWidth = 2.dp)
+                        else Text("Delete card", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                if (d.canEdit) {
+                    FilledTonalButton(
+                        onClick = d::openEditor,
+                        enabled = !d.openingEditor,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        if (d.openingEditor) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Edit card")
+                        }
+                    }
+                }
             }
         }
     }
