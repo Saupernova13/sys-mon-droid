@@ -111,12 +111,27 @@ import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaRunResponse
 import com.raavivi.sysmon.core.model.WaSearchResponse
 import com.raavivi.sysmon.core.model.WaTimelineResponse
+import com.raavivi.sysmon.core.model.CiCardFull
+import com.raavivi.sysmon.core.model.CiCardsPage
+import com.raavivi.sysmon.core.model.CiFamiliesPage
+import com.raavivi.sysmon.core.model.CiMessagesWire
+import com.raavivi.sysmon.core.model.CiNodeDetail
+import com.raavivi.sysmon.core.model.CiNodesPage
+import com.raavivi.sysmon.core.model.CiOverview
+import com.raavivi.sysmon.core.model.CiStorage
+import com.raavivi.sysmon.core.model.LexEntry
+import com.raavivi.sysmon.core.model.LexEntryPutReq
+import com.raavivi.sysmon.core.model.LexEntryReq
+import com.raavivi.sysmon.core.model.LexRejected
+import com.raavivi.sysmon.core.model.LexTermReq
+import com.raavivi.sysmon.core.model.Lexicon
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -568,6 +583,57 @@ interface ApiService {
 
     @POST("api/whatsapp/chat-search/pick")
     suspend fun waChatSearchPick(@Body body: WaPickReq): WaPickCounts
+
+    // ── Chat index explorer + glossary (admin; 404 "chat search is off" while the feature is off) ──────
+    @GET("api/whatsapp/chat-search/explore/overview")
+    suspend fun ciOverview(): CiOverview
+
+    @GET("api/whatsapp/chat-search/explore/families")
+    suspend fun ciFamilies(@Query("offset") offset: Int, @Query("limit") limit: Int): CiFamiliesPage
+
+    /** A chat's nodes of [level] (null = sessions), or the children of [parent]: exactly one of [family] and [parent]. */
+    @GET("api/whatsapp/chat-search/explore/nodes")
+    suspend fun ciNodes(
+        @Query("family") family: Long?,
+        @Query("parent") parent: Long?,
+        @Query("offset") offset: Int,
+        @Query("limit") limit: Int,
+    ): CiNodesPage
+
+    @GET("api/whatsapp/chat-search/explore/nodes/{id}")
+    suspend fun ciNode(@Path("id") id: Long): CiNodeDetail
+
+    @GET("api/whatsapp/chat-search/explore/nodes/{id}/messages")
+    suspend fun ciNodeMessages(@Path("id") id: Long, @Query("offset") offset: Int, @Query("limit") limit: Int): CiMessagesWire
+
+    @GET("api/whatsapp/chat-search/explore/cards")
+    suspend fun ciCards(@Query("family") family: Long, @Query("offset") offset: Int, @Query("limit") limit: Int): CiCardsPage
+
+    @GET("api/whatsapp/chat-search/explore/cards/{id}")
+    suspend fun ciCard(@Path("id") id: Long): CiCardFull
+
+    @GET("api/whatsapp/chat-search/explore/storage")
+    suspend fun ciStorage(): CiStorage
+
+    @GET("api/whatsapp/chat-search/lexicon")
+    suspend fun lexicon(): Lexicon
+
+    @POST("api/whatsapp/chat-search/lexicon/entries")
+    suspend fun lexiconAdd(@Body body: LexEntryReq): LexEntry
+
+    @PUT("api/whatsapp/chat-search/lexicon/entries/{id}")
+    suspend fun lexiconSave(@Path("id") id: Long, @Body body: LexEntryPutReq): LexEntry
+
+    /** 204; a 409 `stale` means the entry changed since [version]. */
+    @DELETE("api/whatsapp/chat-search/lexicon/entries/{id}")
+    suspend fun lexiconDelete(@Path("id") id: Long, @Query("version") version: Long): Response<Unit>
+
+    @POST("api/whatsapp/chat-search/lexicon/rejected")
+    suspend fun lexiconReject(@Body body: LexTermReq): LexRejected
+
+    /** A DELETE with a JSON body: the term to take back (204; 404 when it is not rejected). */
+    @HTTP(method = "DELETE", path = "api/whatsapp/chat-search/lexicon/rejected", hasBody = true)
+    suspend fun lexiconUnreject(@Body body: LexTermReq): Response<Unit>
 
     // ── Jellyfin ─────────────────────────────────────────────────────────────────
     @GET("api/jellyfin/config")

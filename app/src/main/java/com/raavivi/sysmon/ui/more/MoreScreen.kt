@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MonitorHeart
@@ -91,6 +92,7 @@ fun MoreScreen(
     onOpenSettings: () -> Unit = {},
     onOpenJellyfin: () -> Unit = {},
     onOpenCardSettings: () -> Unit = {},
+    onOpenChatIndex: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
     onOpenHealth: () -> Unit = {},
@@ -260,6 +262,13 @@ fun MoreScreen(
                             title = "Topic cards",
                             subtitle = "Night window and chats to card",
                             onClick = onOpenCardSettings,
+                            trailing = { Chevron() },
+                        )
+                        SettingsRow(
+                            icon = Icons.AutoMirrored.Filled.ManageSearch,
+                            title = "Chat index",
+                            subtitle = "Browse what chat search built, and the private words",
+                            onClick = onOpenChatIndex,
                             trailing = { Chevron() },
                         )
                     }

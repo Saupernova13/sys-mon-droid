@@ -10,11 +10,14 @@ import coil.decode.ImageDecoderDecoder
 import com.raavivi.sysmon.core.auth.SessionManager
 import com.raavivi.sysmon.core.auth.TokenRenewer
 import com.raavivi.sysmon.core.data.SettingsStore
+import com.raavivi.sysmon.core.data.chatindex.ChatIndexRepository
+import com.raavivi.sysmon.core.data.chatindex.HttpChatIndexRepository
 import com.raavivi.sysmon.core.data.whatsapp.ContentResolverUploadSource
 import com.raavivi.sysmon.core.data.whatsapp.HttpWhatsAppRepository
 import com.raavivi.sysmon.core.data.whatsapp.UploadSource
 import com.raavivi.sysmon.core.data.whatsapp.WhatsAppRepository
 import com.raavivi.sysmon.core.log.AppLog
+import com.raavivi.sysmon.core.model.ChatOpenRequest
 import com.raavivi.sysmon.core.net.ApiProvider
 import com.raavivi.sysmon.core.push.PushRegistrar
 import com.raavivi.sysmon.core.tracker.TrackerContainer
@@ -39,6 +42,9 @@ class AppContainer(application: Application) {
     val whatsapp: WhatsAppRepository = HttpWhatsAppRepository(api)
     val uploads: UploadSource = ContentResolverUploadSource(appContext.contentResolver)
 
+    /** The chat index explorer and the private-words glossary (Settings > Chat index; admin). */
+    val chatIndex: ChatIndexRepository = HttpChatIndexRepository(api)
+
     /** In-app updates downloaded from sys-mon. */
     val updates: UpdateManager = UpdateManager(appContext, settings, api)
 
@@ -47,6 +53,9 @@ class AppContainer(application: Application) {
 
     /** A route a notification asked to open; the nav host takes it and clears it. */
     val pendingRoute: MutableStateFlow<String?> = MutableStateFlow(null)
+
+    /** A WhatsApp chat another screen (the Chat index) asked to open at a moment; the WhatsApp screen takes it and clears it. */
+    val pendingChatOpen: MutableStateFlow<ChatOpenRequest?> = MutableStateFlow(null)
 
     /** Coil loader that reuses the authed OkHttp client so `/api/fs/file` images
      *  and WhatsApp media carry the bearer token. The GIF decoders animate WhatsApp stickers (animated
