@@ -17,6 +17,7 @@ import com.raavivi.sysmon.ui.whatsapp.SearchPhase
 import com.raavivi.sysmon.ui.whatsapp.actLabel
 import com.raavivi.sysmon.ui.whatsapp.deepRangeText
 import com.raavivi.sysmon.ui.whatsapp.matchedLine
+import com.raavivi.sysmon.ui.whatsapp.modelNote
 import com.raavivi.sysmon.ui.whatsapp.readAsDescription
 import com.raavivi.sysmon.ui.whatsapp.readAsImagined
 import com.raavivi.sysmon.ui.whatsapp.readAsTags
@@ -99,6 +100,16 @@ class DeepSearchTest {
         assertNull(w.time)
         assertNull(w.imagined)
         assertNull(w.topic)
+        assertNull("a server without a rewrite model sends no model key", w.model)
+    }
+
+    @Test
+    fun `a model rewrite decodes its source and model word`() {
+        val raw = """{"mode":"deep","rewrite":{"source":"model","acts":[],"people":[],"time":null,
+            |"expansions":["snog"],"imagined":"Two people kiss at a party.","model":"used"}}""".trimMargin()
+        val w = SysMonJson.decodeFromString(WaChatSearchResponse.serializer(), raw).rewrite!!
+        assertEquals(("model" to "used"), w.source to w.model)
+        assertEquals(listOf("snog"), w.expansions)
     }
 
     // -- act labels and ranges ---------------------------------------------------------------------
@@ -185,6 +196,19 @@ class DeepSearchTest {
         )
         assertEquals(READ_AS_NOTHING, readAsDescription(WaRewrite(), zone))
         assertEquals("Read as: just the words", READ_AS_NOTHING)
+    }
+
+    @Test
+    fun `a rules-only read says why when the server has a rewrite model that gave nothing`() {
+        assertEquals("Rules only: the model is still starting", modelNote("loading"))
+        assertEquals("Rules only: the model did not answer", modelNote("failed"))
+        for (m in listOf("used", "", null, "other")) assertNull("$m", modelNote(m))
+        assertEquals(
+            "Read as: arguing. Rules only: the model is still starting",
+            readAsDescription(WaRewrite(acts = listOf("argu"), model = "loading"), zone),
+        )
+        assertEquals("Read as: just the words. Rules only: the model did not answer", readAsDescription(WaRewrite(model = "failed"), zone))
+        assertEquals("Read as: arguing", readAsDescription(WaRewrite(acts = listOf("argu"), model = "used"), zone))
     }
 
     // -- matches ----------------------------------------------------------------------------------

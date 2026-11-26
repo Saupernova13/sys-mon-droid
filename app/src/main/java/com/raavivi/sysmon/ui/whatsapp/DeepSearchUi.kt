@@ -64,14 +64,16 @@ internal fun ReadAsBlock(conv: ConvSearchState, c: ChatColors, modifier: Modifie
     val rewrite = conv.rewrite ?: return
     val tags = readAsTags(rewrite)
     val imagined = readAsImagined(rewrite)
-    if (tags.isEmpty() && imagined == null) {
-        Text(READ_AS_NOTHING, style = chatMetaStyle(c.meta), modifier = modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
-        return
-    }
+    val note = modelNote(rewrite.model)
     Column(
         modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp).clearAndSetSemantics { contentDescription = readAsDescription(rewrite) },
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (tags.isEmpty() && imagined == null) {
+            Text(READ_AS_NOTHING, style = chatMetaStyle(c.meta))
+            if (note != null) Text(note, style = chatMetaStyle(c.meta).copy(fontStyle = FontStyle.Italic))
+            return@Column
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // The same 4 dp (plus the 1 dp border) as the tags, so the label sits on their line.
             Text("Read as", style = chatMetaStyle(c.meta), modifier = Modifier.padding(vertical = 5.dp))
@@ -88,5 +90,6 @@ internal fun ReadAsBlock(conv: ConvSearchState, c: ChatColors, modifier: Modifie
         if (imagined != null) {
             Text("imagined: $imagined", style = chatMetaStyle(c.meta).copy(fontStyle = FontStyle.Italic), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        if (note != null) Text(note, style = chatMetaStyle(c.meta).copy(fontStyle = FontStyle.Italic))
     }
 }
