@@ -74,8 +74,8 @@ private fun CenteredNote(icon: ImageVector, title: String, hint: String, c: Chat
 
 /** No results: what was missing and what to try. */
 @Composable
-internal fun SearchEmpty(title: String, hint: String, c: ChatColors, modifier: Modifier = Modifier) =
-    CenteredNote(Icons.Filled.SearchOff, title, hint, c, modifier = modifier)
+internal fun SearchEmpty(title: String, hint: String, c: ChatColors, modifier: Modifier = Modifier, extra: @Composable () -> Unit = {}) =
+    CenteredNote(Icons.Filled.SearchOff, title, hint, c, modifier = modifier, extra = extra)
 
 /** A failed search: the message and, unless the server rejected the query itself, a Retry. */
 @Composable

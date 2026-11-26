@@ -86,6 +86,12 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     val searchCalls = mutableListOf<SearchCall>()
     val searchDaysCalls = mutableListOf<Pair<String, String>>()
     val chatSearchQueries = mutableListOf<String>()
+
+    /** The themes each chat search carried (empty when none were picked), in call order. */
+    val chatSearchThemes = mutableListOf<List<String>>()
+
+    /** When set, `chatSearch()` parks on it (after recording the call and taking its answer) until completed. */
+    var chatSearchGate: CompletableDeferred<Unit>? = null
     val picks = mutableListOf<WaPickReq>()
     var cardResult: ApiResult<WaCardDetail> = ApiResult.Ok(WaCardDetail())
     val cardRequests = mutableListOf<Long>()
@@ -292,6 +298,7 @@ class FakeWhatsAppRepository : WhatsAppRepository {
                 window = patch.window ?: base.window,
                 minMsgs = patch.minMsgs ?: base.minMsgs,
                 chats = patch.chats?.map { jid -> WaCardChat(jid = jid) } ?: base.chats,
+                facets = patch.facets ?: base.facets,
             ),
         )
     }
@@ -306,9 +313,12 @@ class FakeWhatsAppRepository : WhatsAppRepository {
         return actionResult
     }
 
-    override suspend fun chatSearch(q: String, limit: Int): ApiResult<WaChatSearchResponse> {
+    override suspend fun chatSearch(q: String, limit: Int, themes: List<String>): ApiResult<WaChatSearchResponse> {
         chatSearchQueries += q
-        return chatSearchResult
+        chatSearchThemes.add(themes)
+        val result = chatSearchResult
+        chatSearchGate?.await()
+        return result
     }
 
     override suspend fun chatSearchPick(body: WaPickReq): ApiResult<WaPickCounts> {
