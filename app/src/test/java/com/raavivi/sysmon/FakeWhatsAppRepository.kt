@@ -90,6 +90,9 @@ class FakeWhatsAppRepository : WhatsAppRepository {
     /** The themes each chat search carried (empty when none were picked), in call order. */
     val chatSearchThemes = mutableListOf<List<String>>()
 
+    /** Whether each chat search was deep, in call order. */
+    val chatSearchDeep = mutableListOf<Boolean>()
+
     /** When set, `chatSearch()` parks on it (after recording the call and taking its answer) until completed. */
     var chatSearchGate: CompletableDeferred<Unit>? = null
     val picks = mutableListOf<WaPickReq>()
@@ -313,9 +316,10 @@ class FakeWhatsAppRepository : WhatsAppRepository {
         return actionResult
     }
 
-    override suspend fun chatSearch(q: String, limit: Int, themes: List<String>): ApiResult<WaChatSearchResponse> {
+    override suspend fun chatSearch(q: String, limit: Int, themes: List<String>, deep: Boolean): ApiResult<WaChatSearchResponse> {
         chatSearchQueries += q
         chatSearchThemes.add(themes)
+        chatSearchDeep += deep
         val result = chatSearchResult
         chatSearchGate?.await()
         return result

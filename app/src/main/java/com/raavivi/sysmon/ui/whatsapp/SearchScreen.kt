@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -105,11 +106,11 @@ internal fun SearchScreen(vm: WhatsAppViewModel, onOpenCardSettings: () -> Unit 
 
 /** A rounded toggle for the filter chips: a 48 dp touch target around a 32 dp pill; accent fill when on. */
 @Composable
-internal fun SearchPill(label: String, on: Boolean, c: ChatColors, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+internal fun SearchPill(label: String, on: Boolean, c: ChatColors, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null, semanticsOverride: (SemanticsPropertyReceiver.() -> Unit)? = null) {
     Box(
         modifier
             .heightIn(min = 48.dp)
-            .semantics { role = Role.Button; selected = on }
+            .semantics(properties = semanticsOverride ?: { role = Role.Button; selected = on })
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

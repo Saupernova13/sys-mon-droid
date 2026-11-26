@@ -9,6 +9,7 @@ import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaConvResult
 import com.raavivi.sysmon.core.model.WaFacetCount
 import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaRewrite
 import com.raavivi.sysmon.core.model.WaYourCard
 import com.raavivi.sysmon.core.net.ApiResult
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +46,7 @@ class ConvSearchState(
     private val scope: CoroutineScope,
     private val onMessage: (String) -> Unit,
     private val onStatusRead: () -> Unit,
+    private val prefs: SearchModePrefs = SearchModePrefs.None,
 ) {
     var status by mutableStateOf<WaChatSearchStatus?>(null)
         private set
@@ -92,6 +94,19 @@ class ConvSearchState(
     var cardSheet by mutableStateOf<CardSheet?>(null)
         private set
 
+    /** Deep search is on: the server reads time, people and acts from the query and looks more carefully. Remembered. */
+    @set:JvmName("writeDeep") // the private setter would clash with setDeep(on) on the JVM
+    var deep by mutableStateOf(false)
+        private set
+
+    /** What the last deep answer read from the query; null for an instant answer. */
+    var rewrite by mutableStateOf<WaRewrite?>(null)
+        private set
+
+    /** The results on screen came from a deep search. */
+    val deepReply: Boolean get() = rewrite != null
+
+    private var deepPicked = false
     private var themeQuery = ""
     private var viewOpen = false
     private var resultsEpoch = 0
@@ -112,6 +127,25 @@ class ConvSearchState(
             val r = repo.chatSearchStatus()
             if (r is ApiResult.Ok) status = r.value
         }
+    }
+
+    init {
+        // The remembered choice; a setDeep made before it lands wins. A query that already ran the other way runs again.
+        scope.launch {
+            val saved = runCatching { prefs.deep() }.getOrDefault(false)
+            if (deepPicked || saved == deep) return@launch
+            deep = saved
+            if (themeQuery.isNotBlank()) run(themeQuery)
+        }
+    }
+
+    /** Turn Deep on or off, remember it, and search the current query again (the whole list changes). */
+    fun setDeep(on: Boolean) {
+        if (on == deep) return
+        deepPicked = true
+        deep = on
+        scope.launch { runCatching { prefs.saveDeep(on) } }
+        if (themeQuery.isNotBlank()) run(themeQuery)
     }
 
     /** A card of the owner's own was deleted: it leaves the results. */
@@ -212,6 +246,7 @@ class ConvSearchState(
         capNote = false
         resultsQ = ""
         degraded = false
+        rewrite = null
         phase = SearchPhase.IDLE
         error = null
         pick = PickState()
@@ -226,7 +261,8 @@ class ConvSearchState(
         themeQuery = q
         val mine = resultsEpoch
         phase = SearchPhase.LOADING
-        scope.launch { fetch(q, keep, mine) }
+        val wantDeep = deep
+        scope.launch { fetch(q, keep, mine, wantDeep) }
     }
 
     /** A chip was pressed: the theme joins or leaves the selection and the same query runs again with it. */
@@ -263,11 +299,12 @@ class ConvSearchState(
         pick = PickState()
         filtering = true
         val themes = selectedThemes
-        scope.launch { fetch(q, themes, mine) }
+        val wantDeep = deep
+        scope.launch { fetch(q, themes, mine, wantDeep) }
     }
 
-    private suspend fun fetch(q: String, themes: List<String>, mine: Int) {
-        val r = repo.chatSearch(q, CONV_LIMIT, themes)
+    private suspend fun fetch(q: String, themes: List<String>, mine: Int, wantDeep: Boolean) {
+        val r = repo.chatSearch(q, CONV_LIMIT, themes, wantDeep)
         if (mine != resultsEpoch) return
         filtering = false
         when (r) {
@@ -277,6 +314,7 @@ class ConvSearchState(
                 themeCounts = cleanThemeCounts(r.value.facetCounts)
                 resultsQ = q
                 degraded = r.value.degraded == "keyword"
+                rewrite = if (r.value.mode == "deep") r.value.rewrite ?: WaRewrite() else null
                 error = null
                 phase = SearchPhase.DONE
             }

@@ -552,6 +552,8 @@ interface ApiService {
         @Query("limit") limit: Int = 20,
         /** Up to 5 theme names, comma-separated; null (no theme picked) leaves the URL unchanged. */
         @Query("facets") facets: String? = null,
+        /** "deep" asks for the careful reading of the query; null (instant) leaves the URL unchanged. */
+        @Query("mode") mode: String? = null,
     ): Response<WaChatSearchResponse>
 
     /** A result's full topic card; 404 when it has none. */
