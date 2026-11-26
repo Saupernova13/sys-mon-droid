@@ -178,6 +178,12 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   filters, scroll position and open card as they were. Opening a hit lands on the message,
   and the in-chat bar (magnifier in the conversation header) steps through that chat's hits,
   highlights the words and marks the days on the timeline scrubber.
+  *Your own cards* (0.28.0, admin, while chat search is live): long-press a message > *Select messages*,
+  tap to pick, long-press to take the range from the last one picked (at most 400), then *Make card* in
+  the bar that replaces the composer. The sheet asks what the card should describe (optional), follows
+  the job (queued, waiting for the game / GPU / index, writing, done with *Open card*) and, if closed,
+  a snackbar says when it is ready. Your cards head the Conversations results as *Your cards*; the card
+  view shows *You asked: ...* and *Delete card*, and *Show in chat* tints exactly the picked messages.
 
 - **Health (watchdog)** — More → Tools → Health shows every target of the central watchdog
   (`GET /api/watchdog/status`): a state dot, "Healthy" / "Down - <error>" / "Paused

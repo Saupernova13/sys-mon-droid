@@ -89,6 +89,8 @@ data class WaChatSearchResponse(
     val tookMs: Double = 0.0,
     val reranked: Boolean = false,
     val degraded: String? = null,
+    /** The owner's own cards that matched, beside [results] and never among them (best first, at most 5). */
+    val yourCards: List<WaYourCard> = emptyList(),
 )
 
 /** One act in a topic card (a kind of speech act); [intensity] is 0..5, [resolved] whether it was settled. */
@@ -154,6 +156,12 @@ data class WaCardDetail(
     val card: WaTopicCard = WaTopicCard(),
     val subtopics: List<WaSubCard> = emptyList(),
     val moments: List<WaCardMoment> = emptyList(),
+    /** `auto` for a topic's card, `manual` for one the owner asked for. */
+    val origin: String = "auto",
+    /** A manual card's description, else null. */
+    val instruction: String? = null,
+    /** The picked messages' ids; empty for a topic card. */
+    val msgIds: List<String> = emptyList(),
 )
 
 /** The transcriber's counts; only `pending` is shown. */

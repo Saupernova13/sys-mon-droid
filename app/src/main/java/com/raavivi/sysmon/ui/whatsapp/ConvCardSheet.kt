@@ -20,20 +20,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -61,6 +66,20 @@ internal class CardSheetActions(
     val found: FoundAction? = null,
 )
 
+/**
+ * What the card sheet adds for one of the owner's own cards (#392): the description it was asked for, and the
+ * Delete card flow (a confirm, then deleting, or the reason it failed).
+ */
+internal class MineCard(
+    val instruction: String,
+    val confirming: Boolean,
+    val deleting: Boolean,
+    val error: String?,
+    val onDelete: () -> Unit,
+    val onKeep: () -> Unit,
+    val onConfirm: () -> Unit,
+)
+
 /** The "Found it" button's label, whether it can be pressed, and what it does. */
 internal class FoundAction(val label: String, val enabled: Boolean, val onFound: () -> Unit)
 
@@ -72,7 +91,16 @@ internal class FoundAction(val label: String, val enabled: Boolean, val onFound:
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun ConvCardSheet(vm: WhatsAppViewModel, sheet: CardSheet, r: WaConvResult?, a: CardSheetActions, c: ChatColors, reduced: Boolean, nowSec: Double) {
+internal fun ConvCardSheet(
+    vm: WhatsAppViewModel,
+    sheet: CardSheet,
+    r: WaConvResult?,
+    a: CardSheetActions,
+    c: ChatColors,
+    reduced: Boolean,
+    nowSec: Double,
+    mine: MineCard? = null,
+) {
     // The results this sheet belongs to are gone: nothing to show.
     if (r == null) {
         LaunchedEffect(Unit) { a.onClose() }
@@ -89,12 +117,17 @@ internal fun ConvCardSheet(vm: WhatsAppViewModel, sheet: CardSheet, r: WaConvRes
                 Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                CardHeader(vm, r, sheet, c, nowSec)
+                CardHeader(vm, r, sheet, c, nowSec, mine)
                 when (sheet.phase) {
                     CardPhase.LOADING -> SearchSkeleton(card = false, c = c, reduced = reduced, horizontal = 0.dp)
                     CardPhase.MISSING -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("No topic card yet for this conversation", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
-                        Text("Cards are written in the background; the matching lines are below", style = chatSecondaryStyle(c.meta))
+                        if (mine != null) {
+                            Text("This card is no longer there", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                            Text("It may have been deleted", style = chatSecondaryStyle(c.meta))
+                        } else {
+                            Text("No topic card yet for this conversation", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                            Text("Cards are written in the background; the matching lines are below", style = chatSecondaryStyle(c.meta))
+                        }
                     }
                     CardPhase.ERROR -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Could not load the card", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
@@ -109,14 +142,15 @@ internal fun ConvCardSheet(vm: WhatsAppViewModel, sheet: CardSheet, r: WaConvRes
                 }
                 Spacer(Modifier.size(8.dp))
             }
-            ActionBar(r, a, c, reduced)
+            ActionBar(r, a, c, reduced, mine)
         }
     }
+    if (mine != null && mine.confirming) DeleteConfirm(mine, c)
 }
 
 /** Avatar, chat name, range and count; then the full title, the summary, and which topic a sub-topic result borrows. */
 @Composable
-private fun CardHeader(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet, c: ChatColors, nowSec: Double) {
+private fun CardHeader(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet, c: ChatColors, nowSec: Double, mine: MineCard?) {
     val name = r.chatName.ifBlank { vm.searchChatName(r.chat, "") }
     val detailCard = sheet.detail?.card
     val title = detailCard?.title?.takeIf { it.isNotBlank() } ?: r.card?.title?.takeIf { it.isNotBlank() } ?: name
@@ -130,7 +164,11 @@ private fun CardHeader(vm: WhatsAppViewModel, r: WaConvResult, sheet: CardSheet,
                 Text("${convRange(r.startTs, r.endTs, nowSec)} · ${messagesLabel(r.nMsgs)}", style = chatMetaStyle(c.meta))
             }
         }
+        if (mine != null) YourCardChip(c, Modifier.align(Alignment.Start))
         Text(title, style = chatBodyStyle(c.ink).copy(fontWeight = FontWeight.SemiBold))
+        if (mine != null && mine.instruction.isNotBlank()) {
+            Text("You asked: ${mine.instruction}", style = chatSecondaryStyle(c.meta).copy(fontStyle = FontStyle.Italic))
+        }
         if (sheet.detail?.ofParent == true) {
             Text("From the wider topic this belongs to", style = chatMetaStyle(c.meta).copy(fontStyle = FontStyle.Italic))
         }
@@ -277,21 +315,54 @@ private fun MomentRow(m: WaCardMoment, c: ChatColors, onOpen: () -> Unit) {
     }
 }
 
-/** Sticky bottom bar: "Found it" (outlined) and the primary "Show in chat". */
+/** Sticky bottom bar: "Found it" (outlined) and the primary "Show in chat"; a card of the owner's has Delete card instead of Found it. */
 @Composable
-private fun ActionBar(r: WaConvResult, a: CardSheetActions, c: ChatColors, reduced: Boolean) {
-    Row(
-        Modifier.fillMaxWidth().background(c.inBg).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        a.found?.let { PickButton(it.label, "Found it", it.enabled, c, reduced, it.onFound) }
-        Spacer(Modifier.weight(1f))
-        Button(
-            onClick = { a.onOpenChat(r) },
-            modifier = Modifier.heightIn(min = 48.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
-        ) {
-            Text("Show in chat", style = chatSecondaryStyle(c.onAccent, FontWeight.SemiBold))
+private fun ActionBar(r: WaConvResult, a: CardSheetActions, c: ChatColors, reduced: Boolean, mine: MineCard?) {
+    Column(Modifier.fillMaxWidth().background(c.inBg).navigationBarsPadding()) {
+        mine?.error?.let {
+            Text(
+                it,
+                style = chatSecondaryStyle(MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).semantics { liveRegion = LiveRegionMode.Assertive },
+            )
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (mine != null) {
+                TextButton(onClick = mine.onDelete, enabled = !mine.deleting, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(
+                        if (mine.deleting) "Deleting..." else "Delete card",
+                        style = chatSecondaryStyle(MaterialTheme.colorScheme.error, FontWeight.SemiBold),
+                    )
+                }
+            } else {
+                a.found?.let { PickButton(it.label, "Found it", it.enabled, c, reduced, it.onFound) }
+            }
+            Spacer(Modifier.weight(1f))
+            Button(
+                onClick = { a.onOpenChat(r) },
+                modifier = Modifier.heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
+            ) {
+                Text("Show in chat", style = chatSecondaryStyle(c.onAccent, FontWeight.SemiBold))
+            }
         }
     }
+}
+
+/** "Delete this card?": the card, its words and its vectors go; the messages themselves are untouched. */
+@Composable
+private fun DeleteConfirm(mine: MineCard, c: ChatColors) {
+    AlertDialog(
+        onDismissRequest = mine.onKeep,
+        title = { Text("Delete this card?") },
+        text = { Text("This cannot be undone. The messages stay in the chat.") },
+        confirmButton = {
+            TextButton(onClick = mine.onConfirm, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = mine.onKeep, modifier = Modifier.heightIn(min = 48.dp)) { Text("Keep", color = c.accent) }
+        },
+    )
 }

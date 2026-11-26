@@ -8,6 +8,7 @@ import com.raavivi.sysmon.core.model.WaCardDetail
 import com.raavivi.sysmon.core.model.WaChatSearchStatus
 import com.raavivi.sysmon.core.model.WaConvResult
 import com.raavivi.sysmon.core.model.WaPickReq
+import com.raavivi.sysmon.core.model.WaYourCard
 import com.raavivi.sysmon.core.net.ApiResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -49,6 +50,10 @@ class ConvSearchState(
     var results by mutableStateOf<List<WaConvResult>>(emptyList())
         private set
 
+    /** The owner's own cards that matched, shown above [results] and never among them. */
+    var yourCards by mutableStateOf<List<WaYourCard>>(emptyList())
+        private set
+
     /** The query [results] answer: a pick names it, never the field's current text. */
     var resultsQ by mutableStateOf("")
         private set
@@ -77,6 +82,23 @@ class ConvSearchState(
 
     /** Conversations mode is offered when chat search is on and has node vectors to search. */
     val available: Boolean get() = status?.let { it.enabled && it.nodeVectors > 0 } == true
+
+    /**
+     * Read the status once when it is not known to be live, outside the Search view and without polling, so an
+     * open chat can tell whether "Select messages" is on offer. A failed read changes nothing.
+     */
+    fun checkAvailable() {
+        if (available) return
+        scope.launch {
+            val r = repo.chatSearchStatus()
+            if (r is ApiResult.Ok) status = r.value
+        }
+    }
+
+    /** A card of the owner's own was deleted: it leaves the results. */
+    fun removeYourCard(cardId: Long) {
+        yourCards = yourCards.filter { it.cardId != cardId }
+    }
 
     // -- status --------------------------------------------------------------------------------
 
@@ -163,6 +185,7 @@ class ConvSearchState(
         resultsEpoch++
         closeCard()
         results = emptyList()
+        yourCards = emptyList()
         resultsQ = ""
         degraded = false
         phase = SearchPhase.IDLE
@@ -181,6 +204,7 @@ class ConvSearchState(
             when (r) {
                 is ApiResult.Ok -> {
                     results = r.value.results
+                    yourCards = r.value.yourCards
                     resultsQ = q
                     degraded = r.value.degraded == "keyword"
                     phase = SearchPhase.DONE

@@ -15,6 +15,8 @@ import com.raavivi.sysmon.core.model.WaForward
 import com.raavivi.sysmon.core.model.WaLatestReq
 import com.raavivi.sysmon.core.model.WaLocalPinReq
 import com.raavivi.sysmon.core.model.WaChatNameReq
+import com.raavivi.sysmon.core.model.WaManualCardReq
+import com.raavivi.sysmon.core.model.WaManualJob
 import com.raavivi.sysmon.core.model.WaMarkRead
 import com.raavivi.sysmon.core.model.WaMessage
 import com.raavivi.sysmon.core.model.WaPickCounts
@@ -181,6 +183,24 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
 
     override suspend fun chatSearchCardById(card: Long): ApiResult<WaCardDetail> =
         safeCall { api.api.waChatSearchCardById(card) }
+
+    override suspend fun createManualCard(chat: String, msgIds: List<String>, instruction: String?): ApiResult<WaManualJob> =
+        safeCall { api.api.waManualCardCreate(WaManualCardReq(chat = chat, msgIds = msgIds, instruction = instruction)) }
+            .mapOk { it.job }
+
+    override suspend fun manualJob(id: Long): ApiResult<WaManualJob> = safeCall { api.api.waManualCardJob(id) }
+
+    override suspend fun cancelManualJob(id: Long): ApiResult<Unit> =
+        when (val r = safeCall { api.api.waManualCardCancel(id) }) {
+            is ApiResult.Ok -> emptyResult(r.value)
+            is ApiResult.Err -> r
+        }
+
+    override suspend fun deleteCard(id: Long): ApiResult<Unit> =
+        when (val r = safeCall { api.api.waCardDelete(id) }) {
+            is ApiResult.Ok -> emptyResult(r.value)
+            is ApiResult.Err -> r
+        }
 
     override suspend fun chatSearchTags(body: WaTagsReq): ApiResult<WaTagsResponse> =
         safeCall { api.api.waChatSearchTags(body) }

@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,6 +59,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
@@ -108,7 +115,15 @@ class ChatEnv(
     val marks: List<WaSearchTerm> = emptyList(),
     /** A tapped conversation's start..end (unix seconds): rows inside it are tinted. */
     val range: LongRange? = null,
+    /** Selection mode (#392): null when off; while on, a tap or long-press picks and nothing else is interactive. */
+    val select: SelectUi? = null,
+    /** The messages a card of the owner's was written for (by id): exactly these rows are tinted. */
+    val picked: Set<String> = emptySet(),
 )
+
+/** Selection mode as a row sees it: the [picks] (message id to time), a tap's action and a long-press's range action. */
+@Stable
+class SelectUi(val picks: Map<String, Double>, val onTap: (WaMessage) -> Unit, val onRange: (WaMessage) -> Unit)
 
 private fun bubbleBg(c: ChatColors, mine: Boolean) = if (mine) c.outBg else c.inBg
 
@@ -167,10 +182,15 @@ fun MessageItem(row: MsgRow, env: ChatEnv, fresh: Boolean, flash: Boolean, modif
     val bubbleFree = sticker || jumbo > 0
 
     val inRange = env.range?.let { m.ts.toLong() in it } == true
+    val isPicked = m.id.isNotBlank() && m.id in env.picked
+    val sel = env.select
+    val selectable = sel != null && waCanSelect(m)
+    val isSel = sel != null && m.id in sel.picks
     Box(
         modifier
             .fillMaxWidth()
-            .then(if (inRange) Modifier.background(c.accent.copy(alpha = 0.12f)) else Modifier)
+            .then(if (inRange || isPicked) Modifier.background(c.accent.copy(alpha = 0.12f)) else Modifier)
+            .then(if (isSel) Modifier.background(c.accent.copy(alpha = 0.24f)) else Modifier)
             .padding(top = if (row.groupFirst) 10.dp else 2.dp)
             .padding(horizontal = 10.dp),
         contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart,
@@ -178,7 +198,7 @@ fun MessageItem(row: MsgRow, env: ChatEnv, fresh: Boolean, flash: Boolean, modif
         Box(
             Modifier
                 .entrance(fresh, mine, env.reduced)
-                .padding(bottom = if (sum.total > 0) 12.dp else 0.dp),
+                .padding(start = if (sel != null) SELECT_GUTTER else 0.dp, bottom = if (sum.total > 0) 12.dp else 0.dp),
         ) {
             val side = if (mine) Alignment.TopEnd else Alignment.TopStart
             // The swipe follows the finger: free to 40dp, resisted toward 72dp; a release past 56dp
@@ -205,24 +225,29 @@ fun MessageItem(row: MsgRow, env: ChatEnv, fresh: Boolean, flash: Boolean, modif
             Box(
                 Modifier
                     .onGloballyPositioned { if (m.id.isNotBlank()) env.rowBounds[m.id] = it.boundsInRoot() }
-                    .combinedClickable(onClick = {}, onLongClick = { env.onLongPress(m) })
-                    .pointerInput(m.id) {
-                        detectHorizontalDragGestures(
-                            onDragEnd = {
-                                if (waSwipeReached(swipe.value)) env.onReply(m)
-                                scope.launch { swipe.animateTo(0f, moveSpring()) }
+                    // Selection mode: no menu, no swipe-to-reply; the row's own overlay (below) reads the taps.
+                    .then(
+                        if (sel != null) Modifier.clearAndSetSemantics { }
+                        else Modifier
+                            .combinedClickable(onClick = {}, onLongClick = { env.onLongPress(m) })
+                            .pointerInput(m.id) {
+                                detectHorizontalDragGestures(
+                                    onDragEnd = {
+                                        if (waSwipeReached(swipe.value)) env.onReply(m)
+                                        scope.launch { swipe.animateTo(0f, moveSpring()) }
+                                    },
+                                    onDragCancel = { scope.launch { swipe.animateTo(0f, moveSpring()) } },
+                                ) { _, dx ->
+                                    rawDrag = (rawDrag + dx).coerceAtLeast(0f)
+                                    scope.launch { swipe.snapTo(waSwipeOffset(rawDrag)) }
+                                    val reached = waSwipeReached(swipe.value)
+                                    if (reached != ticked) {
+                                        ticked = reached
+                                        if (reached && !env.reduced) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                }
                             },
-                            onDragCancel = { scope.launch { swipe.animateTo(0f, moveSpring()) } },
-                        ) { _, dx ->
-                            rawDrag = (rawDrag + dx).coerceAtLeast(0f)
-                            scope.launch { swipe.snapTo(waSwipeOffset(rawDrag)) }
-                            val reached = waSwipeReached(swipe.value)
-                            if (reached != ticked) {
-                                ticked = reached
-                                if (reached && !env.reduced) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                        }
-                    }
+                    )
                     .offset { IntOffset(swipe.value.roundToInt(), 0) },
             ) {
                 if (bubbleFree) {
@@ -281,7 +306,50 @@ fun MessageItem(row: MsgRow, env: ChatEnv, fresh: Boolean, flash: Boolean, modif
                 }
             }
         }
+        if (sel != null) {
+            if (selectable) SelectCheck(isSel, c, Modifier.align(Alignment.CenterStart))
+            // Over the whole row, so a bubble's own taps (media, voice, quote) never fire while picking.
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .semantics {
+                        role = Role.Checkbox
+                        stateDescription = if (isSel) "Selected" else "Not selected"
+                        contentDescription = selectLabel(m, env)
+                    }
+                    .combinedClickable(
+                        onClickLabel = if (isSel) "Unselect" else "Select",
+                        onClick = { sel.onTap(m) },
+                        onLongClickLabel = "Select every message from the last one chosen to this one",
+                        onLongClick = { sel.onRange(m) },
+                    ),
+            )
+        }
     }
+}
+
+/** The gutter a row keeps at its start in selection mode, for the round check. */
+private val SELECT_GUTTER = 36.dp
+
+/** The round check at a row's start: an empty ring, or filled with a tick when picked. */
+@Composable
+private fun SelectCheck(selected: Boolean, c: ChatColors, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .then(if (selected) Modifier.background(c.accent) else Modifier.border(2.dp, c.meta, CircleShape)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = c.onAccent, modifier = Modifier.size(16.dp))
+    }
+}
+
+/** What TalkBack reads for a row in selection mode: who, then the words (or the kind of media). */
+private fun selectLabel(m: WaMessage, env: ChatEnv): String {
+    val who = if (m.fromMe) "You" else m.senderName.ifBlank { waSenderLabel(m.sender, env.names) }
+    val what = if (m.revoked) "Deleted message" else waCaptionOf(m).ifBlank { m.mediaKind()?.label.orEmpty() }
+    return "$who: $what"
 }
 
 /** The menu overlay's lifted copy of a bubble (or bubble-free sticker / jumbo): same body, no gestures. */
