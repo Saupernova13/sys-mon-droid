@@ -55,6 +55,8 @@ import com.raavivi.sysmon.core.model.WaChat
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.ui.common.LoadingBox
 import com.raavivi.sysmon.ui.common.ScreenHeader
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.raavivi.sysmon.LocalAppContainer
 import com.raavivi.sysmon.ui.common.rememberContainerViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -63,6 +65,15 @@ import kotlinx.coroutines.launch
 fun WhatsAppScreen(onBack: (() -> Unit)? = null, onOpenCardSettings: () -> Unit = {}) {
     val vm = rememberContainerViewModel { WhatsAppViewModel.from(it) }
     vm.message?.let { msg -> LaunchedEffect(msg) { delay(2500); vm.message = null } }
+
+    // The Chat index asked for a chat at a moment: open it, then clear the request.
+    val container = LocalAppContainer.current
+    val pendingOpen by container.pendingChatOpen.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingOpen) {
+        val req = pendingOpen ?: return@LaunchedEffect
+        container.pendingChatOpen.value = null
+        vm.openChatAt(req.jid, vm.searchChatName(req.jid, req.name), req.ts, focusId = req.msgId)
+    }
 
     // Leaving the screen (tab switch) must not leave the microphone open.
     DisposableEffect(vm) { onDispose { vm.recorder.cancel() } }

@@ -185,6 +185,14 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
   a snackbar says when it is ready. Your cards head the Conversations results as *Your cards*; the card
   view shows *You asked: ...* and *Delete card*, and *Show in chat* tints exactly the picked messages.
 
+- **Chat index** (0.29.0, admin, More > Server > Chat index) - what chat search has built, and the private words,
+  in four tabs: *Overview* (the index's counts), *Browse* (a chat, then its sessions, topics and sub-topics, or its
+  cards; a node shows its facts, its card in full and its messages; a card's key moments open the WhatsApp chat at
+  that message; a card you asked for is marked *Yours* and can be deleted), *Lexicon* (the glossary: words as chips,
+  one-line meanings, edit in place, delete with a confirm, suggestions to accept or reject, rejected words with
+  Undo; any character is allowed in a word, a comma never splits one, and a change made elsewhere reloads) and
+  *Storage* (each chat-search database, its size and table row counts).
+
 - **Health (watchdog)** — More → Tools → Health shows every target of the central watchdog
   (`GET /api/watchdog/status`): a state dot, "Healthy" / "Down - <error>" / "Paused
   until 18:30" / "Gave up after 3 restarts", restarts in the window, and the recent
@@ -196,7 +204,7 @@ WebSocket API (`docs/API.md` in the sys-mon repo).
 
 Found in `More`, grouped as: **Tools** (Terminal, Screen share, Find Me, Model log, Health,
 Schedules), **Host** (remote control, history backup, restart, shut down; admin), **This phone**
-(Notifications, Theme, Logs, App updates), **Server** (Features, Jellyfin; admin) and **Account**
+(Notifications, Theme, Logs, App updates), **Server** (Features, Jellyfin, Topic cards, Chat index; admin) and **Account**
 (log out, log out everywhere), plus the app + server version line. The Godot editor launcher was
 intentionally left out of this client.
 

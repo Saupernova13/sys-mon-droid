@@ -41,6 +41,7 @@ import com.raavivi.sysmon.ui.notifications.NotificationsScreen
 import com.raavivi.sysmon.ui.power.PowerScreen
 import com.raavivi.sysmon.ui.processes.ProcessesScreen
 import com.raavivi.sysmon.ui.screen.ScreenShareScreen
+import com.raavivi.sysmon.ui.chatindex.ChatIndexScreen
 import com.raavivi.sysmon.ui.settings.CardSettingsScreen
 import com.raavivi.sysmon.ui.settings.JellyfinScreen
 import com.raavivi.sysmon.ui.settings.SettingsScreen
@@ -92,7 +93,7 @@ private fun MainScaffold() {
     LaunchedEffect(visibleDests, currentRoute, isAdmin, features, style) {
         val onHiddenTab = isStrandedOnTab(style, currentRoute, visibleDests)
         val onHiddenTool = when (currentRoute) {
-            Routes.TERMINAL, Routes.SCREEN, Routes.SETTINGS, Routes.JELLYFIN, Routes.CARD_SETTINGS -> !isAdmin
+            Routes.TERMINAL, Routes.SCREEN, Routes.SETTINGS, Routes.JELLYFIN, Routes.CARD_SETTINGS, Routes.CHAT_INDEX -> !isAdmin
             Routes.MODEL_LOG -> !isAdmin || features?.modelLog != true
             Routes.FIND_ME -> !isAdmin || features?.findme != true
             else -> false
@@ -181,6 +182,7 @@ private fun MainScaffold() {
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenJellyfin = { nav.navigate(Routes.JELLYFIN) },
                     onOpenCardSettings = { nav.navigate(Routes.CARD_SETTINGS) },
+                    onOpenChatIndex = { nav.navigate(Routes.CHAT_INDEX) },
                     onOpenNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
                     onOpenLogs = { nav.navigate(Routes.LOGS) },
                     onOpenHealth = { nav.navigate(Routes.HEALTH) },
@@ -236,6 +238,15 @@ private fun MainScaffold() {
             composable(Routes.LOGS) { LogsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.JELLYFIN) { JellyfinScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.CARD_SETTINGS) { CardSettingsScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.CHAT_INDEX) {
+                ChatIndexScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenChat = { req ->
+                        container.pendingChatOpen.value = req
+                        nav.navigate(TopDest.WhatsApp.route) { launchSingleTop = true }
+                    },
+                )
+            }
             composable(Routes.PLUG_ALERTS) { PlugAlertsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.HEALTH) {
                 HealthScreen(onBack = if (minimal) null else ({ nav.popBackStack() }))
