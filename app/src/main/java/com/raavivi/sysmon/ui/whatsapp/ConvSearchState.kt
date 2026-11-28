@@ -94,6 +94,14 @@ class ConvSearchState(
     var cardSheet by mutableStateOf<CardSheet?>(null)
         private set
 
+    /** The conversations opened from "More like this", oldest first; the sheet shows the last. Empty for the result itself. */
+    var similarStack by mutableStateOf<List<SimilarFrame>>(emptyList())
+        private set
+
+    /** "More like this" per card (by node id), kept for the life of the sheet so Back needs no new request. */
+    var similar by mutableStateOf<Map<Long, SimilarList>>(emptyMap())
+        private set
+
     /** Deep search is on: the server reads time, people and acts from the query and looks more carefully. Remembered. */
     @set:JvmName("writeDeep") // the private setter would clash with setDeep(on) on the JVM
     var deep by mutableStateOf(false)
@@ -112,6 +120,8 @@ class ConvSearchState(
     private var resultsEpoch = 0
     private var statusEpoch = 0
     private var cardEpoch = 0
+    private var similarSeq = 0
+    private val similarTokens = mutableMapOf<Long, Int>()
     private var pollJob: Job? = null
 
     /** Conversations mode is offered when chat search is on and has node vectors to search. */
@@ -335,25 +345,29 @@ class ConvSearchState(
     /** Open the full-card sheet on result [index] and read its card. */
     fun openCard(index: Int) {
         if (results.getOrNull(index) == null) return
+        forgetSimilar()
         cardSheet = CardSheet(index)
-        loadCard(index)
+        loadShown()
     }
 
-    /** Close the sheet; a reply still in flight is dropped. */
+    /** Close the sheet; a reply still in flight is dropped, and so is everything opened from "More like this". */
     fun closeCard() {
         cardEpoch++
         cardSheet = null
+        forgetSimilar()
     }
 
     /** Try the open sheet's card again after an error. */
     fun retryCard() {
         val sheet = cardSheet ?: return
         cardSheet = CardSheet(sheet.index)
-        loadCard(sheet.index)
+        loadShown()
     }
 
-    private fun loadCard(index: Int) {
-        val node = results.getOrNull(index)?.nodeId ?: return
+    /** Reads the card of the conversation the sheet shows (the top of the "More like this" stack, else the result). */
+    private fun loadShown() {
+        val index = cardSheet?.index ?: return
+        val node = shownConv?.nodeId ?: return
         val mine = resultsEpoch
         val mineCard = ++cardEpoch
         scope.launch {
@@ -365,6 +379,72 @@ class ConvSearchState(
                 is ApiResult.Err -> CardSheet(index, if (r.code == 404) CardPhase.MISSING else CardPhase.ERROR)
             }
         }
+    }
+
+    // -- more like this -----------------------------------------------------------------------
+
+    /** The conversation the open sheet shows: the top of [similarStack], else its result; null with no sheet. */
+    val shownConv: WaConvResult?
+        get() = similarStack.lastOrNull()?.conv ?: cardSheet?.let { results.getOrNull(it.index) }
+
+    /** What "More like this" holds for the shown card; null when it has not been asked for. */
+    val shownSimilar: SimilarList? get() = shownConv?.let { similar[it.nodeId] }
+
+    /** Ask for the conversations most like the shown card. An answer already there (or on its way) is left alone. */
+    fun moreLike() {
+        val node = shownConv?.nodeId ?: return
+        if (similar[node] != null) return
+        requestSimilar(node)
+    }
+
+    /** Ask again after an error. */
+    fun retrySimilar() {
+        val node = shownConv?.nodeId ?: return
+        if (similar[node]?.phase != SimilarPhase.ERROR) return
+        requestSimilar(node)
+    }
+
+    private fun requestSimilar(node: Long) {
+        val token = ++similarSeq
+        similarTokens[node] = token
+        similar = similar + (node to SimilarList(SimilarPhase.LOADING))
+        scope.launch {
+            val r = repo.chatSearchSimilar(node)
+            // The sheet closed, or its card was left, while this was in flight.
+            if (similarTokens[node] != token) return@launch
+            similarTokens.remove(node)
+            similar = similar + (node to similarListOf(r))
+        }
+    }
+
+    /** Open [conv], a row of "More like this", on top of the shown card and read its card. */
+    fun openSimilar(conv: WaConvResult) {
+        val sheet = cardSheet ?: return
+        similarStack = similarStack + SimilarFrame(conv, sheet)
+        cardSheet = CardSheet(sheet.index)
+        loadShown()
+    }
+
+    /** Back from a card opened from "More like this" to the one under it; false when there was nothing to pop. */
+    fun backFromSimilar(): Boolean {
+        val top = similarStack.lastOrNull() ?: return false
+        similarStack = similarStack.dropLast(1)
+        val node = top.conv.nodeId
+        // A request for the card just left is dropped; an answer it already has stays for the sheet's life.
+        if (similar[node]?.phase == SimilarPhase.LOADING) {
+            similarTokens.remove(node)
+            similar = similar - node
+        }
+        cardEpoch++
+        cardSheet = top.prev
+        if (top.prev.phase == CardPhase.LOADING) loadShown()
+        return true
+    }
+
+    private fun forgetSimilar() {
+        similarStack = emptyList()
+        similar = emptyMap()
+        similarTokens.clear()
     }
 
     // -- picks ---------------------------------------------------------------------------------

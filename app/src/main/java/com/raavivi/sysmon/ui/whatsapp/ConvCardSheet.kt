@@ -1,5 +1,10 @@
 package com.raavivi.sysmon.ui.whatsapp
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -100,52 +105,93 @@ internal fun ConvCardSheet(
     reduced: Boolean,
     nowSec: Double,
     mine: MineCard? = null,
+    /** "More like this" (and Back from a card opened that way); null where the sheet has none. */
+    similar: SimilarUi? = null,
 ) {
     // The results this sheet belongs to are gone: nothing to show.
     if (r == null) {
         LaunchedEffect(Unit) { a.onClose() }
         return
     }
+    val scroll = rememberScrollState()
+    // Opening a card from a row, or coming back, starts the body at the top.
+    LaunchedEffect(r.nodeId) { scroll.scrollTo(0) }
     ModalBottomSheet(
         onDismissRequest = a.onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = c.wall,
         contentColor = c.ink,
     ) {
+        // Back pops to the card underneath instead of closing the sheet.
+        BackHandler(enabled = similar?.canGoBack == true) { similar?.onBack?.invoke() }
         Column(Modifier.fillMaxWidth()) {
-            Column(
-                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                CardHeader(vm, r, sheet, c, nowSec, mine)
-                when (sheet.phase) {
-                    CardPhase.LOADING -> SearchSkeleton(card = false, c = c, reduced = reduced, horizontal = 0.dp)
-                    CardPhase.MISSING -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (mine != null) {
-                            Text("This card is no longer there", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
-                            Text("It may have been deleted", style = chatSecondaryStyle(c.meta))
-                        } else {
-                            Text("No topic card yet for this conversation", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
-                            Text("Cards are written in the background; the matching lines are below", style = chatSecondaryStyle(c.meta))
-                        }
-                    }
-                    CardPhase.ERROR -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Could not load the card", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
-                        OutlinedButton(onClick = a.onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry", color = c.accent) }
-                    }
-                    CardPhase.DONE -> CardBody(r, sheet, a, c)
-                }
-                if (r.preview.isNotEmpty()) {
-                    Section("Matching lines", c) {
-                        for (line in r.preview.take(3)) PreviewLine(line, a.q, c)
-                    }
-                }
-                Spacer(Modifier.size(8.dp))
+            if (similar?.canGoBack == true) SimilarBackButton(c, similar.onBack)
+            if (similar != null) {
+                // A short crossfade between cards (none with reduced motion).
+                Crossfade(
+                    targetState = ShownCard(r, sheet),
+                    modifier = Modifier.weight(1f, fill = false),
+                    animationSpec = if (reduced) snap() else tween(150),
+                    label = "card-sheet",
+                ) { shown -> CardScroll(vm, shown.r, shown.sheet, a, c, reduced, nowSec, mine, similar, scroll) }
+            } else {
+                CardScroll(vm, r, sheet, a, c, reduced, nowSec, mine, null, scroll, Modifier.weight(1f, fill = false))
             }
             ActionBar(r, a, c, reduced, mine)
         }
     }
     if (mine != null && mine.confirming) DeleteConfirm(mine, c)
+}
+
+/** What the sheet's body shows, as one value so a crossfade has something to compare. */
+private data class ShownCard(val r: WaConvResult, val sheet: CardSheet)
+
+/** The scrolling body: header, the card (or its skeleton, missing or error state), matching lines and "More like this". */
+@Composable
+private fun CardScroll(
+    vm: WhatsAppViewModel,
+    r: WaConvResult,
+    sheet: CardSheet,
+    a: CardSheetActions,
+    c: ChatColors,
+    reduced: Boolean,
+    nowSec: Double,
+    mine: MineCard?,
+    similar: SimilarUi?,
+    scroll: ScrollState,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.verticalScroll(scroll).padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        CardHeader(vm, r, sheet, c, nowSec, mine)
+        when (sheet.phase) {
+            CardPhase.LOADING -> SearchSkeleton(card = false, c = c, reduced = reduced, horizontal = 0.dp)
+            CardPhase.MISSING -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (mine != null) {
+                    Text("This card is no longer there", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                    Text("It may have been deleted", style = chatSecondaryStyle(c.meta))
+                } else {
+                    Text("No topic card yet for this conversation", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                    Text("Cards are written in the background; the matching lines are below", style = chatSecondaryStyle(c.meta))
+                }
+            }
+            CardPhase.ERROR -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Could not load the card", style = chatSecondaryStyle(c.ink, FontWeight.SemiBold))
+                OutlinedButton(onClick = a.onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry", color = c.accent) }
+            }
+            CardPhase.DONE -> CardBody(r, sheet, a, c)
+        }
+        if (r.preview.isNotEmpty()) {
+            Section("Matching lines", c) {
+                for (line in r.preview.take(3)) PreviewLine(line, a.q, c)
+            }
+        }
+        // A topic's card, not one of the owner's own; not while its card is still loading.
+        if (similar != null && mine == null && sheet.phase != CardPhase.LOADING) SimilarSection(vm, similar, c, nowSec)
+        Spacer(Modifier.size(8.dp))
+    }
 }
 
 /** Avatar, chat name, range and count; then the full title, the summary, and which topic a sub-topic result borrows. */

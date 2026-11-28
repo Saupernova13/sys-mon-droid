@@ -27,6 +27,7 @@ import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaPinReq
 import com.raavivi.sysmon.core.model.WaReact
 import com.raavivi.sysmon.core.model.WaSearchResponse
+import com.raavivi.sysmon.core.model.WaSimilarResponse
 import com.raavivi.sysmon.core.model.WaSendText
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
@@ -183,6 +184,12 @@ class HttpWhatsAppRepository(private val api: ApiProvider) : WhatsAppRepository 
     override suspend fun chatSearchCard(node: Long): ApiResult<WaCardDetail> =
         safeCall { api.api.waChatSearchCard(node) }
 
+    override suspend fun chatSearchSimilar(node: Long): ApiResult<WaSimilarResponse> =
+        when (val r = safeCall { api.api.waChatSearchSimilar(node) }) {
+            is ApiResult.Ok -> similarResult(r.value)
+            is ApiResult.Err -> r
+        }
+
     override suspend fun chatSearchCardById(card: Long): ApiResult<WaCardDetail> =
         safeCall { api.api.waChatSearchCardById(card) }
 
@@ -277,15 +284,34 @@ internal fun <T> cardSettingsResult(r: RetrofitResponse<T>): ApiResult<T> {
  * is read too. Anything else gets the generic text.
  */
 internal fun cardSettingsError(code: Int, raw: String?): String {
-    val text = raw?.trim().orEmpty()
-    val envelope = text.takeIf { it.startsWith("{") }
-        ?.let { runCatching { SysMonJson.decodeFromString(ErrorEnvelope.serializer(), it) }.getOrNull() }
-    val msg = (envelope?.error ?: envelope?.detail)?.takeIf { it.isNotBlank() }
-        ?: text.takeIf { envelope == null && it.isNotEmpty() && it.length <= 200 && !it.startsWith("<") && !it.startsWith("{") }
+    val msg = serverReason(raw)
     return when {
         code == 401 -> "Not authorised — please log in again"
         code == 404 -> "Chat search is off"
         msg != null -> msg
         else -> "HTTP $code"
     }
+}
+
+/** The reason in a failed body: an `{error}` envelope's text, or a short plain string; null for anything else. */
+private fun serverReason(raw: String?): String? {
+    val text = raw?.trim().orEmpty()
+    val envelope = text.takeIf { it.startsWith("{") }
+        ?.let { runCatching { SysMonJson.decodeFromString(ErrorEnvelope.serializer(), it) }.getOrNull() }
+    return (envelope?.error ?: envelope?.detail)?.takeIf { it.isNotBlank() }
+        ?: text.takeIf { envelope == null && it.isNotEmpty() && it.length <= 200 && !it.startsWith("<") && !it.startsWith("{") }
+}
+
+/** A 2xx body as Ok; else Err with the HTTP status and [similarError] of the body. */
+internal fun similarResult(r: RetrofitResponse<WaSimilarResponse>): ApiResult<WaSimilarResponse> {
+    if (r.isSuccessful) return r.body()?.let { ApiResult.Ok(it) } ?: ApiResult.Err("Empty response", r.code())
+    val raw = runCatching { r.errorBody()?.string() }.getOrNull()
+    AppLog.w("Api", "error code=${r.code()}")
+    return ApiResult.Err(similarError(r.code(), raw), r.code())
+}
+
+/** The words of a failed similar call: the server's own reason (a 404 says why: off, or no vector yet), else "HTTP code". */
+internal fun similarError(code: Int, raw: String?): String = when {
+    code == 401 -> "Not authorised — please log in again"
+    else -> serverReason(raw) ?: "HTTP $code"
 }

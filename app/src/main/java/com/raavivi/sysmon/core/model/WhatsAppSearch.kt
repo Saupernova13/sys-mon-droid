@@ -129,6 +129,14 @@ data class WaChatSearchResponse(
     val rewrite: WaRewrite? = null,
 )
 
+/** `GET /api/whatsapp/chat-search/similar?node=`: the conversations most like node [of], shaped like search results. */
+@Serializable
+data class WaSimilarResponse(
+    val of: Long = 0,
+    val results: List<WaConvResult> = emptyList(),
+    val tookMs: Long = 0,
+)
+
 /** One theme of [WaChatSearchResponse.facetCounts] and how many conversations carry it. */
 @Serializable
 data class WaFacetCount(val name: String = "", val count: Int = 0)

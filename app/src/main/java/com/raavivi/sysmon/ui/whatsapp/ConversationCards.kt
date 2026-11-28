@@ -123,15 +123,28 @@ internal fun ConversationResults(vm: WhatsAppViewModel, c: ChatColors, modifier:
             onOpenChat = { vm.openConversation(it) },
             onOpenMoment = { jid, ts, msgId ->
                 s.noteQuery(s.query)
-                vm.openChatAt(jid, vm.searchChatName(jid, conv.results.getOrNull(sheet.index)?.chatName.orEmpty()), ts, focusId = msgId)
+                vm.openChatAt(jid, vm.searchChatName(jid, conv.shownConv?.chatName.orEmpty()), ts, focusId = msgId)
             },
             onSearchFor = {
                 conv.closeCard()
                 s.openFor(it)
             },
-            found = FoundAction(pickLabel("Found it", sheet.index, conv.pick), conv.pick.busy == null) { conv.pickFound(sheet.index) },
+            // A card opened from "More like this" is not one of the results: nothing to confirm.
+            found = if (foundOffered(conv.similarStack.size)) {
+                FoundAction(pickLabel("Found it", sheet.index, conv.pick), conv.pick.busy == null) { conv.pickFound(sheet.index) }
+            } else {
+                null
+            },
         )
-        ConvCardSheet(vm, sheet, conv.results.getOrNull(sheet.index), actions, c, reduced, nowSec)
+        val similar = SimilarUi(
+            list = conv.shownSimilar,
+            canGoBack = conv.similarStack.isNotEmpty(),
+            onMore = conv::moreLike,
+            onRetry = conv::retrySimilar,
+            onOpen = conv::openSimilar,
+            onBack = { conv.backFromSimilar() },
+        )
+        ConvCardSheet(vm, sheet, conv.shownConv, actions, c, reduced, nowSec, similar = similar)
     }
 }
 
