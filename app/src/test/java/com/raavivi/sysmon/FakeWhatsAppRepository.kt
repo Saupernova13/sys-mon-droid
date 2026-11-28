@@ -20,6 +20,7 @@ import com.raavivi.sysmon.core.model.WaTagSuggestResponse
 import com.raavivi.sysmon.core.model.WaTagsReq
 import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaSearchResponse
+import com.raavivi.sysmon.core.model.WaSimilarResponse
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
 import com.raavivi.sysmon.core.net.ApiResult
@@ -335,6 +336,17 @@ class FakeWhatsAppRepository : WhatsAppRepository {
         cardRequests += node
         cardGate?.await()
         return cardResult
+    }
+
+    /** What `chatSearchSimilar()` answers, the nodes it was asked about, and a gate it parks on (after recording the node). */
+    var similarResult: ApiResult<WaSimilarResponse> = ApiResult.Ok(WaSimilarResponse())
+    val similarRequests = mutableListOf<Long>()
+    var similarGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun chatSearchSimilar(node: Long): ApiResult<WaSimilarResponse> {
+        similarRequests += node
+        similarGate?.await()
+        return similarResult
     }
 
     override suspend fun chatSearchCardById(card: Long): ApiResult<WaCardDetail> {

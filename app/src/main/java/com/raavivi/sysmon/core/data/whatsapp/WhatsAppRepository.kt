@@ -16,6 +16,7 @@ import com.raavivi.sysmon.core.model.WaTagSuggestResponse
 import com.raavivi.sysmon.core.model.WaTagsReq
 import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaSearchResponse
+import com.raavivi.sysmon.core.model.WaSimilarResponse
 import com.raavivi.sysmon.core.model.WaStatus
 import com.raavivi.sysmon.core.model.WaTimelineDay
 import com.raavivi.sysmon.core.net.ApiResult
@@ -97,6 +98,9 @@ interface WhatsAppRepository {
 
     /** The full topic card of the result node [node]; an Err with code 404 means it has none. */
     suspend fun chatSearchCard(node: Long): ApiResult<WaCardDetail>
+
+    /** The conversations most like node [node] (the server's top 8). The Err message is the server's reason (404: off, or no vector yet). */
+    suspend fun chatSearchSimilar(node: Long): ApiResult<WaSimilarResponse>
 
     /** The full topic card with card id [card] (a tag result whose topic node is gone); an Err with code 404 means none. */
     suspend fun chatSearchCardById(card: Long): ApiResult<WaCardDetail>

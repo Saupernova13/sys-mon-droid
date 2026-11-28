@@ -110,6 +110,7 @@ import com.raavivi.sysmon.core.model.WaTagsReq
 import com.raavivi.sysmon.core.model.WaTagsResponse
 import com.raavivi.sysmon.core.model.WaRunResponse
 import com.raavivi.sysmon.core.model.WaSearchResponse
+import com.raavivi.sysmon.core.model.WaSimilarResponse
 import com.raavivi.sysmon.core.model.WaTimelineResponse
 import com.raavivi.sysmon.core.model.CiCardEdit
 import com.raavivi.sysmon.core.model.CiCardFull
@@ -559,6 +560,10 @@ interface ApiService {
     /** A result's full topic card; 404 when it has none. */
     @GET("api/whatsapp/chat-search/card")
     suspend fun waChatSearchCard(@Query("node") node: Long): WaCardDetail
+
+    /** The conversations most like [node]; a [Response] so a 404's reason (off, or no vector yet) can be read. */
+    @GET("api/whatsapp/chat-search/similar")
+    suspend fun waChatSearchSimilar(@Query("node") node: Long, @Query("limit") limit: Int = 8): Response<WaSimilarResponse>
 
     /** A result's full topic card by its card id (a tag result whose topic node is gone); 404 when it has none. */
     @GET("api/whatsapp/chat-search/card")
